@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use asset::{AssetPath, Assets, Loadable};
+use cgmath::{num_traits::ConstZero, InnerSpace, Vector3};
+use input::INPUT;
 use render::{
     camera::{Camera, CameraUniform},
     material_creations, Image, Material, MaterialInstance, MeshSurface, Renderable, Vertex,
@@ -17,6 +19,7 @@ use winit::{
 };
 
 mod asset;
+mod input;
 mod render;
 
 pub async fn run() {
@@ -281,10 +284,44 @@ impl<'a> State<'a> {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
+        input::INPUT.lock().unwrap().update(event);
         false
     }
 
-    fn update(&mut self) {}
+    fn update(&mut self) {
+        let input = INPUT.lock().unwrap();
+        let mut move_vec = Vector3::new(0., 0., 0.);
+        if input.is_key_down(KeyCode::KeyW) {
+            move_vec += Vector3::new(0.0, 0.0, 1.0);
+        }
+        if input.is_key_down(KeyCode::KeyA) {
+            move_vec += Vector3::new(-1.0, 0.0, 0.0);
+        }
+        if input.is_key_down(KeyCode::KeyS) {
+            move_vec += Vector3::new(0.0, 0.0, -1.0);
+        }
+        if input.is_key_down(KeyCode::KeyD) {
+            move_vec += Vector3::new(1.0, 0.0, 0.0);
+        }
+        if input.is_key_down(KeyCode::ShiftLeft) {
+            move_vec += Vector3::new(0.0, -1.0, 0.0);
+        }
+        if input.is_key_down(KeyCode::Space) {
+            move_vec += Vector3::new(0.0, 1.0, 1.0);
+        }
+        if move_vec != Vector3::new(0., 0., 0.) {
+            move_vec = move_vec.normalize();
+            self.camera.eye += move_vec * 0.1;
+            self.camera.target += move_vec * 0.1;
+
+            self.camera_uniform.update_view_proj(&self.camera);
+            self.queue.write_buffer(
+                &self.camera_buffer,
+                0,
+                bytemuck::cast_slice(&[self.camera_uniform]),
+            );
+        }
+    }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;

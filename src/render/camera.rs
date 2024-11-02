@@ -15,12 +15,12 @@ impl Camera {
     pub fn build_view_projection_matrix(&self) -> Matrix4<f32> {
         let view = Matrix4::look_at_rh(self.eye, self.target, self.up);
         let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        return OPENGL_TO_WGPU_MATRIX * view * proj;
+        return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
 
     pub fn new(aspect: f32) -> Camera {
         Self {
-            eye: Point3::new(0.0, 0.0, -2.0),
+            eye: Point3::new(0.0, 1.0, 2.0),
             target: Point3::new(0.0, 0.0, 0.0),
             up: Vector3::new(0.0, 1.0, 0.0),
             aspect,
