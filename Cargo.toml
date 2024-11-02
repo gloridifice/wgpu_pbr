@@ -13,3 +13,6 @@ env_logger = "0.11"
 pollster = "0.4.0"
 bytemuck = { version = "1.19.0", features = ["derive"] }
 uuid = { version = "1.11.0", features = ["v4"] }
+anyhow = "1.0.92"
+image = "0.25.4"
+cgmath = "0.18.0"
