@@ -1,6 +1,13 @@
-use asset::Assets;
-use render::{Material, MaterialInstance, Mesh, Vertex};
-use wgpu::{util::DeviceExt, Device};
+use std::sync::Arc;
+
+use asset::{AssetPath, Assets, Loadable};
+use render::{
+    camera::{Camera, CameraUniform},
+    material_creations, Image, Material, MaterialInstance, MeshSurface, Renderable, Vertex,
+};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, RenderPass,
+};
 use winit::{
     event::{ElementState, Event, KeyEvent, WindowEvent},
     event_loop::EventLoop,
@@ -18,6 +25,7 @@ pub async fn run() {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     let mut state = State::new(&window).await;
+    state.init();
 
     event_loop
         .run(move |event, control_flow| match event {
@@ -84,7 +92,14 @@ struct State<'a> {
 
     materials: Assets<Material>,
     material_instances: Assets<MaterialInstance>,
-    meshes: Assets<Mesh>,
+    meshes: Assets<MeshSurface>,
+    images: Assets<Image>,
+    renderables: Vec<Renderable>,
+
+    camera: Camera,
+    camera_uniform: CameraUniform,
+    camera_buffer: wgpu::Buffer,
+    camera_bind_group_layout: Arc<BindGroupLayout>,
 }
 
 impl<'a> State<'a> {
@@ -146,63 +161,19 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        // Render Pipeline
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+        let camera = Camera::new(config.width as f32 / config.height as f32);
 
-        let render_pipeline_layout =
-            device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
-                push_constant_ranges: &[],
-            });
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&render_pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: "vs_main",
-                buffers: &[Vertex::desc()],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: "fs_main",
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-            }),
-            //The `primitive` field describes how to interpret our vertices when converting them into triangles.
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            // relate with array layers
-            multiview: None,
-            // cache allows wgpu to cache shader compilation data. Only really useful for Android build targets.
-            cache: None,
+        let mut camera_uniform = CameraUniform::new();
+        camera_uniform.update_view_proj(&camera);
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(VERTICES),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
-        let num_vertices = VERTICES.len() as u32;
+        let camera_bind_group_layout =
+            Arc::new(device.create_bind_group_layout(&CameraUniform::layout_desc()));
 
         Self {
             window,
@@ -211,9 +182,93 @@ impl<'a> State<'a> {
             queue,
             config,
             size,
-            render_pipeline,
+
+            materials: Assets::new(),
+            material_instances: Assets::new(),
+            meshes: Assets::new(),
+            images: Assets::new(),
+            renderables: vec![],
+
+            camera,
+            camera_uniform,
+            camera_buffer,
+            camera_bind_group_layout,
+        }
+    }
+
+    pub fn init(&mut self) {
+        // Render Pipeline
+
+        let vertex_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(VERTICES),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(INDICES),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        let image = Image::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), self).unwrap();
+
+        let material = Arc::new(material_creations::unlit_textured_material(self));
+        let binding_groups = material.create_bind_groups(
+            &self.device,
+            vec![
+                vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&image.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&image.sampler),
+                    },
+                ],
+                vec![BindGroupEntry {
+                    binding: 0,
+                    resource: self.camera_buffer.as_entire_binding(),
+                }],
+            ],
+        );
+
+        let material_instance = Arc::new(MaterialInstance {
+            material: material.clone(),
+            bind_groups: binding_groups,
+        });
+
+        let mesh = Arc::new(MeshSurface {
             vertex_buffer,
-            num_vertices,
+            index_buffer,
+        });
+
+        let renderable = Renderable {
+            mesh,
+            material: material_instance.clone(),
+            indices_num: INDICES.len() as u32,
+            indices_start: 0,
+        };
+        self.renderables.push(renderable);
+    }
+
+    fn draw_objects(&mut self, render_pass: &mut RenderPass) {
+        for renderable in self.renderables.iter() {
+            let mesh = renderable.mesh.clone();
+            let material_instance = renderable.material.clone();
+            render_pass.set_pipeline(&material_instance.material.pipeline);
+            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+            for (i, bind_group) in material_instance.bind_groups.iter().enumerate() {
+                render_pass.set_bind_group(i as u32, bind_group, &[]);
+            }
+            let start = renderable.indices_start;
+            let num = renderable.indices_num;
+            render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
 
@@ -259,11 +314,7 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
             });
 
-            // 2. Set Render Pipeline for Render Pass
-            render_pass.set_pipeline(&self.render_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            // 3. Draw
-            render_pass.draw(0..self.num_vertices, 0..1);
+            self.draw_objects(&mut render_pass);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -293,12 +344,14 @@ const VERTICES: &[Vertex] = &[
         position: [-0.5, -0.5, 0.0],
         color: [0.0, 1.0, 0.0, 1.0],
         normal: [0.0, 0.0, 0.0],
-        tex_coord: [0.0, 0.0],
+        tex_coord: [0.0, 1.0],
     },
     Vertex {
         position: [0.5, -0.5, 0.0],
         color: [0.0, 0.0, 1.0, 1.0],
         normal: [0.0, 0.0, 0.0],
-        tex_coord: [0.0, 0.0],
+        tex_coord: [1.0, 0.0],
     },
 ];
+
+const INDICES: &[u32] = &[0, 1, 2];
