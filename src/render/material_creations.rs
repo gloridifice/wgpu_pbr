@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{RenderState, State};
 
-use super::{Material, Vertex};
+use super::{DefaultMaterial, Vertex};
 
-pub fn unlit_textured_material(state: &State) -> Material {
+pub fn unlit_textured_material(state: &State) -> DefaultMaterial {
     let shader = state
         .render_state
         .device
@@ -38,9 +38,36 @@ pub fn unlit_textured_material(state: &State) -> Material {
                 label: Some("texture_bind_group_layout"),
             });
 
+    let depth_bind_group =
+        state
+            .render_state
+            .device
+            .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("Depth texture bind group"),
+                entries: &[
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            sample_type: wgpu::TextureSampleType::Depth,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
+                        count: None,
+                    },
+                ],
+            });
+
     let bind_group_layouts = vec![
         Arc::new(texture_bind_group_layout),
         state.camera_bind_group_layout.clone(),
+        Arc::new(depth_bind_group),
     ];
 
     let render_pipeline_layout =
@@ -107,7 +134,7 @@ pub fn unlit_textured_material(state: &State) -> Material {
                 cache: None,
             });
 
-    Material {
+    DefaultMaterial {
         pipeline: render_pipeline,
         pipeline_layout: render_pipeline_layout,
         bind_group_layouts,

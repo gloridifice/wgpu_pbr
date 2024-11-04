@@ -12,7 +12,7 @@ pub mod material_creations;
 
 pub struct DrawContext<'a> {
     pub render_pass: &'a mut RenderPass<'a>,
-    pub default_material: Arc<MaterialInstance>,
+    pub default_material: Arc<DefaultMaterialInstance>,
 }
 
 pub trait DrawAble {
@@ -66,13 +66,31 @@ impl Vertex {
     }
 }
 
-pub struct Material {
+pub trait MaterialPipeline<Instance>: Sized
+where
+    Instance: MaterialInstance<Self>,
+{
+    fn pipeline(&self) -> &RenderPipeline;
+    fn pipeline_layout(&self) -> &PipelineLayout;
+    fn bind_group_layouts(&self) -> &Vec<Arc<BindGroupLayout>>;
+    fn create_instance(&self, render_state: &RenderState) -> Instance;
+}
+
+pub trait MaterialInstance<Parent>: Sized
+where
+    Parent: MaterialPipeline<Self>,
+{
+    fn parent(&self) -> Arc<Parent>;
+    fn bind_groups(&self) -> Arc<Arc<BindGroup>>;
+}
+
+pub struct DefaultMaterial {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
-impl Material {
+impl DefaultMaterial {
     pub fn create_bind_groups(
         &self,
         device: &wgpu::Device,
@@ -92,8 +110,8 @@ impl Material {
     }
 }
 
-pub struct MaterialInstance {
-    pub material: Arc<Material>,
+pub struct DefaultMaterialInstance {
+    pub material: Arc<DefaultMaterial>,
     pub bind_groups: Vec<Arc<BindGroup>>,
 }
 
@@ -106,7 +124,7 @@ pub struct UploadedMesh {
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub material_instance: Option<Arc<MaterialInstance>>,
+    pub material_instance: Option<Arc<DefaultMaterialInstance>>,
 }
 
 pub struct UploadedImage {
@@ -184,7 +202,7 @@ impl Mesh {
                                 }],
                             ],
                         );
-                        let material_instance = Arc::new(MaterialInstance {
+                        let material_instance = Arc::new(DefaultMaterialInstance {
                             material: default_material.clone(),
                             bind_groups: binding_groups,
                         });

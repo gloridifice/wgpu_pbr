@@ -5,8 +5,8 @@ use cgmath::{InnerSpace, Vector3};
 use input::INPUT;
 use render::{
     camera::{Camera, CameraUniform},
-    material_creations, DrawAble, DrawContext, Material, MaterialInstance, UploadedImage,
-    UploadedMesh, Vertex,
+    material_creations, DefaultMaterial, DefaultMaterialInstance, DrawAble, DrawContext,
+    UploadedImage, UploadedMesh, Vertex,
 };
 use time::TIME;
 use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, RenderPass};
@@ -90,8 +90,8 @@ pub async fn run() {
 struct State<'a> {
     render_state: RenderState<'a>,
 
-    materials: Assets<Material>,
-    material_instances: Assets<MaterialInstance>,
+    materials: Assets<DefaultMaterial>,
+    material_instances: Assets<DefaultMaterialInstance>,
     meshes: Assets<UploadedMesh>,
     images: Assets<UploadedImage>,
     renderables: Vec<Arc<dyn DrawAble>>,
@@ -219,7 +219,7 @@ impl<'a> State<'a> {
                 }],
             ],
         );
-        let material_instance = Arc::new(MaterialInstance {
+        let material_instance = Arc::new(DefaultMaterialInstance {
             material: material.clone(),
             bind_groups: binding_groups,
         });
