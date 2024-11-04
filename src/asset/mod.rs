@@ -1,9 +1,7 @@
 use anyhow::Result;
 use std::{
     collections::HashMap,
-    fs::File,
     hash::{Hash, Hasher},
-    io::Read,
     marker::PhantomData,
     sync::Arc,
 };
@@ -47,19 +45,20 @@ impl<T> Assets<T> {
             .flatten()
     }
 
-    pub fn insert_with_name(&mut self, name: &str, value: Arc<T>) -> Result<Handle<T>> {
+    pub fn insert_with_name(&mut self, name: &str, value: Arc<T>) -> (Handle<T>, Option<Arc<T>>) {
         let name = name.to_string();
-        if !self.name_map.contains_key(&name) {
-            let uuid = uuid::Uuid::new_v4();
-            let handle = Handle {
-                pha: PhantomData::<T>,
-                uuid,
-            };
-            self.map.insert(handle, (name.clone(), value));
-            self.name_map.insert(name, handle);
-            return Ok(handle);
-        }
-        Err(anyhow::anyhow!("Same name in the assets!"))
+        let removed = self.remove_by_name(&name);
+        // insert
+
+        let uuid = uuid::Uuid::new_v4();
+        let handle = Handle {
+            pha: PhantomData::<T>,
+            uuid,
+        };
+        self.map.insert(handle, (name.clone(), value));
+        self.name_map.insert(name, handle);
+
+        (handle.clone(), removed)
     }
 
     pub fn insert(&mut self, value: Arc<T>) -> Handle<T> {
@@ -142,9 +141,7 @@ mod test {
     fn test_asset_name() {
         let mut assets = Assets::<String>::new();
         let name = "boooo1121321!";
-        assets
-            .insert_with_name(name, Arc::new("Hello".to_string()))
-            .unwrap();
+        assets.insert_with_name(name, Arc::new("Hello".to_string()));
 
         assert_eq!(*assets.get_by_name(&name.to_string()).unwrap(), "Hello");
 

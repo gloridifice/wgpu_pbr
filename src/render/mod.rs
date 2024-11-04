@@ -1,13 +1,44 @@
 use std::sync::Arc;
 
-use cgmath::{Point3, Vector2, Vector3, Vector4};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, PipelineLayout,
-    RenderPipeline, Sampler, Texture, TextureView,
+    RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
 pub mod camera;
 pub mod material_creations;
+
+pub struct DrawContext<'a> {
+    pub render_pass: &'a mut RenderPass<'a>,
+    pub default_material: Arc<MaterialInstance>,
+}
+
+pub trait DrawAble {
+    fn draw(&self, context: &mut DrawContext);
+}
+
+impl DrawAble for UploadedMesh {
+    fn draw(&self, context: &mut DrawContext) {
+        let default_material = &context.default_material;
+        let render_pass = &mut context.render_pass;
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+        for primitive in self.primitives.iter() {
+            let material_instance = match &primitive.material_instance {
+                Some(arc) => arc.clone(),
+                None => default_material.clone(),
+            };
+            render_pass.set_pipeline(&material_instance.material.pipeline);
+            for (i, bind_group) in material_instance.bind_groups.iter().enumerate() {
+                render_pass.set_bind_group(i as u32, bind_group, &[]);
+            }
+            let start = primitive.indices_start;
+            let num = primitive.indices_num;
+            render_pass.draw_indexed(start..(start + num), 0, 0..1);
+        }
+    }
+}
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
@@ -67,13 +98,17 @@ pub struct MaterialInstance {
 pub struct UploadedMesh {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
+    pub primitives: Vec<UploadedPrimitive>,
+}
+
+pub struct UploadedPrimitive {
+    pub indices_start: u32,
+    pub indices_num: u32,
+    pub material_instance: Option<Arc<MaterialInstance>>,
 }
 
 pub struct Renderable {
     pub mesh: Arc<UploadedMesh>,
-    pub material: Arc<MaterialInstance>,
-    pub indices_start: u32,
-    pub indices_num: u32,
 }
 
 pub struct Image {
@@ -83,10 +118,22 @@ pub struct Image {
     pub sampler: Sampler,
 }
 
-#[derive(Debug)]
+pub struct GltfMaterial {}
+
+pub struct Model {
+    pub meshes: Vec<Mesh>,
+}
+
+pub struct Primitive {
+    pub indices_start: u32,
+    pub indices_num: u32,
+    pub material: Option<GltfMaterial>,
+}
+
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
+    pub primitives: Vec<Primitive>,
 }
 
 impl Mesh {
@@ -102,9 +149,20 @@ impl Mesh {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+        let primitives = self
+            .primitives
+            .iter()
+            .map(|it| UploadedPrimitive {
+                indices_start: it.indices_start,
+                indices_num: it.indices_num,
+                material_instance: None,
+            })
+            .collect::<Vec<_>>();
+
         UploadedMesh {
             vertex_buffer,
             index_buffer,
+            primitives,
         }
     }
 }

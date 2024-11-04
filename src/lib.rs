@@ -5,7 +5,8 @@ use cgmath::{InnerSpace, Vector3};
 use input::INPUT;
 use render::{
     camera::{Camera, CameraUniform},
-    material_creations, Image, Material, MaterialInstance, Renderable, UploadedMesh, Vertex,
+    material_creations, DrawAble, DrawContext, Image, Material, MaterialInstance, Renderable,
+    UploadedMesh, Vertex,
 };
 use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, RenderPass};
 use winit::{
@@ -95,7 +96,7 @@ struct State<'a> {
     material_instances: Assets<MaterialInstance>,
     meshes: Assets<UploadedMesh>,
     images: Assets<Image>,
-    renderables: Vec<Renderable>,
+    renderables: Vec<Arc<dyn DrawAble>>,
 
     camera: Camera,
     camera_uniform: CameraUniform,
@@ -198,26 +199,43 @@ impl<'a> State<'a> {
     }
 
     pub fn init(&mut self) {
-        // Render Pipeline
+        self.load_default_material();
 
-        let vertex_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(VERTICES),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = self
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(INDICES),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let model = render::Model::load(
+            AssetPath::Assets("Patagiosites laevis.glb".to_string()),
+            self,
+        )
+        .unwrap();
 
+        let mut render = model
+            .meshes
+            .iter()
+            .map(|it| Arc::new(it.upload(&self.device)) as Arc<dyn DrawAble>)
+            .collect::<Vec<_>>();
+        self.renderables.append(&mut render);
+    }
+
+    fn draw_objects<'b>(&mut self, render_pass: &'b mut RenderPass<'b>) {
+        let default_material = self
+            .material_instances
+            .get_by_name("default")
+            .unwrap()
+            .clone();
+        let mut ctx = DrawContext {
+            render_pass,
+            default_material,
+        };
+        for renderable in self.renderables.iter() {
+            renderable.draw(&mut ctx);
+        }
+    }
+
+    pub fn load_default_material(&mut self) {
         let image = Image::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), self).unwrap();
 
         let material = Arc::new(material_creations::unlit_textured_material(self));
+        self.materials.insert_with_name("default", material.clone());
+
         let binding_groups = material.create_bind_groups(
             &self.device,
             vec![
@@ -237,40 +255,12 @@ impl<'a> State<'a> {
                 }],
             ],
         );
-
         let material_instance = Arc::new(MaterialInstance {
             material: material.clone(),
             bind_groups: binding_groups,
         });
-
-        let mesh = Arc::new(UploadedMesh {
-            vertex_buffer,
-            index_buffer,
-        });
-
-        let renderable = Renderable {
-            mesh,
-            material: material_instance.clone(),
-            indices_num: INDICES.len() as u32,
-            indices_start: 0,
-        };
-        self.renderables.push(renderable);
-    }
-
-    fn draw_objects(&mut self, render_pass: &mut RenderPass) {
-        for renderable in self.renderables.iter() {
-            let mesh = renderable.mesh.clone();
-            let material_instance = renderable.material.clone();
-            render_pass.set_pipeline(&material_instance.material.pipeline);
-            render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-            render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-            for (i, bind_group) in material_instance.bind_groups.iter().enumerate() {
-                render_pass.set_bind_group(i as u32, bind_group, &[]);
-            }
-            let start = renderable.indices_start;
-            let num = renderable.indices_num;
-            render_pass.draw_indexed(start..(start + num), 0, 0..1);
-        }
+        self.material_instances
+            .insert_with_name("default", material_instance);
     }
 
     pub fn window(&self) -> &Window {
@@ -301,14 +291,12 @@ impl<'a> State<'a> {
         if input.is_key_hold(KeyCode::KeyD) {
             move_vec += Vector3::new(1.0, 0.0, 0.0);
         }
-        if input.is_key_hold(KeyCode::ShiftLeft) {
-            move_vec += Vector3::new(0.0, -1.0, 0.0);
-        }
         if input.is_key_hold(KeyCode::Space) {
-            move_vec += Vector3::new(0.0, 1.0, 1.0);
-        }
-        if input.is_key_down(KeyCode::KeyJ) {
-            println!("114514");
+            if input.is_key_hold(KeyCode::ShiftLeft) {
+                move_vec += Vector3::new(0.0, -1.0, 0.0);
+            } else {
+                move_vec += Vector3::new(0.0, 1.0, 1.0);
+            }
         }
         if move_vec != Vector3::new(0., 0., 0.) {
             move_vec = move_vec.normalize();
