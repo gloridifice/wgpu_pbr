@@ -5,7 +5,7 @@ use wgpu::{
     RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
-use crate::State;
+use crate::{RenderState, State};
 
 pub mod camera;
 pub mod material_creations;
@@ -138,20 +138,18 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn upload(&self, state: &State) -> UploadedMesh {
-        let vertex_buffer = state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(&self.vertices),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-        let index_buffer = state
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Index Buffer"),
-                contents: bytemuck::cast_slice(&self.indices),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let device = &state.render_state.device;
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&self.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&self.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
 
         let default_material = state.materials.get_by_name("default").unwrap();
 
@@ -164,7 +162,7 @@ impl Mesh {
                 material_instance: {
                     it.material.as_ref().map(|gltf_mat| {
                         let binding_groups = default_material.create_bind_groups(
-                            &state.device,
+                            device,
                             vec![
                                 vec![
                                     wgpu::BindGroupEntry {
@@ -233,7 +231,7 @@ impl UploadedImage {
     pub fn from_glb_data(
         data: &gltf::image::Data,
         gltf_sampler: &gltf::texture::Sampler,
-        state: &State,
+        state: &RenderState,
     ) -> Self {
         let size = wgpu::Extent3d {
             width: data.width,
