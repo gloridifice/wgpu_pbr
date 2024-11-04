@@ -5,6 +5,8 @@ use wgpu::{
     RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
+use crate::State;
+
 pub mod camera;
 pub mod material_creations;
 
@@ -107,18 +109,16 @@ pub struct UploadedPrimitive {
     pub material_instance: Option<Arc<MaterialInstance>>,
 }
 
-pub struct Renderable {
-    pub mesh: Arc<UploadedMesh>,
-}
-
-pub struct Image {
+pub struct UploadedImage {
     pub size: wgpu::Extent3d,
     pub texture: Texture,
     pub view: TextureView,
     pub sampler: Sampler,
 }
 
-pub struct GltfMaterial {}
+pub struct GltfMaterial {
+    pub base_color_texture: Arc<UploadedImage>,
+}
 
 pub struct Model {
     pub meshes: Vec<Mesh>,
@@ -137,17 +137,23 @@ pub struct Mesh {
 }
 
 impl Mesh {
-    pub fn upload(&self, device: &wgpu::Device) -> UploadedMesh {
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&self.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+    pub fn upload(&self, state: &State) -> UploadedMesh {
+        let vertex_buffer = state
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(&self.vertices),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_buffer = state
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Index Buffer"),
+                contents: bytemuck::cast_slice(&self.indices),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        let default_material = state.materials.get_by_name("default").unwrap();
 
         let primitives = self
             .primitives
@@ -155,7 +161,38 @@ impl Mesh {
             .map(|it| UploadedPrimitive {
                 indices_start: it.indices_start,
                 indices_num: it.indices_num,
-                material_instance: None,
+                material_instance: {
+                    it.material.as_ref().map(|gltf_mat| {
+                        let binding_groups = default_material.create_bind_groups(
+                            &state.device,
+                            vec![
+                                vec![
+                                    wgpu::BindGroupEntry {
+                                        binding: 0,
+                                        resource: wgpu::BindingResource::TextureView(
+                                            &gltf_mat.base_color_texture.view,
+                                        ),
+                                    },
+                                    wgpu::BindGroupEntry {
+                                        binding: 1,
+                                        resource: wgpu::BindingResource::Sampler(
+                                            &gltf_mat.base_color_texture.sampler,
+                                        ),
+                                    },
+                                ],
+                                vec![BindGroupEntry {
+                                    binding: 0,
+                                    resource: state.camera_buffer.as_entire_binding(),
+                                }],
+                            ],
+                        );
+                        let material_instance = Arc::new(MaterialInstance {
+                            material: default_material.clone(),
+                            bind_groups: binding_groups,
+                        });
+                        material_instance
+                    })
+                },
             })
             .collect::<Vec<_>>();
 
@@ -163,6 +200,108 @@ impl Mesh {
             vertex_buffer,
             index_buffer,
             primitives,
+        }
+    }
+}
+
+impl UploadedImage {
+    pub fn image_data_layout(
+        width: u32,
+        heigh: u32,
+        pixel_size: u32,
+        offset: u64,
+    ) -> wgpu::ImageDataLayout {
+        wgpu::ImageDataLayout {
+            offset,
+            bytes_per_row: Some(pixel_size * width),
+            rows_per_image: Some(heigh),
+        }
+    }
+
+    pub fn default_sampler_desc() -> wgpu::SamplerDescriptor<'static> {
+        wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Nearest,
+            mipmap_filter: wgpu::FilterMode::Nearest,
+            ..Default::default()
+        }
+    }
+
+    pub fn from_glb_data(
+        data: &gltf::image::Data,
+        gltf_sampler: &gltf::texture::Sampler,
+        state: &State,
+    ) -> Self {
+        let size = wgpu::Extent3d {
+            width: data.width,
+            height: data.height,
+            depth_or_array_layers: 1,
+        };
+
+        let texture = state.device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+
+        println!(
+            "width: {}; heitgh: {}; mul: {}; pixels_size: {};",
+            size.width,
+            size.height,
+            size.width * size.height,
+            data.pixels.len(),
+        );
+
+        let pixels = match data.format {
+            gltf::image::Format::R8G8B8 => {
+                let new_len = data.pixels.len() / 3 * 4;
+                let mut ret = vec![0u8; new_len];
+                for i in 0..new_len {
+                    let divide = i / 4;
+                    let modulo = i % 4;
+                    ret[i] = if modulo != 3 {
+                        *data.pixels.get(divide * 3 + modulo).unwrap()
+                    } else {
+                        0u8
+                    };
+                }
+                ret
+            }
+            _ => data.pixels.clone(),
+        };
+
+        state.queue.write_texture(
+            wgpu::ImageCopyTexture {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            &pixels,
+            UploadedImage::image_data_layout(data.width, data.height, 4, 0),
+            size,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        // todo
+        let sampler = state
+            .device
+            .create_sampler(&UploadedImage::default_sampler_desc());
+
+        Self {
+            size,
+            texture,
+            view,
+            sampler,
         }
     }
 }
