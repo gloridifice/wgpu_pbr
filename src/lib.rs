@@ -8,6 +8,7 @@ use render::{
     material_creations, DrawAble, DrawContext, Material, MaterialInstance, UploadedImage,
     UploadedMesh, Vertex,
 };
+use time::TIME;
 use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, RenderPass};
 use winit::{
     event::{ElementState, Event, KeyEvent, WindowEvent},
@@ -20,6 +21,7 @@ use winit::{
 mod asset;
 mod input;
 mod render;
+mod time;
 
 pub async fn run() {
     env_logger::init();
@@ -40,6 +42,7 @@ pub async fn run() {
                         //Update and Render
                         WindowEvent::RedrawRequested => {
                             state.window().request_redraw();
+                            state.core_update();
                             state.update();
                             match state.render() {
                                 Ok(_) => {}
@@ -277,17 +280,23 @@ impl<'a> State<'a> {
         false
     }
 
+    fn core_update(&mut self) {
+        TIME.lock().unwrap().update();
+    }
+
     fn update(&mut self) {
+        let time = TIME.lock().unwrap();
         let input = INPUT.lock().unwrap();
+
         let mut move_vec = Vector3::new(0., 0., 0.);
         if input.is_key_hold(KeyCode::KeyW) {
-            move_vec += Vector3::new(0.0, 0.0, 1.0);
+            move_vec += Vector3::new(0.0, 0.0, -1.0);
         }
         if input.is_key_hold(KeyCode::KeyA) {
             move_vec += Vector3::new(-1.0, 0.0, 0.0);
         }
         if input.is_key_hold(KeyCode::KeyS) {
-            move_vec += Vector3::new(0.0, 0.0, -1.0);
+            move_vec += Vector3::new(0.0, 0.0, 1.0);
         }
         if input.is_key_hold(KeyCode::KeyD) {
             move_vec += Vector3::new(1.0, 0.0, 0.0);
@@ -300,9 +309,9 @@ impl<'a> State<'a> {
             }
         }
         if move_vec != Vector3::new(0., 0., 0.) {
-            move_vec = move_vec.normalize();
-            self.camera.eye += move_vec * 0.1;
-            self.camera.target += move_vec * 0.1;
+            move_vec = move_vec.normalize() * 0.5 * time.delta_time.as_secs_f32();
+            self.camera.eye += move_vec;
+            self.camera.target += move_vec;
 
             self.camera_uniform.update_view_proj(&self.camera);
             self.queue.write_buffer(

@@ -252,14 +252,6 @@ impl UploadedImage {
             view_formats: &[],
         });
 
-        println!(
-            "width: {}; heitgh: {}; mul: {}; pixels_size: {};",
-            size.width,
-            size.height,
-            size.width * size.height,
-            data.pixels.len(),
-        );
-
         let pixels = match data.format {
             gltf::image::Format::R8G8B8 => {
                 let new_len = data.pixels.len() / 3 * 4;
