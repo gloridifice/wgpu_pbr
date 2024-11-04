@@ -67,7 +67,7 @@ pub fn unlit_textured_material(state: &State) -> DefaultMaterial {
     let bind_group_layouts = vec![
         Arc::new(texture_bind_group_layout),
         state.camera_bind_group_layout.clone(),
-        Arc::new(depth_bind_group),
+        // Arc::new(depth_bind_group),
     ];
 
     let render_pipeline_layout =
