@@ -1,11 +1,10 @@
 use std::{fs::File, io::Read};
 
 use crate::{
-    render::{Image, Mesh, UploadedMesh, Vertex},
+    render::{self, Image, Model, Primitive, Vertex},
     State,
 };
 use anyhow::*;
-use gltf::{Glb, Gltf};
 
 use super::AssetPath;
 
@@ -74,51 +73,68 @@ impl Loadable for Image {
     }
 }
 
-impl Loadable for Mesh {
+impl Loadable for Model {
     fn load(path: AssetPath, state: &mut State) -> Result<Self> {
         let path = path.final_path();
         let (document, buffers, images) = gltf::import(path)?;
 
-        // let meshes = Vec>::new();
+        let meshes = document
+            .meshes()
+            .into_iter()
+            .map(|mesh| {
+                let mut vertices = Vec::<Vertex>::new();
+                let mut indices = Vec::<u32>::new();
+                let mut primitives = Vec::<render::Primitive>::new();
+                for primitive in mesh.primitives() {
+                    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+                    let positions = reader
+                        .read_positions()
+                        .map(|v| v.collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    let normals = reader
+                        .read_normals()
+                        .map(|v| v.collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    let tex_coords = reader
+                        .read_tex_coords(0)
+                        .map(|v| v.into_f32().collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    let colors = reader
+                        .read_colors(0)
+                        .map(|v| v.into_rgba_f32().collect::<Vec<_>>())
+                        .unwrap_or_default();
+                    let mut primitive_indices = reader
+                        .read_indices()
+                        .map(|v| v.into_u32().collect::<Vec<_>>())
+                        .unwrap_or_default();
 
-        for mesh in document.meshes() {
-            for primitive in mesh.primitives() {
-                let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-                let positions = reader
-                    .read_positions()
-                    .map(|v| v.collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let normals = reader
-                    .read_normals()
-                    .map(|v| v.collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let tex_coords = reader
-                    .read_tex_coords(0)
-                    .map(|v| v.into_f32().collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let colors = reader
-                    .read_colors(0)
-                    .map(|v| v.into_rgba_f32().collect::<Vec<_>>())
-                    .unwrap_or_default();
-                let indices = reader
-                    .read_indices()
-                    .map(|v| v.into_u32().collect::<Vec<_>>())
-                    .unwrap_or_default();
+                    let indices_start = indices.len() as u32;
+                    let indices_num = primitive_indices.len() as u32;
 
-                let mut vertices = Vec::<Vertex>::with_capacity(positions.len());
-                for i in 0..positions.len() {
-                    vertices[i] = Vertex {
-                        position: positions[i],
-                        normal: normals[i],
-                        color: colors[i],
-                        tex_coord: tex_coords[i],
-                    };
+                    for i in 0..positions.len() {
+                        let v = Vertex {
+                            position: *positions.get(i).unwrap_or(&[0.0; 3]),
+                            normal: *normals.get(i).unwrap_or(&[0.0; 3]),
+                            color: *colors.get(i).unwrap_or(&[0.0; 4]),
+                            tex_coord: *tex_coords.get(i).unwrap_or(&[0.0; 2]),
+                        };
+                        vertices.push(v);
+                    }
+                    indices.append(&mut primitive_indices);
+                    primitives.push(Primitive {
+                        indices_start,
+                        indices_num,
+                        material: None,
+                    });
                 }
+                render::Mesh {
+                    vertices,
+                    indices,
+                    primitives,
+                }
+            })
+            .collect::<Vec<render::Mesh>>();
 
-                return Ok(Mesh { vertices, indices });
-            }
-        }
-
-        Err(anyhow!("Failed to load Mesh!"))
+        Ok(Model { meshes })
     }
 }

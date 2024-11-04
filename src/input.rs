@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, HashMap, HashSet},
-    sync::Mutex,
-};
+use std::{collections::HashSet, sync::Mutex};
 
 use lazy_static::lazy_static;
 use winit::{
