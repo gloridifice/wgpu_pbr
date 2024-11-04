@@ -1,15 +1,13 @@
 use std::sync::Arc;
 
-use asset::{AssetPath, Assets, Loadable};
-use cgmath::{num_traits::ConstZero, InnerSpace, Vector3};
+use asset::{load::Loadable, AssetPath, Assets};
+use cgmath::{InnerSpace, Vector3};
 use input::INPUT;
 use render::{
     camera::{Camera, CameraUniform},
-    material_creations, Image, Material, MaterialInstance, MeshSurface, Renderable, Vertex,
+    material_creations, Image, Material, MaterialInstance, Renderable, UploadedMesh, Vertex,
 };
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout, RenderPass,
-};
+use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, RenderPass};
 use winit::{
     event::{ElementState, Event, KeyEvent, WindowEvent},
     event_loop::EventLoop,
@@ -95,7 +93,7 @@ struct State<'a> {
 
     materials: Assets<Material>,
     material_instances: Assets<MaterialInstance>,
-    meshes: Assets<MeshSurface>,
+    meshes: Assets<UploadedMesh>,
     images: Assets<Image>,
     renderables: Vec<Renderable>,
 
@@ -245,7 +243,7 @@ impl<'a> State<'a> {
             bind_groups: binding_groups,
         });
 
-        let mesh = Arc::new(MeshSurface {
+        let mesh = Arc::new(UploadedMesh {
             vertex_buffer,
             index_buffer,
         });
@@ -291,23 +289,26 @@ impl<'a> State<'a> {
     fn update(&mut self) {
         let input = INPUT.lock().unwrap();
         let mut move_vec = Vector3::new(0., 0., 0.);
-        if input.is_key_down(KeyCode::KeyW) {
+        if input.is_key_hold(KeyCode::KeyW) {
             move_vec += Vector3::new(0.0, 0.0, 1.0);
         }
-        if input.is_key_down(KeyCode::KeyA) {
+        if input.is_key_hold(KeyCode::KeyA) {
             move_vec += Vector3::new(-1.0, 0.0, 0.0);
         }
-        if input.is_key_down(KeyCode::KeyS) {
+        if input.is_key_hold(KeyCode::KeyS) {
             move_vec += Vector3::new(0.0, 0.0, -1.0);
         }
-        if input.is_key_down(KeyCode::KeyD) {
+        if input.is_key_hold(KeyCode::KeyD) {
             move_vec += Vector3::new(1.0, 0.0, 0.0);
         }
-        if input.is_key_down(KeyCode::ShiftLeft) {
+        if input.is_key_hold(KeyCode::ShiftLeft) {
             move_vec += Vector3::new(0.0, -1.0, 0.0);
         }
-        if input.is_key_down(KeyCode::Space) {
+        if input.is_key_hold(KeyCode::Space) {
             move_vec += Vector3::new(0.0, 1.0, 1.0);
+        }
+        if input.is_key_down(KeyCode::KeyJ) {
+            println!("114514");
         }
         if move_vec != Vector3::new(0., 0., 0.) {
             move_vec = move_vec.normalize();

@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use cgmath::{Point3, Vector2, Vector3, Vector4};
 use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, Buffer, PipelineLayout, RenderPipeline, Sampler,
-    Texture, TextureView,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, PipelineLayout,
+    RenderPipeline, Sampler, Texture, TextureView,
 };
 
 pub mod camera;
@@ -63,13 +64,13 @@ pub struct MaterialInstance {
     pub bind_groups: Vec<Arc<BindGroup>>,
 }
 
-pub struct MeshSurface {
+pub struct UploadedMesh {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
 }
 
 pub struct Renderable {
-    pub mesh: Arc<MeshSurface>,
+    pub mesh: Arc<UploadedMesh>,
     pub material: Arc<MaterialInstance>,
     pub indices_start: u32,
     pub indices_num: u32,
@@ -80,4 +81,30 @@ pub struct Image {
     pub texture: Texture,
     pub view: TextureView,
     pub sampler: Sampler,
+}
+
+#[derive(Debug)]
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
+
+impl Mesh {
+    pub fn upload(&self, device: &wgpu::Device) -> UploadedMesh {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Buffer"),
+            contents: bytemuck::cast_slice(&self.vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(&self.indices),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        UploadedMesh {
+            vertex_buffer,
+            index_buffer,
+        }
+    }
 }

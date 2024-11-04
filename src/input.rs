@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Mutex,
 };
 
@@ -13,52 +13,34 @@ lazy_static! {
     pub static ref INPUT: Mutex<InputManager> = Mutex::new(InputManager::new());
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum KeyState {
-    Empty,
-    Down,
-    Hold,
-    Up,
-}
-
 pub struct InputManager {
-    pub keys: BTreeMap<KeyCode, KeyState>,
+    pub down_keys: HashSet<KeyCode>,
+    pub hold_keys: HashSet<KeyCode>,
+    pub up_keys: HashSet<KeyCode>,
 }
 
 impl InputManager {
     pub fn new() -> Self {
         InputManager {
-            keys: BTreeMap::new(),
+            down_keys: HashSet::with_capacity(100),
+            hold_keys: HashSet::with_capacity(100),
+            up_keys: HashSet::with_capacity(100),
         }
-    }
-
-    pub fn get_key_state(&self, key: KeyCode) -> KeyState {
-        if let Some(key) = self.keys.get(&key) {
-            return *key;
-        };
-        KeyState::Empty
     }
 
     pub fn is_key_down(&self, key: KeyCode) -> bool {
-        return self.get_key_state(key) == KeyState::Down;
+        return self.down_keys.contains(&key);
     }
     pub fn is_key_up(&self, key: KeyCode) -> bool {
-        return self.get_key_state(key) == KeyState::Up;
+        return self.up_keys.contains(&key);
     }
-    pub fn is_key_pressed(&self, key: KeyCode) -> bool {
-        return self.get_key_state(key) == KeyState::Hold;
+    pub fn is_key_hold(&self, key: KeyCode) -> bool {
+        return self.hold_keys.contains(&key);
     }
 
     pub fn update(&mut self, event: &WindowEvent) {
-        let mut to_change = vec![];
-        for (code, state) in self.keys.iter() {
-            if *state == KeyState::Up {
-                to_change.push(*code);
-            }
-        }
-        for key in to_change {
-            self.keys.insert(key, KeyState::Empty);
-        }
+        self.down_keys.clear();
+        self.up_keys.clear();
 
         match event {
             WindowEvent::KeyboardInput {
@@ -70,17 +52,20 @@ impl InputManager {
                     },
                 ..
             } => {
-                let last_key_state = self.get_key_state(*key);
-                let key_state =
-                    if last_key_state == KeyState::Down && *state == ElementState::Pressed {
-                        KeyState::Hold
-                    } else {
-                        match *state {
-                            ElementState::Pressed => KeyState::Down,
-                            ElementState::Released => KeyState::Up,
+                match *state {
+                    ElementState::Pressed => {
+                        if !self.is_key_hold(*key) {
+                            self.down_keys.insert(*key);
                         }
-                    };
-                self.keys.insert(*key, key_state);
+                        self.hold_keys.insert(*key);
+                    }
+                    ElementState::Released => {
+                        if self.is_key_hold(*key) {
+                            self.up_keys.insert(*key);
+                        }
+                        self.hold_keys.remove(key);
+                    }
+                };
             }
             _ => {}
         };
