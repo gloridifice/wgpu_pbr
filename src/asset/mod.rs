@@ -38,7 +38,7 @@ impl<T> Assets<T> {
         self.map.get(handle).map(|it| it.1.clone())
     }
 
-    pub fn get_by_name(&mut self, name: &str) -> Option<Arc<T>> {
+    pub fn get_by_name(&self, name: &str) -> Option<Arc<T>> {
         self.name_map
             .get(&name.to_string())
             .map(|handle| self.get(handle))

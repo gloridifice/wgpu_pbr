@@ -1,7 +1,7 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::Read, sync::Arc};
 
 use crate::{
-    render::{self, Image, Model, Primitive, Vertex},
+    render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex},
     State,
 };
 use anyhow::*;
@@ -12,7 +12,7 @@ pub trait Loadable: Sized {
     fn load(path: AssetPath, state: &mut State) -> Result<Self>;
 }
 
-impl Loadable for Image {
+impl Loadable for UploadedImage {
     fn load(path: AssetPath, state: &mut State) -> Result<Self> {
         let mut file = File::open(path.final_path())?;
         let mut buffer = Vec::new();
@@ -54,17 +54,11 @@ impl Loadable for Image {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = state.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        });
+        let sampler = state
+            .device
+            .create_sampler(&UploadedImage::default_sampler_desc());
 
-        Ok(Image {
+        Ok(UploadedImage {
             size,
             texture,
             view,
@@ -87,6 +81,7 @@ impl Loadable for Model {
                 let mut primitives = Vec::<render::Primitive>::new();
                 for primitive in mesh.primitives() {
                     let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+
                     let positions = reader
                         .read_positions()
                         .map(|v| v.collect::<Vec<_>>())
@@ -108,9 +103,6 @@ impl Loadable for Model {
                         .map(|v| v.into_u32().collect::<Vec<_>>())
                         .unwrap_or_default();
 
-                    let indices_start = indices.len() as u32;
-                    let indices_num = primitive_indices.len() as u32;
-
                     for i in 0..positions.len() {
                         let v = Vertex {
                             position: *positions.get(i).unwrap_or(&[0.0; 3]),
@@ -120,11 +112,32 @@ impl Loadable for Model {
                         };
                         vertices.push(v);
                     }
+
+                    let material_instance: Option<GltfMaterial> = {
+                        let base_color = primitive
+                            .material()
+                            .pbr_metallic_roughness()
+                            .base_color_texture();
+                        base_color.map(|tex_info| {
+                            let uploaded_image = Arc::new(UploadedImage::from_glb_data(
+                                images.get(tex_info.texture().index()).unwrap(),
+                                &tex_info.texture().sampler(),
+                                state,
+                            ));
+                            GltfMaterial {
+                                base_color_texture: uploaded_image,
+                            }
+                        })
+                    };
+
+                    let indices_start = indices.len() as u32;
+                    let indices_num = primitive_indices.len() as u32;
+
                     indices.append(&mut primitive_indices);
                     primitives.push(Primitive {
                         indices_start,
                         indices_num,
-                        material: None,
+                        material: material_instance,
                     });
                 }
                 render::Mesh {

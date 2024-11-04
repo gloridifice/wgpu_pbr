@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use wgpu::BindGroupLayout;
-
 use crate::State;
 
 use super::{Material, Vertex};

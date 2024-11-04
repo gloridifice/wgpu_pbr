@@ -5,7 +5,7 @@ use cgmath::{InnerSpace, Vector3};
 use input::INPUT;
 use render::{
     camera::{Camera, CameraUniform},
-    material_creations, DrawAble, DrawContext, Image, Material, MaterialInstance, Renderable,
+    material_creations, DrawAble, DrawContext, Material, MaterialInstance, UploadedImage,
     UploadedMesh, Vertex,
 };
 use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, RenderPass};
@@ -95,7 +95,7 @@ struct State<'a> {
     materials: Assets<Material>,
     material_instances: Assets<MaterialInstance>,
     meshes: Assets<UploadedMesh>,
-    images: Assets<Image>,
+    images: Assets<UploadedImage>,
     renderables: Vec<Arc<dyn DrawAble>>,
 
     camera: Camera,
@@ -210,7 +210,7 @@ impl<'a> State<'a> {
         let mut render = model
             .meshes
             .iter()
-            .map(|it| Arc::new(it.upload(&self.device)) as Arc<dyn DrawAble>)
+            .map(|it| Arc::new(it.upload(self)) as Arc<dyn DrawAble>)
             .collect::<Vec<_>>();
         self.renderables.append(&mut render);
     }
@@ -231,7 +231,8 @@ impl<'a> State<'a> {
     }
 
     pub fn load_default_material(&mut self) {
-        let image = Image::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), self).unwrap();
+        let image =
+            UploadedImage::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), self).unwrap();
 
         let material = Arc::new(material_creations::unlit_textured_material(self));
         self.materials.insert_with_name("default", material.clone());
