@@ -17,3 +17,7 @@ anyhow = "1.0.92"
 image = "0.25.4"
 cgmath = "0.18.0"
 lazy_static = "1.5.0"
+
+[dependencies.gltf]
+version = "1.4"
+features = ["extras", "names"]
