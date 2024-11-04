@@ -2,18 +2,18 @@ use std::{fs::File, io::Read, sync::Arc};
 
 use crate::{
     render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex},
-    State,
+    RenderState, State,
 };
 use anyhow::*;
 
 use super::AssetPath;
 
 pub trait Loadable: Sized {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self>;
+    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self>;
 }
 
 impl Loadable for UploadedImage {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
+    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self> {
         let mut file = File::open(path.final_path())?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
@@ -68,7 +68,7 @@ impl Loadable for UploadedImage {
 }
 
 impl Loadable for Model {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
+    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self> {
         let path = path.final_path();
         let (document, buffers, images) = gltf::import(path)?;
 
