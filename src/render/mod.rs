@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
+use material_impl::{DefaultMaterial, DefaultMaterialInstance};
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, PipelineLayout,
-    RenderPass, RenderPipeline, Sampler, Texture, TextureView,
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
+    RenderPipeline, Sampler, Texture, TextureView,
 };
 
-use crate::{RenderState, State};
+use crate::{App, State};
 
 pub mod camera;
-pub mod material_creations;
+pub mod material_impl;
 
 pub struct DrawContext<'a> {
     pub render_pass: &'a mut RenderPass<'a>,
@@ -31,8 +32,8 @@ impl DrawAble for UploadedMesh {
                 Some(arc) => arc.clone(),
                 None => default_material.clone(),
             };
-            render_pass.set_pipeline(&material_instance.material.pipeline);
-            for (i, bind_group) in material_instance.bind_groups.iter().enumerate() {
+            render_pass.set_pipeline(&material_instance.material.pipeline());
+            for (i, bind_group) in material_instance.bind_groups().iter().enumerate() {
                 render_pass.set_bind_group(i as u32, bind_group, &[]);
             }
             let start = primitive.indices_start;
@@ -66,53 +67,18 @@ impl Vertex {
     }
 }
 
-pub trait MaterialPipeline<Instance>: Sized
-where
-    Instance: MaterialInstance<Self>,
-{
+pub trait MaterialPipeline: Sized {
     fn pipeline(&self) -> &RenderPipeline;
     fn pipeline_layout(&self) -> &PipelineLayout;
     fn bind_group_layouts(&self) -> &Vec<Arc<BindGroupLayout>>;
-    fn create_instance(&self, render_state: &RenderState) -> Instance;
 }
 
 pub trait MaterialInstance<Parent>: Sized
 where
-    Parent: MaterialPipeline<Self>,
+    Parent: MaterialPipeline,
 {
     fn parent(&self) -> Arc<Parent>;
-    fn bind_groups(&self) -> Arc<Arc<BindGroup>>;
-}
-
-pub struct DefaultMaterial {
-    pub pipeline: RenderPipeline,
-    pub pipeline_layout: PipelineLayout,
-    pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
-}
-
-impl DefaultMaterial {
-    pub fn create_bind_groups(
-        &self,
-        device: &wgpu::Device,
-        entries_vec: Vec<Vec<BindGroupEntry>>,
-    ) -> Vec<Arc<BindGroup>> {
-        let mut ret = vec![];
-        for (i, entries) in entries_vec.iter().enumerate() {
-            ret.push(Arc::new(device.create_bind_group(
-                &wgpu::BindGroupDescriptor {
-                    layout: self.bind_group_layouts.get(i).unwrap(),
-                    entries,
-                    label: None,
-                },
-            )));
-        }
-        ret
-    }
-}
-
-pub struct DefaultMaterialInstance {
-    pub material: Arc<DefaultMaterial>,
-    pub bind_groups: Vec<Arc<BindGroup>>,
+    fn bind_groups(&self) -> Vec<Arc<BindGroup>>;
 }
 
 pub struct UploadedMesh {
@@ -179,34 +145,11 @@ impl Mesh {
                 indices_num: it.indices_num,
                 material_instance: {
                     it.material.as_ref().map(|gltf_mat| {
-                        let binding_groups = default_material.create_bind_groups(
-                            device,
-                            vec![
-                                vec![
-                                    wgpu::BindGroupEntry {
-                                        binding: 0,
-                                        resource: wgpu::BindingResource::TextureView(
-                                            &gltf_mat.base_color_texture.view,
-                                        ),
-                                    },
-                                    wgpu::BindGroupEntry {
-                                        binding: 1,
-                                        resource: wgpu::BindingResource::Sampler(
-                                            &gltf_mat.base_color_texture.sampler,
-                                        ),
-                                    },
-                                ],
-                                vec![BindGroupEntry {
-                                    binding: 0,
-                                    resource: state.camera_buffer.as_entire_binding(),
-                                }],
-                            ],
-                        );
-                        let material_instance = Arc::new(DefaultMaterialInstance {
-                            material: default_material.clone(),
-                            bind_groups: binding_groups,
-                        });
-                        material_instance
+                        Arc::new(DefaultMaterial::create_instance(
+                            state,
+                            Arc::clone(&default_material),
+                            &gltf_mat.base_color_texture,
+                        ))
                     })
                 },
             })
@@ -249,7 +192,7 @@ impl UploadedImage {
     pub fn from_glb_data(
         data: &gltf::image::Data,
         gltf_sampler: &gltf::texture::Sampler,
-        state: &RenderState,
+        state: &State,
     ) -> Self {
         let size = wgpu::Extent3d {
             width: data.width,
@@ -257,16 +200,19 @@ impl UploadedImage {
             depth_or_array_layers: 1,
         };
 
-        let texture = state.device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let texture = state
+            .render_state
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: None,
+                size,
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
 
         let pixels = match data.format {
             gltf::image::Format::R8G8B8 => {
@@ -286,7 +232,7 @@ impl UploadedImage {
             _ => data.pixels.clone(),
         };
 
-        state.queue.write_texture(
+        state.render_state.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -302,6 +248,7 @@ impl UploadedImage {
 
         // todo
         let sampler = state
+            .render_state
             .device
             .create_sampler(&UploadedImage::default_sampler_desc());
 

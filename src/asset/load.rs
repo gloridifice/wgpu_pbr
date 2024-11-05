@@ -2,18 +2,18 @@ use std::{fs::File, io::Read, sync::Arc};
 
 use crate::{
     render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex},
-    RenderState, State,
+    State,
 };
 use anyhow::*;
 
 use super::AssetPath;
 
 pub trait Loadable: Sized {
-    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self>;
+    fn load(path: AssetPath, state: &mut State) -> Result<Self>;
 }
 
 impl Loadable for UploadedImage {
-    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self> {
+    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
         let mut file = File::open(path.final_path())?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
@@ -26,18 +26,21 @@ impl Loadable for UploadedImage {
             depth_or_array_layers: 1,
         };
 
-        let texture = state.device.create_texture(&wgpu::TextureDescriptor {
-            size,
-            mip_level_count: 1,
-            label: None,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
+        let texture = state
+            .render_state
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                size,
+                mip_level_count: 1,
+                label: None,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            });
 
-        state.queue.write_texture(
+        state.render_state.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -55,6 +58,7 @@ impl Loadable for UploadedImage {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = state
+            .render_state
             .device
             .create_sampler(&UploadedImage::default_sampler_desc());
 
@@ -68,7 +72,7 @@ impl Loadable for UploadedImage {
 }
 
 impl Loadable for Model {
-    fn load(path: AssetPath, state: &mut RenderState) -> Result<Self> {
+    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
         let path = path.final_path();
         let (document, buffers, images) = gltf::import(path)?;
 
