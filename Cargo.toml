@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-winit = { version = "0.29", features = ["rwh_05"] }
+winit = { version = "0.30", features = ["rwh_05"] }
 wgpu = "22"
 log = "0.4"
 env_logger = "0.11"
@@ -18,6 +18,9 @@ image = "0.25.4"
 cgmath = "0.18.0"
 lazy_static = "1.5.0"
 derive_builder = "0.20.2"
+egui = "0.29.1"
+egui-wgpu = "0.29.1"
+egui-winit = "0.29.1"
 
 [dependencies.gltf]
 version = "1.4"
