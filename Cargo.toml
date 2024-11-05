@@ -21,6 +21,7 @@ derive_builder = "0.20.2"
 egui = "0.29.1"
 egui-wgpu = "0.29.1"
 egui-winit = "0.29.1"
+bevy_ecs = "0.14.2"
 
 [dependencies.gltf]
 version = "1.4"
