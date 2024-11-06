@@ -8,9 +8,10 @@ use pollster::block_on;
 use render::{
     camera::{Camera, CameraUniform, RenderCamera},
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
+    transform::TransformUniform,
     UploadedImage, UploadedMesh,
 };
-use wgpu::{util::DeviceExt, BindGroupEntry, Instance, Surface};
+use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -23,6 +24,7 @@ mod engine_lifetime;
 mod input;
 mod render;
 mod time;
+mod wgpu_init;
 
 pub async fn run() {
     env_logger::init();
@@ -50,8 +52,8 @@ struct State {
     meshes: Assets<UploadedMesh>,
     images: Assets<UploadedImage>,
     world: World,
+    transform_bind_group_layout: Arc<BindGroupLayout>,
     // transform_buffer: wgpu::Buffer,
-    // transform_bind_group_layout: Arc<BindGroupLayout>,
     // transform_bind_group: Arc<BindGroup>,
 }
 
@@ -227,6 +229,10 @@ impl State {
         //     },
         // ));
 
+        let transform_bind_group_layout = Arc::new(TransformUniform::create_bind_group_layout(
+            &render_state.device,
+        ));
+
         let depth_texture = render_state.create_depth_texture();
         let egui_renderer = EguiRenderer::new(
             &render_state.device,
@@ -257,7 +263,7 @@ impl State {
             world: World::new(),
             // transform_buffer,
             // transform_bind_group,
-            // transform_bind_group_layout,
+            transform_bind_group_layout,
         }
     }
 

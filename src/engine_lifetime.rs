@@ -1,5 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
+use bevy_ecs::{change_detection::DetectChanges, entity::Entity};
 use cgmath::{InnerSpace, Point3, Vector3};
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
@@ -82,6 +83,33 @@ impl State {
         self.render_camera
             .camera_update(&mut self.world, &self.render_state.queue, &input, &time);
         CameraConfig::panel(&mut self.world, &self.egui_renderer);
+
+        {
+            let a = self
+                .world
+                .query::<(Entity, &MeshRenderer, &Transform)>()
+                .iter(&self.world)
+                .map(|(entity, _, trans)| (entity, trans.calculate_world_matrix4x4(&self.world)))
+                .collect::<Vec<_>>();
+
+            for (entity, matrix) in a.iter() {
+                let (mut mesh_renderer, transform) = self
+                    .world
+                    .query::<(&mut MeshRenderer, &mut Transform)>()
+                    .get_mut(&mut self.world, *entity)
+                    .unwrap();
+
+                if mesh_renderer.transform_bind_group.is_none() {
+                    mesh_renderer.init_transform_buffer(
+                        &self.render_state.device,
+                        &self.transform_bind_group_layout,
+                        *matrix,
+                    );
+                } else if transform.is_changed() {
+                    mesh_renderer.update_transform_buffer(&self.render_state.queue, *matrix);
+                }
+            }
+        }
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -123,20 +151,15 @@ impl State {
             // Draw Objects
             let default_material = self.material_instances.get_by_name("default").unwrap();
 
-            for (mesh_renderer, transform) in self
-                .world
-                .query::<(&MeshRenderer, &Transform)>()
-                .iter(&self.world)
-            {
+            for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
                 if let Some(mesh) = mesh_renderer.mesh.as_ref() {
-                    let transform = transform.calculate_world_matrix4x4(&self.world);
+                    if let Some(transform_bind_group) = mesh_renderer.transform_bind_group.as_ref()
                     {
                         let mut ctx = DrawContext {
                             render_pass: &mut render_pass,
                             default_material: Arc::clone(&default_material),
-                            push_constants: PushConstants {
-                                model: transform.into(),
-                            },
+                            transform_bind_group,
+                            camera_bind_group: &self.render_camera.camera_bind_group,
                         };
                         mesh.draw(&mut ctx);
                     }

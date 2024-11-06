@@ -1,6 +1,9 @@
 use bevy_ecs::{component::Component, entity::Entity, world::World};
 use cgmath::{Deg, EuclideanSpace, Matrix4, Point3, Quaternion, Rotation3, SquareMatrix, Vector3};
 use derive_builder::Builder;
+use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
+
+use crate::wgpu_init::bind_group_layout_entry_shader;
 
 #[derive(Component, Builder, Clone, Debug)]
 pub struct Transform {
@@ -50,3 +53,27 @@ impl Transform {
         return local_matrix;
     }
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct TransformUniform {
+    pub model: [[f32; 4]; 4],
+}
+
+impl TransformUniform {
+    pub fn create_bind_group_layout(device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Transform Bind Group Layout"),
+            entries: &[bind_group_layout_entry_shader(
+                0,
+                wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+            )],
+        })
+    }
+}
+
+unsafe impl bytemuck::Pod for TransformUniform {}
+unsafe impl bytemuck::Zeroable for TransformUniform {}
