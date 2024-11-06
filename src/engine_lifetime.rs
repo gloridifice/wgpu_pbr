@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{borrow::BorrowMut, sync::Arc};
 
 use cgmath::{InnerSpace, Vector3};
 use egui_wgpu::ScreenDescriptor;
@@ -7,7 +7,12 @@ use winit::{event::WindowEvent, keyboard::KeyCode};
 use crate::{
     asset::{load::Loadable, AssetPath},
     input::INPUT,
-    render::{self, camera::CameraConfig, DrawAble},
+    render::{
+        self,
+        camera::CameraConfig,
+        transform::{Transform, TransformBuilder, TransformUniform},
+        DrawAble, DrawContext, MeshRenderer,
+    },
     time::TIME,
     State,
 };
@@ -22,12 +27,17 @@ impl State {
         )
         .unwrap();
 
-        let mut render = model
-            .meshes
-            .iter()
-            .map(|it| Arc::new(it.upload(self)) as Arc<dyn DrawAble>)
-            .collect::<Vec<_>>();
-        self.renderables.append(&mut render);
+        let parent = self.world.spawn(Transform::default()).id();
+        for mesh in model.meshes {
+            let uploaded = Arc::new(mesh.upload(self));
+            self.world.spawn((
+                MeshRenderer::new(uploaded),
+                TransformBuilder::default()
+                    .parent(Some(parent))
+                    .build()
+                    .unwrap(),
+            ));
+        }
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -105,7 +115,34 @@ impl State {
                 timestamp_writes: None,
             });
 
-            self.draw_objects(&mut render_pass);
+            // Draw Objects
+            let default_material = self
+                .material_instances
+                .get_by_name("default")
+                .unwrap()
+                .clone();
+            let mut ctx = DrawContext {
+                render_pass: &mut render_pass,
+                default_material,
+            };
+
+            for (mesh_renderer, transform) in self
+                .world
+                .query::<(&MeshRenderer, &Transform)>()
+                .iter(&self.world)
+            {
+                if let Some(mesh) = mesh_renderer.mesh.as_ref() {
+                    let transform = transform.calculate_world_matrix4x4(&self.world);
+                    self.render_state.queue.write_buffer(
+                        &self.transform_buffer,
+                        0,
+                        bytemuck::cast_slice(&[TransformUniform {
+                            matrix: transform.into(),
+                        }]),
+                    );
+                    mesh.draw(&mut ctx);
+                }
+            }
         }
         let screen_descriptor = ScreenDescriptor {
             size_in_pixels: [
@@ -124,6 +161,7 @@ impl State {
                 screen_descriptor,
             )
         }
+        // End Draw Objects
 
         self.render_state
             .queue
