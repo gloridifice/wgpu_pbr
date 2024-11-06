@@ -7,7 +7,7 @@ use winit::{event::WindowEvent, keyboard::KeyCode};
 use crate::{
     asset::{load::Loadable, AssetPath},
     input::INPUT,
-    render::{self, DrawAble},
+    render::{self, camera::CameraConfig, DrawAble},
     time::TIME,
     State,
 };
@@ -61,49 +61,12 @@ impl State {
     }
 
     pub fn update(&mut self) {
-        egui::Window::new("Camera")
-            .resizable(true)
-            .show(self.egui_renderer.context(), |ui| {
-                ui.label("Label");
-            });
-
         let time = TIME.lock().unwrap();
         let input = INPUT.lock().unwrap();
 
-        let mut move_vec = Vector3::new(0., 0., 0.);
-        if input.is_key_hold(KeyCode::KeyW) {
-            move_vec += Vector3::new(0.0, 0.0, -1.0);
-        }
-        if input.is_key_hold(KeyCode::KeyA) {
-            move_vec += Vector3::new(-1.0, 0.0, 0.0);
-        }
-        if input.is_key_hold(KeyCode::KeyS) {
-            move_vec += Vector3::new(0.0, 0.0, 1.0);
-        }
-        if input.is_key_hold(KeyCode::KeyD) {
-            move_vec += Vector3::new(1.0, 0.0, 0.0);
-        }
-        if input.is_key_hold(KeyCode::Space) {
-            if input.is_key_hold(KeyCode::ShiftLeft) {
-                move_vec += Vector3::new(0.0, -1.0, 0.0);
-            } else {
-                move_vec += Vector3::new(0.0, 1.0, 1.0);
-            }
-        }
-        if move_vec != Vector3::new(0., 0., 0.) {
-            move_vec = move_vec.normalize() * 0.5 * time.delta_time.as_secs_f32();
-            self.render_camera.camera.eye += move_vec;
-            self.render_camera.camera.target += move_vec;
-
-            self.render_camera
-                .camera_uniform
-                .update_view_proj(&self.render_camera.camera);
-            self.render_state.queue.write_buffer(
-                &self.render_camera.camera_buffer,
-                0,
-                bytemuck::cast_slice(&[self.render_camera.camera_uniform]),
-            );
-        }
+        self.render_camera
+            .camera_update(&mut self.world, &self.render_state.queue, &input, &time);
+        CameraConfig::panel(&mut self.world, &self.egui_renderer);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

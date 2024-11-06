@@ -2962,6 +2962,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tiny_bail"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "425cf2e86c5941892b64bcf4a89cc1b468c754ef4946d15a7244a17205e7424d"
+dependencies = [
+ "tracing",
+]
+
+[[package]]
 name = "tinystr"
 version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3011,8 +3020,21 @@ version = "0.1.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3523ab5a71916ccf420eebdf5521fcef02141234bbc0b8a49f2fdc4544364ef"
 dependencies = [
+ "log",
  "pin-project-lite",
+ "tracing-attributes",
  "tracing-core",
+]
+
+[[package]]
+name = "tracing-attributes"
+version = "0.1.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.85",
 ]
 
 [[package]]
@@ -3496,6 +3518,7 @@ dependencies = [
  "lazy_static",
  "log",
  "pollster",
+ "tiny_bail",
  "uuid",
  "wgpu",
  "winit",
