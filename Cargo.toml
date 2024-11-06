@@ -23,6 +23,7 @@ egui-wgpu = "0.29.1"
 egui-winit = "0.29.1"
 bevy_ecs = "0.14.2"
 tiny_bail = "0.4.3"
+rand = "0.8.5"
 
 [dependencies.gltf]
 version = "1.4"

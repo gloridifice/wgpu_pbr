@@ -1,6 +1,6 @@
 use std::{borrow::BorrowMut, sync::Arc};
 
-use cgmath::{InnerSpace, Vector3};
+use cgmath::{InnerSpace, Point3, Vector3};
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -10,11 +10,11 @@ use crate::{
     render::{
         self,
         camera::CameraConfig,
-        transform::{Transform, TransformBuilder, TransformUniform},
+        transform::{Transform, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
     time::TIME,
-    State,
+    PushConstants, State,
 };
 
 impl State {
@@ -27,13 +27,18 @@ impl State {
         )
         .unwrap();
 
+        // let trans = Transform::with_position(Point3::new(0.2, 0.2, 0.0));
         let parent = self.world.spawn(Transform::default()).id();
+
         for mesh in model.meshes {
             let uploaded = Arc::new(mesh.upload(self));
+            let y: f32 = rand::random();
+            println!("y: {}", y);
             self.world.spawn((
                 MeshRenderer::new(uploaded),
                 TransformBuilder::default()
                     .parent(Some(parent))
+                    .position(Point3::new(0.0, y, 0.0))
                     .build()
                     .unwrap(),
             ));
@@ -116,15 +121,7 @@ impl State {
             });
 
             // Draw Objects
-            let default_material = self
-                .material_instances
-                .get_by_name("default")
-                .unwrap()
-                .clone();
-            let mut ctx = DrawContext {
-                render_pass: &mut render_pass,
-                default_material,
-            };
+            let default_material = self.material_instances.get_by_name("default").unwrap();
 
             for (mesh_renderer, transform) in self
                 .world
@@ -133,14 +130,16 @@ impl State {
             {
                 if let Some(mesh) = mesh_renderer.mesh.as_ref() {
                     let transform = transform.calculate_world_matrix4x4(&self.world);
-                    self.render_state.queue.write_buffer(
-                        &self.transform_buffer,
-                        0,
-                        bytemuck::cast_slice(&[TransformUniform {
-                            matrix: transform.into(),
-                        }]),
-                    );
-                    mesh.draw(&mut ctx);
+                    {
+                        let mut ctx = DrawContext {
+                            render_pass: &mut render_pass,
+                            default_material: Arc::clone(&default_material),
+                            push_constants: PushConstants {
+                                model: transform.into(),
+                            },
+                        };
+                        mesh.draw(&mut ctx);
+                    }
                 }
             }
         }

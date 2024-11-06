@@ -2,7 +2,7 @@ use bevy_ecs::{component::Component, entity::Entity, world::World};
 use cgmath::{Deg, EuclideanSpace, Matrix4, Point3, Quaternion, Rotation3, SquareMatrix, Vector3};
 use derive_builder::Builder;
 
-#[derive(Component, Builder)]
+#[derive(Component, Builder, Clone, Debug)]
 pub struct Transform {
     #[builder(default = None)]
     pub parent: Option<Entity>,
@@ -10,21 +10,15 @@ pub struct Transform {
     pub children: Vec<Entity>,
     #[builder(default = Point3::<f32>::new(0.,0.,0.))]
     pub position: Point3<f32>,
-    #[builder(default = Quaternion::<f32>::from_angle_x(Deg(0.)))]
+    #[builder(default = Quaternion::<f32>::new(1., 0., 0., 0.))]
     pub rotation: Quaternion<f32>,
-    #[builder(default = Vector3::<f32>::new(0.,0.,0.))]
+    #[builder(default = Vector3::<f32>::new(1.,1.,1.))]
     pub scale: Vector3<f32>,
 }
 
 impl Default for Transform {
     fn default() -> Self {
-        Self {
-            parent: None,
-            children: vec![],
-            position: Point3::new(0., 0., 0.),
-            rotation: Quaternion::from_angle_x(Deg(0.)),
-            scale: Vector3::new(1., 1., 1.),
-        }
+        TransformBuilder::default().build().unwrap()
     }
 }
 
@@ -40,8 +34,8 @@ impl Transform {
         let translation = Matrix4::from_translation(self.position.to_vec());
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
-
-        translation * rotation * scale
+        let ret = translation * rotation * scale;
+        ret
     }
 
     pub fn calculate_world_matrix4x4(&self, world: &World) -> Matrix4<f32> {
@@ -54,22 +48,5 @@ impl Transform {
                     .calculate_world_matrix4x4(world);
         };
         return local_matrix;
-    }
-}
-
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct TransformUniform {
-    pub matrix: [[f32; 4]; 4],
-}
-
-unsafe impl bytemuck::Pod for TransformUniform {}
-unsafe impl bytemuck::Zeroable for TransformUniform {}
-
-impl Default for TransformUniform {
-    fn default() -> Self {
-        TransformUniform {
-            matrix: Matrix4::identity().into(),
-        }
     }
 }

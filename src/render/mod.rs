@@ -3,21 +3,21 @@ use std::sync::Arc;
 use bevy_ecs::component::Component;
 use cgmath::Matrix4;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
-use transform::{Transform, TransformUniform};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
     RenderPipeline, Sampler, Texture, TextureView,
 };
 
-use crate::{App, State};
+use crate::{App, PushConstants, State};
 
 pub mod camera;
 pub mod material_impl;
 pub mod transform;
 
-pub struct DrawContext<'a> {
-    pub render_pass: &'a mut RenderPass<'a>,
+pub struct DrawContext<'a, 'b> {
+    pub render_pass: &'b mut RenderPass<'a>,
     pub default_material: Arc<DefaultMaterialInstance>,
+    pub push_constants: PushConstants,
 }
 
 pub trait DrawAble {
@@ -35,22 +35,14 @@ impl MeshRenderer {
     }
 }
 
-pub struct Node {
-    pub parent: Option<Arc<Node>>,
-    pub children: Vec<Arc<Node>>,
-    pub transform: Transform,
-    pub mesh: Option<Arc<dyn DrawAble>>,
-}
-
 impl DrawAble for UploadedMesh {
     fn draw(&self, context: &mut DrawContext) {
-        // context.state.render_state.queue.write_buffer(
-        //     &context.state.transform_buffer,
-        //     0,
-        //     bytemuck::cast_slice(&[TransformUniform {
-        //         matrix: self.transform_matrix().into(),
-        //     }]),
-        // );
+        context.render_pass.set_push_constants(
+            wgpu::ShaderStages::VERTEX,
+            0,
+            bytemuck::cast_slice(&[context.push_constants]),
+        );
+
         let default_material = &context.default_material;
         let render_pass = &mut context.render_pass;
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
