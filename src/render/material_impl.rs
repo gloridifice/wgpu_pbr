@@ -4,7 +4,7 @@ use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
 };
 
-use crate::{App, PushConstants, RenderState, State};
+use crate::{PushConstants, RenderState, State};
 
 use super::{MaterialInstance, MaterialPipeline, UploadedImage, Vertex};
 
@@ -12,7 +12,6 @@ pub struct DefaultMaterial {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
-    pub universal_bind_groups: Vec<Arc<BindGroup>>,
 }
 
 impl DefaultMaterial {
@@ -45,15 +44,11 @@ impl DefaultMaterial {
                 label: Some("texture_bind_group_layout"),
             });
 
-        let (depth_bind_group_layout, depth_bind_group) =
-            DefaultMaterial::create_depth_bind_group(state);
-
         let bind_group_layouts = vec![
-            Arc::new(texture_bind_group_layout),
+            state.transform_bind_group_layout.clone(),
             state.render_camera.camera_bind_group_layout.clone(),
+            Arc::new(texture_bind_group_layout),
         ];
-
-        let universal_bind_groups = vec![Arc::clone(&state.render_camera.camera_bind_group)];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -62,10 +57,7 @@ impl DefaultMaterial {
                     .iter()
                     .map(|it| it.as_ref())
                     .collect::<Vec<_>>(),
-                push_constant_ranges: &[wgpu::PushConstantRange {
-                    stages: wgpu::ShaderStages::VERTEX,
-                    range: 0..std::mem::size_of::<PushConstants>() as u32,
-                }],
+                push_constant_ranges: &[],
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -119,7 +111,7 @@ impl DefaultMaterial {
             pipeline: render_pipeline,
             pipeline_layout: render_pipeline_layout,
             bind_group_layouts,
-            universal_bind_groups,
+            // universal_bind_groups,
         }
     }
 
@@ -176,7 +168,7 @@ impl DefaultMaterial {
         parent: Arc<Self>,
         image: &UploadedImage,
     ) -> DefaultMaterialInstance {
-        let layout = parent.bind_group_layouts().get(0).unwrap();
+        let layout = parent.bind_group_layouts().get(2).unwrap();
         let texture_bind_group =
             state
                 .render_state
@@ -227,10 +219,6 @@ impl MaterialInstance<DefaultMaterial> for DefaultMaterialInstance {
     }
 
     fn bind_groups(&self) -> Vec<Arc<BindGroup>> {
-        self.bind_groups
-            .clone()
-            .into_iter()
-            .chain(self.material.universal_bind_groups.clone().into_iter())
-            .collect::<Vec<_>>()
+        self.bind_groups.clone()
     }
 }

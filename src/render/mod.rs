@@ -3,9 +3,11 @@ use std::sync::Arc;
 use bevy_ecs::component::Component;
 use cgmath::Matrix4;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
+use tiny_bail::or_return;
+use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
-    RenderPipeline, Sampler, Texture, TextureView,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry, Buffer,
+    BufferUsages, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
 use crate::{App, PushConstants, State};
@@ -17,32 +19,67 @@ pub mod transform;
 pub struct DrawContext<'a, 'b> {
     pub render_pass: &'b mut RenderPass<'a>,
     pub default_material: Arc<DefaultMaterialInstance>,
-    pub push_constants: PushConstants,
+    pub transform_bind_group: &'b BindGroup,
+    pub camera_bind_group: &'b BindGroup,
 }
 
 pub trait DrawAble {
     fn draw(&self, context: &mut DrawContext);
 }
 
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct MeshRenderer {
     pub mesh: Option<Arc<UploadedMesh>>,
+    pub transform_bind_group: Option<Arc<BindGroup>>,
+    pub transform_buffer: Option<Arc<Buffer>>,
 }
 
 impl MeshRenderer {
     pub fn new(mesh: Arc<UploadedMesh>) -> Self {
-        Self { mesh: Some(mesh) }
+        Self {
+            mesh: Some(mesh),
+            ..Default::default()
+        }
+    }
+
+    pub fn init_transform_buffer(
+        &mut self,
+        device: &wgpu::Device,
+        layout: &BindGroupLayout,
+        trans_mat: Matrix4<f32>,
+    ) {
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&[TransformUniform {
+                model: trans_mat.into(),
+            }]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+        self.transform_bind_group = Some(Arc::new(device.create_bind_group(
+            &wgpu::BindGroupDescriptor {
+                label: None,
+                layout,
+                entries: &[BindGroupEntry {
+                    binding: 0,
+                    resource: buffer.as_entire_binding(),
+                }],
+            },
+        )));
+        self.transform_buffer = Some(Arc::new(buffer));
+    }
+
+    pub fn update_transform_buffer(&self, queue: &wgpu::Queue, mat: Matrix4<f32>) {
+        let transform_buffer = or_return!(self.transform_buffer.as_ref());
+        queue.write_buffer(
+            transform_buffer,
+            0,
+            bytemuck::cast_slice(&[TransformUniform { model: mat.into() }]),
+        );
     }
 }
 
 impl DrawAble for UploadedMesh {
     fn draw(&self, context: &mut DrawContext) {
-        context.render_pass.set_push_constants(
-            wgpu::ShaderStages::VERTEX,
-            0,
-            bytemuck::cast_slice(&[context.push_constants]),
-        );
-
         let default_material = &context.default_material;
         let render_pass = &mut context.render_pass;
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -53,9 +90,13 @@ impl DrawAble for UploadedMesh {
                 Some(arc) => arc.clone(),
                 None => default_material.clone(),
             };
+
+            render_pass.set_bind_group(0, context.transform_bind_group, &[]);
+            render_pass.set_bind_group(1, context.camera_bind_group, &[]);
+
             render_pass.set_pipeline(&material_instance.material.pipeline());
             for (i, bind_group) in material_instance.bind_groups().iter().enumerate() {
-                render_pass.set_bind_group(i as u32, bind_group, &[]);
+                render_pass.set_bind_group((i + 2) as u32, bind_group, &[]);
             }
             let start = primitive.indices_start;
             let num = primitive.indices_num;
