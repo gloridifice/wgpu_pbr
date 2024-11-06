@@ -7,18 +7,18 @@ use winit::{
 };
 
 lazy_static! {
-    pub static ref INPUT: Mutex<InputManager> = Mutex::new(InputManager::new());
+    pub static ref INPUT: Mutex<GameInput> = Mutex::new(GameInput::new());
 }
 
-pub struct InputManager {
+pub struct GameInput {
     pub down_keys: HashSet<KeyCode>,
     pub hold_keys: HashSet<KeyCode>,
     pub up_keys: HashSet<KeyCode>,
 }
 
-impl InputManager {
+impl GameInput {
     pub fn new() -> Self {
-        InputManager {
+        GameInput {
             down_keys: HashSet::with_capacity(100),
             hold_keys: HashSet::with_capacity(100),
             up_keys: HashSet::with_capacity(100),

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use asset::{load::Loadable, AssetPath, Assets};
+use bevy_ecs::world::World;
 use egui_tools::EguiRenderer;
 use engine_lifetime::*;
 use pollster::block_on;
 use render::{
-    camera::{Camera, CameraUniform},
+    camera::{Camera, CameraUniform, RenderCamera},
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
     DrawAble, DrawContext, UploadedImage, UploadedMesh,
 };
@@ -18,6 +19,7 @@ use winit::{
 };
 
 mod asset;
+mod bevy_ecs_ext;
 mod egui_tools;
 mod engine_lifetime;
 mod input;
@@ -38,14 +40,6 @@ struct App {
     window: Option<Arc<Window>>,
 }
 
-struct RenderCamera {
-    pub camera: Camera,
-    pub camera_uniform: CameraUniform,
-    pub camera_buffer: wgpu::Buffer,
-    pub camera_bind_group_layout: Arc<BindGroupLayout>,
-    pub camera_bind_group: Arc<BindGroup>,
-}
-
 struct State {
     window: Arc<Window>,
     render_state: RenderState,
@@ -58,6 +52,7 @@ struct State {
     meshes: Assets<UploadedMesh>,
     images: Assets<UploadedImage>,
     renderables: Vec<Arc<dyn DrawAble>>,
+    world: World,
 }
 
 struct RenderState {
@@ -202,7 +197,7 @@ impl State {
             render_state,
             depth_texture,
             egui_renderer,
-            render_camera: RenderCamera {
+            render_camera: render::camera::RenderCamera {
                 camera,
                 camera_uniform,
                 camera_buffer,
@@ -215,6 +210,7 @@ impl State {
             images: Assets::new(),
             renderables: vec![],
             egui_scale_factor: 1.0,
+            world: World::new(),
         }
     }
 

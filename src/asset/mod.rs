@@ -61,7 +61,7 @@ impl<T> Assets<T> {
         (handle.clone(), removed)
     }
 
-    pub fn insert(&mut self, value: Arc<T>) -> Handle<T> {
+    pub fn push(&mut self, value: Arc<T>) -> Handle<T> {
         let uuid = uuid::Uuid::new_v4();
         let handle = Handle {
             pha: PhantomData::<T>,
@@ -128,7 +128,7 @@ mod test {
     #[test]
     fn test_asset_handle() {
         let mut assets = Assets::<String>::new();
-        let handle = assets.insert(Arc::new("Hello".to_string()));
+        let handle = assets.push(Arc::new("Hello".to_string()));
         assert_eq!("Hello", *assets.get(&handle).unwrap());
 
         let hello = assets.remove(&handle).unwrap();
