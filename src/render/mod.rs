@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
+use bevy_ecs::component::Component;
+use cgmath::Matrix4;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
+use transform::{Transform, TransformUniform};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, Buffer, PipelineLayout, RenderPass,
     RenderPipeline, Sampler, Texture, TextureView,
@@ -10,6 +13,7 @@ use crate::{App, State};
 
 pub mod camera;
 pub mod material_impl;
+pub mod transform;
 
 pub struct DrawContext<'a> {
     pub render_pass: &'a mut RenderPass<'a>,
@@ -20,8 +24,33 @@ pub trait DrawAble {
     fn draw(&self, context: &mut DrawContext);
 }
 
+#[derive(Component)]
+pub struct MeshRenderer {
+    pub mesh: Option<Arc<UploadedMesh>>,
+}
+
+impl MeshRenderer {
+    pub fn new(mesh: Arc<UploadedMesh>) -> Self {
+        Self { mesh: Some(mesh) }
+    }
+}
+
+pub struct Node {
+    pub parent: Option<Arc<Node>>,
+    pub children: Vec<Arc<Node>>,
+    pub transform: Transform,
+    pub mesh: Option<Arc<dyn DrawAble>>,
+}
+
 impl DrawAble for UploadedMesh {
     fn draw(&self, context: &mut DrawContext) {
+        // context.state.render_state.queue.write_buffer(
+        //     &context.state.transform_buffer,
+        //     0,
+        //     bytemuck::cast_slice(&[TransformUniform {
+        //         matrix: self.transform_matrix().into(),
+        //     }]),
+        // );
         let default_material = &context.default_material;
         let render_pass = &mut context.render_pass;
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -41,6 +70,14 @@ impl DrawAble for UploadedMesh {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
+
+    // fn transform_matrix(&self) -> Matrix4<f32> {
+    //     let matrix = self.transform.calculate_matrix4x4();
+    //     match self.parent.as_ref() {
+    //         Some(p) => matrix * p.transform_matrix(),
+    //         None => matrix,
+    //     }
+    // }
 }
 
 #[repr(C)]

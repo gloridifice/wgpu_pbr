@@ -44,18 +44,19 @@ impl DefaultMaterial {
                 ],
                 label: Some("texture_bind_group_layout"),
             });
+
         let (depth_bind_group_layout, depth_bind_group) =
             DefaultMaterial::create_depth_bind_group(state);
 
         let bind_group_layouts = vec![
             Arc::new(texture_bind_group_layout),
             state.render_camera.camera_bind_group_layout.clone(),
-            // Arc::new(depth_bind_group_layout),
+            state.transform_bind_group_layout.clone(),
         ];
 
         let universal_bind_groups = vec![
             Arc::clone(&state.render_camera.camera_bind_group),
-            // Arc::new(depth_bind_group),
+            Arc::clone(&state.transform_bind_group),
         ];
 
         let render_pipeline_layout =
