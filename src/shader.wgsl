@@ -16,6 +16,9 @@ struct CameraUniform {
     view_proj: mat4x4<f32>
 }
 
+struct PushConstants{
+    model: mat4x4<f32>
+}
 @group(1) @binding(0)
 var<uniform> camera: CameraUniform;
 
@@ -25,7 +28,7 @@ fn vs_main(
 ) -> VertexOutput {
     var out: VertexOutput;
     out.color = model.color;
-    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
+    out.clip_position =  camera.view_proj * push_constants.model * vec4<f32>(model.position, 1.0);
     out.normal = model.normal;
     out.tex_coord = model.tex_coord;
     return out;

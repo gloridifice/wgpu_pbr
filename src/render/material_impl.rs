@@ -4,7 +4,7 @@ use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
 };
 
-use crate::{App, RenderState, State};
+use crate::{App, PushConstants, RenderState, State};
 
 use super::{MaterialInstance, MaterialPipeline, UploadedImage, Vertex};
 
@@ -51,13 +51,9 @@ impl DefaultMaterial {
         let bind_group_layouts = vec![
             Arc::new(texture_bind_group_layout),
             state.render_camera.camera_bind_group_layout.clone(),
-            state.transform_bind_group_layout.clone(),
         ];
 
-        let universal_bind_groups = vec![
-            Arc::clone(&state.render_camera.camera_bind_group),
-            Arc::clone(&state.transform_bind_group),
-        ];
+        let universal_bind_groups = vec![Arc::clone(&state.render_camera.camera_bind_group)];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -66,7 +62,10 @@ impl DefaultMaterial {
                     .iter()
                     .map(|it| it.as_ref())
                     .collect::<Vec<_>>(),
-                push_constant_ranges: &[],
+                push_constant_ranges: &[wgpu::PushConstantRange {
+                    stages: wgpu::ShaderStages::VERTEX,
+                    range: 0..std::mem::size_of::<PushConstants>() as u32,
+                }],
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

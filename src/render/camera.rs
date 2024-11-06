@@ -106,14 +106,9 @@ impl CameraConfig {
     pub fn panel(world: &mut World, egui_renderer: &EguiRenderer) {
         let mut camera_config = world.resource_or_default::<CameraConfig>();
 
-        egui::Window::new("Camera")
-            .resizable(true)
-            .show(egui_renderer.context(), |ui| {
-                ui.add(egui::widgets::Slider::new(
-                    &mut camera_config.speed,
-                    0.5..=10.0,
-                ));
-            });
+        egui::Window::new("Camera").show(egui_renderer.context(), |ui| {
+            ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
+        });
     }
 }
 

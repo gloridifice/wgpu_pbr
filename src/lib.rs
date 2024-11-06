@@ -2,17 +2,15 @@ use std::sync::Arc;
 
 use asset::{load::Loadable, AssetPath, Assets};
 use bevy_ecs::world::World;
+use egui::Visuals;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use render::{
     camera::{Camera, CameraUniform, RenderCamera},
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
-    transform::TransformUniform,
-    DrawAble, DrawContext, UploadedImage, UploadedMesh,
+    UploadedImage, UploadedMesh,
 };
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Instance, RenderPass, Surface,
-};
+use wgpu::{util::DeviceExt, BindGroupEntry, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -52,10 +50,9 @@ struct State {
     meshes: Assets<UploadedMesh>,
     images: Assets<UploadedImage>,
     world: World,
-
-    transform_buffer: wgpu::Buffer,
-    transform_bind_group_layout: Arc<BindGroupLayout>,
-    transform_bind_group: Arc<BindGroup>,
+    // transform_buffer: wgpu::Buffer,
+    // transform_bind_group_layout: Arc<BindGroupLayout>,
+    // transform_bind_group: Arc<BindGroup>,
 }
 
 struct RenderState {
@@ -65,6 +62,14 @@ struct RenderState {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
 }
+
+#[derive(Debug, Clone, Copy)]
+pub struct PushConstants {
+    pub model: [[f32; 4]; 4],
+}
+
+unsafe impl bytemuck::Pod for PushConstants {}
+unsafe impl bytemuck::Zeroable for PushConstants {}
 
 impl App {
     pub fn new() -> App {
@@ -186,41 +191,41 @@ impl State {
             },
         ));
 
-        let transform_buffer =
-            render_state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Transform Buffer"),
-                    contents: bytemuck::cast_slice(&[TransformUniform::default()]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
+        // let transform_buffer =
+        //     render_state
+        //         .device
+        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        //             label: Some("Transform Buffer"),
+        //             contents: bytemuck::cast_slice(&[TransformUniform::default()]),
+        //             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        //         });
 
-        let transform_bind_group_layout = Arc::new(render_state.device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                label: Some("Transform Bind Group Layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            },
-        ));
+        // let transform_bind_group_layout = Arc::new(render_state.device.create_bind_group_layout(
+        //     &wgpu::BindGroupLayoutDescriptor {
+        //         label: Some("Transform Bind Group Layout"),
+        //         entries: &[wgpu::BindGroupLayoutEntry {
+        //             binding: 0,
+        //             visibility: wgpu::ShaderStages::VERTEX,
+        //             ty: wgpu::BindingType::Buffer {
+        //                 ty: wgpu::BufferBindingType::Uniform,
+        //                 has_dynamic_offset: false,
+        //                 min_binding_size: None,
+        //             },
+        //             count: None,
+        //         }],
+        //     },
+        // ));
 
-        let transform_bind_group = Arc::new(render_state.device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: Some("Transform Bind Group"),
-                layout: &transform_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: transform_buffer.as_entire_binding(),
-                }],
-            },
-        ));
+        // let transform_bind_group = Arc::new(render_state.device.create_bind_group(
+        //     &wgpu::BindGroupDescriptor {
+        //         label: Some("Transform Bind Group"),
+        //         layout: &transform_bind_group_layout,
+        //         entries: &[wgpu::BindGroupEntry {
+        //             binding: 0,
+        //             resource: transform_buffer.as_entire_binding(),
+        //         }],
+        //     },
+        // ));
 
         let depth_texture = render_state.create_depth_texture();
         let egui_renderer = EguiRenderer::new(
@@ -230,6 +235,7 @@ impl State {
             1,
             &window,
         );
+        egui_renderer.context().set_visuals(Visuals::light());
 
         Self {
             window: Arc::clone(&window),
@@ -247,12 +253,11 @@ impl State {
             material_instances: Assets::new(),
             meshes: Assets::new(),
             images: Assets::new(),
-            egui_scale_factor: 1.0,
+            egui_scale_factor: 0.8,
             world: World::new(),
-
-            transform_buffer,
-            transform_bind_group,
-            transform_bind_group_layout,
+            // transform_buffer,
+            // transform_bind_group,
+            // transform_bind_group_layout,
         }
     }
 
