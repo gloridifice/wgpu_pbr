@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::system::Resource;
-use cgmath::{Vector3, Vector4};
+use cgmath::{InnerSpace, Vector3, Vector4};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BufferUsages, ShaderStages,
@@ -24,18 +24,21 @@ pub struct MainLight {
 impl Default for MainLight {
     fn default() -> Self {
         Self {
-            direction: Vector3::new(0.0, -1.0, 0.0),
+            direction: Vector3::new(-1.0, -1.0, 0.0).normalize(),
             intensity: 1.0,
             color: Vector4::new(0.6, 0.6, 0.5, 1.0),
         }
     }
 }
 
+#[repr(C, align(16))]
 #[derive(Debug, Clone, Copy)]
 pub struct LightUniform {
     pub direction: [f32; 3],
-    pub intensity: f32,
+    pub padding1: f32,
     pub color: [f32; 4],
+    pub intensity: f32,
+    pub padding2: [f32; 3],
 }
 
 impl RenderLight {
@@ -75,9 +78,11 @@ impl RenderLight {
 impl MainLight {
     pub fn get_uniform(&self) -> LightUniform {
         LightUniform {
-            direction: self.direction.into(),
-            intensity: self.intensity,
+            direction: self.direction.normalize().into(),
             color: self.color.into(),
+            intensity: self.intensity,
+            padding2: [0f32; 3],
+            padding1: 0.,
         }
     }
 }

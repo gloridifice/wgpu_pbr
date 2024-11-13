@@ -49,13 +49,11 @@ impl MeshRenderer {
         &mut self,
         device: &wgpu::Device,
         layout: &BindGroupLayout,
-        trans_mat: Matrix4<f32>,
+        trans_mat: TransformUniform,
     ) {
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
-            contents: bytemuck::cast_slice(&[TransformUniform {
-                model: trans_mat.into(),
-            }]),
+            contents: bytemuck::cast_slice(&[trans_mat]),
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         self.transform_bind_group = Some(Arc::new(device.create_bind_group(
@@ -71,13 +69,9 @@ impl MeshRenderer {
         self.transform_buffer = Some(Arc::new(buffer));
     }
 
-    pub fn update_transform_buffer(&self, queue: &wgpu::Queue, mat: Matrix4<f32>) {
+    pub fn update_transform_buffer(&self, queue: &wgpu::Queue, uniform: TransformUniform) {
         let transform_buffer = or_return!(self.transform_buffer.as_ref());
-        queue.write_buffer(
-            transform_buffer,
-            0,
-            bytemuck::cast_slice(&[TransformUniform { model: mat.into() }]),
-        );
+        queue.write_buffer(transform_buffer, 0, bytemuck::cast_slice(&[uniform]));
     }
 }
 

@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
-use cgmath::{Deg, EuclideanSpace, Matrix4, Point3, Quaternion, Rotation3, SquareMatrix, Vector3};
+use cgmath::{
+    Deg, EuclideanSpace, Matrix3, Matrix4, Point3, Quaternion, Rotation3, SquareMatrix, Vector3,
+};
 use derive_builder::Builder;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
@@ -35,30 +37,42 @@ impl Transform {
         }
     }
 
-    pub fn local_matrix4x4(&self) -> Matrix4<f32> {
+    pub fn local_matrix(&self) -> (Matrix4<f32>, Quaternion<f32>) {
         let translation = Matrix4::from_translation(self.position.to_vec());
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
         let ret = translation * rotation * scale;
-        ret
+        (ret, self.rotation)
     }
 
-    pub fn calculate_world_matrix4x4(&self, world: &World) -> Matrix4<f32> {
-        let local_matrix = self.local_matrix4x4();
+    pub fn calculate_world_matrix(&self, world: &World) -> (Matrix4<f32>, Quaternion<f32>) {
+        let local_matrix = self.local_matrix();
         if let Some(parent) = self.parent {
-            return local_matrix
-                * world
-                    .get::<Transform>(parent)
-                    .expect("Transform's parent entity don't have Transform component")
-                    .calculate_world_matrix4x4(world);
+            let par = world
+                .get::<Transform>(parent)
+                .expect("Transform's parent entity don't have Transform component")
+                .calculate_world_matrix(world);
+            return (local_matrix.0 * par.0, local_matrix.1 * par.1);
         };
         return local_matrix;
     }
+
+    pub fn get_uniform(&self, world: &World) -> TransformUniform {
+        let (model, rotation) = self.calculate_world_matrix(world);
+        TransformUniform {
+            model: model.into(),
+            rotation: Matrix3::from(rotation).into(),
+            padding: [0.; 3],
+        }
+    }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct TransformUniform {
     pub model: [[f32; 4]; 4],
+    pub rotation: [[f32; 3]; 3],
+    pub padding: [f32; 3],
 }
 
 impl TransformUniform {
