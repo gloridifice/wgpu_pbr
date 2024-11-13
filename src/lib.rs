@@ -6,12 +6,10 @@ use egui::Visuals;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use render::{
-    camera::{Camera, CameraUniform, RenderCamera},
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
-    transform::TransformUniform,
     UploadedImage, UploadedMesh,
 };
-use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayout, Instance, Surface};
+use wgpu::{Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -46,15 +44,11 @@ struct State {
     depth_texture: UploadedImage,
     egui_renderer: EguiRenderer,
     egui_scale_factor: f32,
-    render_camera: RenderCamera,
     materials: Assets<DefaultMaterial>,
     material_instances: Assets<DefaultMaterialInstance>,
     meshes: Assets<UploadedMesh>,
     images: Assets<UploadedImage>,
     world: World,
-    transform_bind_group_layout: Arc<BindGroupLayout>,
-    // transform_buffer: wgpu::Buffer,
-    // transform_bind_group: Arc<BindGroup>,
 }
 
 struct RenderState {
@@ -161,78 +155,6 @@ impl State {
         height: u32,
     ) -> State {
         let render_state = RenderState::new(instance, surface, width, height).await;
-
-        let camera =
-            Camera::new(render_state.config.width as f32 / render_state.config.height as f32);
-
-        let mut camera_uniform = CameraUniform::new();
-        camera_uniform.update_view_proj(&camera);
-
-        let camera_buffer =
-            render_state
-                .device
-                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                    label: Some("Camera Buffer"),
-                    contents: bytemuck::cast_slice(&[camera_uniform]),
-                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                });
-
-        let camera_bind_group_layout = Arc::new(
-            render_state
-                .device
-                .create_bind_group_layout(&CameraUniform::layout_desc()),
-        );
-        let camera_bind_group = Arc::new(render_state.device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &camera_bind_group_layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: camera_buffer.as_entire_binding(),
-                }],
-            },
-        ));
-
-        // let transform_buffer =
-        //     render_state
-        //         .device
-        //         .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        //             label: Some("Transform Buffer"),
-        //             contents: bytemuck::cast_slice(&[TransformUniform::default()]),
-        //             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        //         });
-
-        // let transform_bind_group_layout = Arc::new(render_state.device.create_bind_group_layout(
-        //     &wgpu::BindGroupLayoutDescriptor {
-        //         label: Some("Transform Bind Group Layout"),
-        //         entries: &[wgpu::BindGroupLayoutEntry {
-        //             binding: 0,
-        //             visibility: wgpu::ShaderStages::VERTEX,
-        //             ty: wgpu::BindingType::Buffer {
-        //                 ty: wgpu::BufferBindingType::Uniform,
-        //                 has_dynamic_offset: false,
-        //                 min_binding_size: None,
-        //             },
-        //             count: None,
-        //         }],
-        //     },
-        // ));
-
-        // let transform_bind_group = Arc::new(render_state.device.create_bind_group(
-        //     &wgpu::BindGroupDescriptor {
-        //         label: Some("Transform Bind Group"),
-        //         layout: &transform_bind_group_layout,
-        //         entries: &[wgpu::BindGroupEntry {
-        //             binding: 0,
-        //             resource: transform_buffer.as_entire_binding(),
-        //         }],
-        //     },
-        // ));
-
-        let transform_bind_group_layout = Arc::new(TransformUniform::create_bind_group_layout(
-            &render_state.device,
-        ));
-
         let depth_texture = render_state.create_depth_texture();
         let egui_renderer = EguiRenderer::new(
             &render_state.device,
@@ -248,22 +170,12 @@ impl State {
             render_state,
             depth_texture,
             egui_renderer,
-            render_camera: render::camera::RenderCamera {
-                camera,
-                camera_uniform,
-                camera_buffer,
-                camera_bind_group_layout,
-                camera_bind_group,
-            },
             materials: Assets::new(),
             material_instances: Assets::new(),
             meshes: Assets::new(),
             images: Assets::new(),
             egui_scale_factor: 0.8,
             world: World::new(),
-            // transform_buffer,
-            // transform_bind_group,
-            transform_bind_group_layout,
         }
     }
 

@@ -1,15 +1,19 @@
 use std::sync::Arc;
 
+use crate::{bevy_ecs_ext::BevyEcsExt, egui_tools::EguiRenderer};
 use bevy_ecs::{system::Resource, world::World};
-use cgmath::{perspective, InnerSpace, Matrix4, Point3, SquareMatrix, Vector3};
-use egui::{InputState, Ui};
-use tiny_bail::or_return;
-use wgpu::{BindGroup, BindGroupLayout, BindGroupLayoutDescriptor, Queue};
-use winit::keyboard::KeyCode;
-
-use crate::{
-    bevy_ecs_ext::BevyEcsExt, egui_tools::EguiRenderer, input::GameInput, time::GameTime, State,
+use cgmath::{perspective, InnerSpace, Matrix4, Point3, Vector3};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, Queue,
 };
+
+#[derive(Resource)]
+pub struct RenderCamera {
+    pub camera: Camera,
+    pub buffer: Arc<wgpu::Buffer>,
+    pub bind_group_layout: Arc<BindGroupLayout>,
+    pub bind_group: Arc<BindGroup>,
+}
 
 pub struct Camera {
     pub eye: Point3<f32>,
@@ -39,24 +43,79 @@ impl Camera {
             zfar: 1000.0,
         }
     }
+
+    pub fn get_uniform(&self) -> CameraUniform {
+        CameraUniform {
+            view_proj: self.build_view_projection_matrix().into(),
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct CameraConfig {
+    pub speed: f32,
+}
+
+impl Default for CameraConfig {
+    fn default() -> Self {
+        Self { speed: 1.0 }
+    }
+}
+
+impl CameraConfig {
+    pub fn panel(world: &mut World, egui_renderer: &EguiRenderer) {
+        let mut camera_config = world.resource_or_default::<CameraConfig>();
+
+        egui::Window::new("Camera").show(egui_renderer.context(), |ui| {
+            ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
+        });
+    }
+}
+
+impl RenderCamera {
+    pub fn new(device: &wgpu::Device, aspect: f32) -> RenderCamera {
+        let camera = Camera::new(aspect);
+
+        let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Camera Buffer"),
+            contents: bytemuck::cast_slice(&[camera.get_uniform()]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let camera_bind_group_layout =
+            Arc::new(device.create_bind_group_layout(&CameraUniform::layout_desc()));
+        let camera_bind_group = Arc::new(device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &camera_bind_group_layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: camera_buffer.as_entire_binding(),
+            }],
+        }));
+
+        RenderCamera {
+            camera,
+            buffer: Arc::new(camera_buffer),
+            bind_group_layout: camera_bind_group_layout,
+            bind_group: camera_bind_group,
+        }
+    }
+
+    pub fn update_uniform2gpu(&self, queue: &wgpu::Queue) {
+        queue.write_buffer(
+            &self.buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera.get_uniform()]),
+        );
+    }
 }
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct CameraUniform {
-    view_proj: [[f32; 4]; 4],
+    pub view_proj: [[f32; 4]; 4],
 }
 impl CameraUniform {
-    pub fn new() -> Self {
-        Self {
-            view_proj: Matrix4::identity().into(),
-        }
-    }
-
-    pub fn update_view_proj(&mut self, camera: &Camera) {
-        self.view_proj = camera.build_view_projection_matrix().into();
-    }
-
     pub fn layout_desc() -> BindGroupLayoutDescriptor<'static> {
         BindGroupLayoutDescriptor {
             label: Some("Camera Bind Group Layout"),
@@ -83,76 +142,3 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 0.5,
     0.0, 0.0, 0.0, 1.0,
 );
-
-pub struct RenderCamera {
-    pub camera: Camera,
-    pub camera_uniform: CameraUniform,
-    pub camera_buffer: wgpu::Buffer,
-    pub camera_bind_group_layout: Arc<BindGroupLayout>,
-    pub camera_bind_group: Arc<BindGroup>,
-}
-
-#[derive(Resource)]
-pub struct CameraConfig {
-    pub speed: f32,
-}
-impl Default for CameraConfig {
-    fn default() -> Self {
-        Self { speed: 1.0 }
-    }
-}
-
-impl CameraConfig {
-    pub fn panel(world: &mut World, egui_renderer: &EguiRenderer) {
-        let mut camera_config = world.resource_or_default::<CameraConfig>();
-
-        egui::Window::new("Camera").show(egui_renderer.context(), |ui| {
-            ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
-        });
-    }
-}
-
-impl RenderCamera {
-    pub fn camera_update(
-        &mut self,
-        world: &mut World,
-        queue: &Queue,
-        input: &GameInput,
-        time: &GameTime,
-    ) {
-        let speed = world.resource_or_default::<CameraConfig>().speed;
-
-        let mut move_vec = Vector3::new(0., 0., 0.);
-        if input.is_key_hold(KeyCode::KeyW) {
-            move_vec += Vector3::new(0.0, 0.0, -1.0);
-        }
-        if input.is_key_hold(KeyCode::KeyA) {
-            move_vec += Vector3::new(-1.0, 0.0, 0.0);
-        }
-        if input.is_key_hold(KeyCode::KeyS) {
-            move_vec += Vector3::new(0.0, 0.0, 1.0);
-        }
-        if input.is_key_hold(KeyCode::KeyD) {
-            move_vec += Vector3::new(1.0, 0.0, 0.0);
-        }
-        if input.is_key_hold(KeyCode::Space) {
-            if input.is_key_hold(KeyCode::ShiftLeft) {
-                move_vec += Vector3::new(0.0, -1.0, 0.0);
-            } else {
-                move_vec += Vector3::new(0.0, 1.0, 1.0);
-            }
-        }
-        if move_vec != Vector3::new(0., 0., 0.) {
-            move_vec = move_vec.normalize() * speed * time.delta_time.as_secs_f32();
-            self.camera.eye += move_vec;
-            self.camera.target += move_vec;
-
-            self.camera_uniform.update_view_proj(&self.camera);
-            queue.write_buffer(
-                &self.camera_buffer,
-                0,
-                bytemuck::cast_slice(&[self.camera_uniform]),
-            );
-        }
-    }
-}

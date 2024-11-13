@@ -5,6 +5,7 @@ use crate::{
     State,
 };
 use anyhow::*;
+use cgmath::{Matrix3, Point3, Vector3};
 
 use super::AssetPath;
 
@@ -86,9 +87,13 @@ impl Loadable for Model {
                 for primitive in mesh.primitives() {
                     let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
+                    let rotate_90 = Matrix3::from_angle_x(cgmath::Deg(90f32));
                     let positions = reader
                         .read_positions()
-                        .map(|v| v.collect::<Vec<_>>())
+                        .map(|v| {
+                            v.map(|raw_pos| (rotate_90 * Vector3::from(raw_pos)).into())
+                                .collect::<Vec<_>>()
+                        })
                         .unwrap_or_default();
                     let normals = reader
                         .read_normals()

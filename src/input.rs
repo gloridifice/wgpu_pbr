@@ -1,24 +1,21 @@
-use std::{collections::HashSet, sync::Mutex};
+use std::collections::HashSet;
 
-use lazy_static::lazy_static;
+use bevy_ecs::system::Resource;
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
-lazy_static! {
-    pub static ref INPUT: Mutex<GameInput> = Mutex::new(GameInput::new());
-}
-
-pub struct GameInput {
+#[derive(Resource, Default)]
+pub struct Input {
     pub down_keys: HashSet<KeyCode>,
     pub hold_keys: HashSet<KeyCode>,
     pub up_keys: HashSet<KeyCode>,
 }
 
-impl GameInput {
+impl Input {
     pub fn new() -> Self {
-        GameInput {
+        Input {
             down_keys: HashSet::with_capacity(100),
             hold_keys: HashSet::with_capacity(100),
             up_keys: HashSet::with_capacity(100),
