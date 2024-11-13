@@ -38,9 +38,9 @@ fn vs_main(
 
 // Fragment shader
 
-@group(2) @binding(0)
+@group(3) @binding(0)
 var tex_0: texture_2d<f32>;
-@group(2) @binding(1)
+@group(3) @binding(1)
 var samp_0: sampler;
 
 

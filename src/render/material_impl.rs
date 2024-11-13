@@ -4,14 +4,18 @@ use wgpu::{
     BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
 };
 
-use crate::{PushConstants, RenderState, State};
+use crate::{RenderState, State};
 
-use super::{MaterialInstance, MaterialPipeline, UploadedImage, Vertex};
+use super::{
+    camera::RenderCamera, light::RenderLight, transform::TransformBindGroupLayout,
+    MaterialInstance, MaterialPipeline, UploadedImage, Vertex,
+};
 
 pub struct DefaultMaterial {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
+    pub texture_bind_group_layout: Arc<BindGroupLayout>,
 }
 
 impl DefaultMaterial {
@@ -19,8 +23,8 @@ impl DefaultMaterial {
         let device = &state.render_state.device;
         let shader = device.create_shader_module(wgpu::include_wgsl!("../shader.wgsl"));
 
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        let texture_bind_group_layout = Arc::new(device.create_bind_group_layout(
+            &wgpu::BindGroupLayoutDescriptor {
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
@@ -42,12 +46,27 @@ impl DefaultMaterial {
                     },
                 ],
                 label: Some("texture_bind_group_layout"),
-            });
+            },
+        ));
+
+        let tranform_bind_group_layout =
+            state.world.resource::<TransformBindGroupLayout>().0.clone();
+        let camera_bind_group_layout = state
+            .world
+            .resource::<RenderCamera>()
+            .bind_group_layout
+            .clone();
+        let light_bind_group_layout = state
+            .world
+            .resource::<RenderLight>()
+            .bind_group_layout
+            .clone();
 
         let bind_group_layouts = vec![
-            state.transform_bind_group_layout.clone(),
-            state.render_camera.camera_bind_group_layout.clone(),
-            Arc::new(texture_bind_group_layout),
+            tranform_bind_group_layout,
+            camera_bind_group_layout,
+            light_bind_group_layout,
+            Arc::clone(&texture_bind_group_layout),
         ];
 
         let render_pipeline_layout =
@@ -111,7 +130,7 @@ impl DefaultMaterial {
             pipeline: render_pipeline,
             pipeline_layout: render_pipeline_layout,
             bind_group_layouts,
-            // universal_bind_groups,
+            texture_bind_group_layout,
         }
     }
 
@@ -168,7 +187,7 @@ impl DefaultMaterial {
         parent: Arc<Self>,
         image: &UploadedImage,
     ) -> DefaultMaterialInstance {
-        let layout = parent.bind_group_layouts().get(2).unwrap();
+        let layout = &parent.texture_bind_group_layout;
         let texture_bind_group =
             state
                 .render_state

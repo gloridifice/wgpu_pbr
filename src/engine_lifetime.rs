@@ -1,45 +1,68 @@
-use std::{borrow::BorrowMut, sync::Arc};
+use std::sync::Arc;
 
-use bevy_ecs::{change_detection::DetectChanges, entity::Entity};
-use cgmath::{InnerSpace, Point3, Vector3};
+use bevy_ecs::{
+    change_detection::DetectChanges,
+    component::Component,
+    entity::Entity,
+    system::{Query, Res, ResMut, RunSystemOnce},
+};
+use cgmath::{InnerSpace, Point3, Quaternion, Rad, Rotation3, Vector3};
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 use crate::{
     asset::{load::Loadable, AssetPath},
-    input::INPUT,
+    input::Input,
     render::{
         self,
-        camera::CameraConfig,
-        transform::{Transform, TransformBuilder},
+        camera::{CameraConfig, RenderCamera},
+        light::RenderLight,
+        transform::{Transform, TransformBindGroupLayout, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
-    time::TIME,
-    PushConstants, State,
+    time::Time,
+    State,
 };
+
+#[derive(Debug, Component)]
+pub struct Rotation {
+    pub speed: f32,
+}
 
 impl State {
     pub fn init(&mut self) {
+        // init resource
+        self.world.insert_resource(Time::default());
+        self.world.insert_resource(Input::default());
+        self.world.insert_resource(CameraConfig::default());
+        self.world
+            .insert_resource(TransformBindGroupLayout::new(&self.render_state.device));
+        {
+            let config = &self.render_state.config;
+            let aspect = config.width as f32 / config.height as f32;
+            self.world
+                .insert_resource(RenderCamera::new(&self.render_state.device, aspect));
+        }
+        self.world
+            .insert_resource(RenderLight::new(&self.render_state.device));
+
         self.load_default_material();
 
-        let model = render::Model::load(
-            AssetPath::Assets("Patagiosites laevis.glb".to_string()),
-            self,
-        )
-        .unwrap();
+        let model = render::Model::load(AssetPath::Assets("ship.glb".to_string()), self).unwrap();
 
         // let trans = Transform::with_position(Point3::new(0.2, 0.2, 0.0));
-        let parent = self.world.spawn(Transform::default()).id();
+        let parent = self
+            .world
+            .spawn((Transform::default(), Rotation { speed: 1.0 }))
+            .id();
 
         for mesh in model.meshes {
             let uploaded = Arc::new(mesh.upload(self));
-            let y: f32 = rand::random();
-            println!("y: {}", y);
             self.world.spawn((
                 MeshRenderer::new(uploaded),
                 TransformBuilder::default()
                     .parent(Some(parent))
-                    .position(Point3::new(0.0, y, 0.0))
+                    .position(Point3::new(0.0, 0.0, 0.0))
                     .build()
                     .unwrap(),
             ));
@@ -47,7 +70,7 @@ impl State {
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
-        INPUT.lock().unwrap().update(event);
+        self.world.resource_mut::<Input>().update(event);
         false
     }
 
@@ -55,6 +78,7 @@ impl State {
         self.egui_renderer.begin_frame(&self.window);
         self.pre_update();
         self.update();
+        self.post_update();
 
         match self.render() {
             Ok(_) => {}
@@ -73,26 +97,28 @@ impl State {
     }
 
     pub fn pre_update(&mut self) {
-        TIME.lock().unwrap().update();
+        self.world.resource_mut::<Time>().update();
     }
 
     pub fn update(&mut self) {
-        let time = TIME.lock().unwrap();
-        let input = INPUT.lock().unwrap();
-
-        self.render_camera
-            .camera_update(&mut self.world, &self.render_state.queue, &input, &time);
         CameraConfig::panel(&mut self.world, &self.egui_renderer);
+        self.world.run_system_once(sys_update_camera);
+        self.world.run_system_once(sys_update_rotation);
+    }
 
+    pub fn post_update(&mut self) {
+        // Update transform unifrom
         {
-            let a = self
+            let transform_bind_group_layout =
+                self.world.resource::<TransformBindGroupLayout>().0.clone();
+            let matrix_cache = self
                 .world
                 .query::<(Entity, &MeshRenderer, &Transform)>()
                 .iter(&self.world)
                 .map(|(entity, _, trans)| (entity, trans.calculate_world_matrix4x4(&self.world)))
                 .collect::<Vec<_>>();
 
-            for (entity, matrix) in a.iter() {
+            for (entity, matrix) in matrix_cache.iter() {
                 let (mut mesh_renderer, transform) = self
                     .world
                     .query::<(&mut MeshRenderer, &mut Transform)>()
@@ -102,12 +128,30 @@ impl State {
                 if mesh_renderer.transform_bind_group.is_none() {
                     mesh_renderer.init_transform_buffer(
                         &self.render_state.device,
-                        &self.transform_bind_group_layout,
+                        &transform_bind_group_layout,
                         *matrix,
                     );
                 } else if transform.is_changed() {
                     mesh_renderer.update_transform_buffer(&self.render_state.queue, *matrix);
                 }
+            }
+        }
+
+        // Update camera uniform
+        {
+            if self.world.is_resource_changed::<RenderCamera>() {
+                self.world
+                    .resource::<RenderCamera>()
+                    .update_uniform2gpu(&self.render_state.queue);
+            }
+        }
+
+        // Update light uniform
+        {
+            if self.world.is_resource_changed::<RenderLight>() {
+                self.world
+                    .resource::<RenderLight>()
+                    .update_uniform2gpu(&self.render_state.queue);
             }
         }
     }
@@ -159,7 +203,7 @@ impl State {
                             render_pass: &mut render_pass,
                             default_material: Arc::clone(&default_material),
                             transform_bind_group,
-                            camera_bind_group: &self.render_camera.camera_bind_group,
+                            world: &self.world,
                         };
                         mesh.draw(&mut ctx);
                     }
@@ -191,5 +235,48 @@ impl State {
         output.present();
 
         Ok(())
+    }
+}
+
+pub fn sys_update_rotation(mut q: Query<(&mut Transform, &Rotation)>, time: Res<Time>) {
+    for (mut trans, rot) in q.iter_mut() {
+        //todo delta time
+        trans.rotation = Quaternion::from_angle_y(Rad(rot.speed) * time.delta_time.as_secs_f32())
+            * trans.rotation;
+    }
+}
+
+pub fn sys_update_camera(
+    config: Res<CameraConfig>,
+    input: Res<Input>,
+    time: Res<Time>,
+    mut render_camera: ResMut<RenderCamera>,
+) {
+    let speed = config.speed;
+
+    let mut move_vec = Vector3::new(0., 0., 0.);
+    if input.is_key_hold(KeyCode::KeyW) {
+        move_vec += Vector3::new(0.0, 0.0, -1.0);
+    }
+    if input.is_key_hold(KeyCode::KeyA) {
+        move_vec += Vector3::new(-1.0, 0.0, 0.0);
+    }
+    if input.is_key_hold(KeyCode::KeyS) {
+        move_vec += Vector3::new(0.0, 0.0, 1.0);
+    }
+    if input.is_key_hold(KeyCode::KeyD) {
+        move_vec += Vector3::new(1.0, 0.0, 0.0);
+    }
+    if input.is_key_hold(KeyCode::Space) {
+        if input.is_key_hold(KeyCode::ShiftLeft) {
+            move_vec += Vector3::new(0.0, -1.0, 0.0);
+        } else {
+            move_vec += Vector3::new(0.0, 1.0, 1.0);
+        }
+    }
+    if move_vec != Vector3::new(0., 0., 0.) {
+        move_vec = move_vec.normalize() * speed * time.delta_time.as_secs_f32();
+        render_camera.camera.eye += move_vec;
+        render_camera.camera.target += move_vec;
     }
 }

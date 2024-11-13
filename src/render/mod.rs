@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
-use bevy_ecs::component::Component;
+use bevy_ecs::{component::Component, world::World};
+use camera::RenderCamera;
 use cgmath::Matrix4;
+use light::RenderLight;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
 use tiny_bail::or_return;
 use transform::TransformUniform;
@@ -10,9 +12,10 @@ use wgpu::{
     BufferUsages, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
-use crate::{App, PushConstants, State};
+use crate::State;
 
 pub mod camera;
+pub mod light;
 pub mod material_impl;
 pub mod transform;
 
@@ -20,7 +23,7 @@ pub struct DrawContext<'a, 'b> {
     pub render_pass: &'b mut RenderPass<'a>,
     pub default_material: Arc<DefaultMaterialInstance>,
     pub transform_bind_group: &'b BindGroup,
-    pub camera_bind_group: &'b BindGroup,
+    pub world: &'b World,
 }
 
 pub trait DrawAble {
@@ -82,6 +85,9 @@ impl DrawAble for UploadedMesh {
     fn draw(&self, context: &mut DrawContext) {
         let default_material = &context.default_material;
         let render_pass = &mut context.render_pass;
+        let camera_bind_group = Arc::clone(&context.world.resource::<RenderCamera>().bind_group);
+        let light_bind_group = Arc::clone(&context.world.resource::<RenderLight>().bind_group);
+
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
 
@@ -91,12 +97,18 @@ impl DrawAble for UploadedMesh {
                 None => default_material.clone(),
             };
 
-            render_pass.set_bind_group(0, context.transform_bind_group, &[]);
-            render_pass.set_bind_group(1, context.camera_bind_group, &[]);
+            let uniform_bind_groups = vec![
+                context.transform_bind_group,
+                &camera_bind_group,
+                &light_bind_group,
+            ];
+            uniform_bind_groups.iter().enumerate().for_each(|(i, it)| {
+                render_pass.set_bind_group(i as u32, it, &[]);
+            });
 
             render_pass.set_pipeline(&material_instance.material.pipeline());
             for (i, bind_group) in material_instance.bind_groups().iter().enumerate() {
-                render_pass.set_bind_group((i + 2) as u32, bind_group, &[]);
+                render_pass.set_bind_group((i + uniform_bind_groups.len()) as u32, bind_group, &[]);
             }
             let start = primitive.indices_start;
             let num = primitive.indices_num;

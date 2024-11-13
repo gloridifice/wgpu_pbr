@@ -1,21 +1,14 @@
-use std::{
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-use lazy_static::lazy_static;
+use bevy_ecs::system::Resource;
 
-lazy_static! {
-    pub static ref TIME: Mutex<GameTime> = Mutex::new(GameTime::default());
-}
-
-#[derive(Default)]
-pub struct GameTime {
+#[derive(Default, Resource, Clone)]
+pub struct Time {
     pub last_time: Option<Instant>,
     pub delta_time: Duration,
 }
 
-impl GameTime {
+impl Time {
     pub fn update(&mut self) {
         let now = Instant::now();
 
