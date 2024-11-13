@@ -115,10 +115,10 @@ impl State {
                 .world
                 .query::<(Entity, &MeshRenderer, &Transform)>()
                 .iter(&self.world)
-                .map(|(entity, _, trans)| (entity, trans.calculate_world_matrix4x4(&self.world)))
+                .map(|(entity, _, trans)| (entity, trans.get_uniform(&self.world)))
                 .collect::<Vec<_>>();
 
-            for (entity, matrix) in matrix_cache.iter() {
+            for (entity, uniform) in matrix_cache.iter() {
                 let (mut mesh_renderer, transform) = self
                     .world
                     .query::<(&mut MeshRenderer, &mut Transform)>()
@@ -129,10 +129,10 @@ impl State {
                     mesh_renderer.init_transform_buffer(
                         &self.render_state.device,
                         &transform_bind_group_layout,
-                        *matrix,
+                        *uniform,
                     );
                 } else if transform.is_changed() {
-                    mesh_renderer.update_transform_buffer(&self.render_state.queue, *matrix);
+                    mesh_renderer.update_transform_buffer(&self.render_state.queue, *uniform);
                 }
             }
         }
