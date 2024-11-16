@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{InnerSpace, Vector3, Vector4};
+use cgmath::Vector4;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
+    BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
     BindGroupLayoutEntry, BufferDescriptor, BufferUsages, ShaderStages,
 };
 
-use super::transform::{self, Transform};
+use super::transform::{Transform};
 
 #[derive(Resource)]
 pub struct RenderLight {

@@ -1,4 +1,4 @@
-use std::{sync::Arc, u32::MAX};
+use std::sync::Arc;
 
 use bevy_ecs::system::Resource;
 use cgmath::{Matrix4, SquareMatrix};
