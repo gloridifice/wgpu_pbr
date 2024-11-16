@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::{bevy_ecs_ext::BevyEcsExt, egui_tools::EguiRenderer};
 use bevy_ecs::{system::Resource, world::World};
-use cgmath::{perspective, InnerSpace, Matrix4, Point3, Vector3};
+use cgmath::{perspective, Matrix4, Point3, Vector3};
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, Queue,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
 };
 
 #[derive(Resource)]

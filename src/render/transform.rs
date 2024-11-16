@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
 use cgmath::{
-    Deg, EuclideanSpace, Matrix3, Matrix4, Point3, Quaternion, Rotation3, SquareMatrix, Vector3,
+    EuclideanSpace, Matrix3, Matrix4, Point3, Quaternion, Vector3,
 };
 use derive_builder::Builder;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
