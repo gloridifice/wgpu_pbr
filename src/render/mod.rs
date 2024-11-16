@@ -2,13 +2,12 @@ use std::sync::Arc;
 
 use bevy_ecs::{component::Component, world::World};
 use camera::RenderCamera;
-use cgmath::Matrix4;
 use light::RenderLight;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
 use tiny_bail::or_return;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutEntry, Buffer,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer,
     BufferUsages, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 

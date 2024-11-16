@@ -5,7 +5,7 @@ use crate::{
     State,
 };
 use anyhow::*;
-use cgmath::{Matrix3, Point3, Vector3};
+use cgmath::{Matrix3, Vector3};
 
 use super::AssetPath;
 
