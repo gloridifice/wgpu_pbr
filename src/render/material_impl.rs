@@ -20,7 +20,7 @@ pub struct DefaultMaterial {
 
 impl DefaultMaterial {
     pub fn new(state: &State) -> Self {
-        let device = &state.render_state.device;
+        let device = &state.render_state().device;
         let shader = device.create_shader_module(wgpu::include_wgsl!("../shader.wgsl"));
 
         let texture_bind_group_layout = Arc::new(device.create_bind_group_layout(
@@ -92,7 +92,7 @@ impl DefaultMaterial {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: state.render_state.config.format,
+                    format: state.render_state().config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -137,7 +137,7 @@ impl DefaultMaterial {
     pub fn create_depth_bind_group(state: &State) -> (BindGroupLayout, BindGroup) {
         let layout =
             state
-                .render_state
+                .render_state()
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("Depth texture bind group"),
@@ -162,7 +162,7 @@ impl DefaultMaterial {
                 });
 
         let bind_group = state
-            .render_state
+            .render_state()
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: None,
@@ -190,7 +190,7 @@ impl DefaultMaterial {
         let layout = &parent.texture_bind_group_layout;
         let texture_bind_group =
             state
-                .render_state
+                .render_state()
                 .device
                 .create_bind_group(&wgpu::BindGroupDescriptor {
                     label: Some("Texture Bind Group"),

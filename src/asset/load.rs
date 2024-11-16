@@ -28,7 +28,7 @@ impl Loadable for UploadedImage {
         };
 
         let texture = state
-            .render_state
+            .render_state()
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 size,
@@ -41,7 +41,7 @@ impl Loadable for UploadedImage {
                 view_formats: &[],
             });
 
-        state.render_state.queue.write_texture(
+        state.render_state().queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -59,7 +59,7 @@ impl Loadable for UploadedImage {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let sampler = state
-            .render_state
+            .render_state()
             .device
             .create_sampler(&UploadedImage::default_sampler_desc());
 

@@ -1,6 +1,5 @@
-use std::sync::Arc;
-
 use asset::{load::Loadable, AssetPath, Assets};
+use bevy_ecs::system::Resource;
 use bevy_ecs::world::World;
 use egui::Visuals;
 use egui_tools::EguiRenderer;
@@ -9,6 +8,8 @@ use render::{
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
     UploadedImage, UploadedMesh,
 };
+use std::sync::Arc;
+use bevy_ecs::change_detection::Mut;
 use wgpu::{Device, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
@@ -41,10 +42,10 @@ struct App {
 
 struct State {
     window: Arc<Window>,
-    render_state: RenderState,
+    // render_state: RenderState,
     depth_texture: UploadedImage,
-    egui_renderer: EguiRenderer,
-    egui_scale_factor: f32,
+    // egui_renderer: EguiRenderer,
+    // egui_scale_factor: f32,
     materials: Assets<DefaultMaterial>,
     material_instances: Assets<DefaultMaterialInstance>,
     meshes: Assets<UploadedMesh>,
@@ -52,6 +53,7 @@ struct State {
     world: World,
 }
 
+#[derive(Resource)]
 struct RenderState {
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -123,7 +125,7 @@ impl ApplicationHandler for App {
     ) {
         let state = self.state.as_mut().unwrap();
         let window = self.window.as_ref().unwrap();
-        state.egui_renderer.handle_input(window, &event);
+        state.egui_renderer_mut().handle_input(window, &event);
         if !state.input(&event) {
             match event {
                 //Update and Render
@@ -165,19 +167,35 @@ impl State {
             &window,
         );
         egui_renderer.context().set_visuals(Visuals::light());
+        let mut world = World::new();
+        world.insert_resource(render_state);
+        world.insert_resource(egui_renderer);
 
         Self {
             window: Arc::clone(&window),
-            render_state,
             depth_texture,
-            egui_renderer,
             materials: Assets::new(),
             material_instances: Assets::new(),
             meshes: Assets::new(),
             images: Assets::new(),
-            egui_scale_factor: 0.8,
-            world: World::new(),
+            world,
         }
+    }
+    
+    pub fn render_state(&self) -> &RenderState{
+        self.world.resource::<RenderState>()
+    }
+    
+    pub fn render_state_mut(&mut self) -> Mut<'_, RenderState> {
+        self.world.resource_mut::<RenderState>()
+    }
+
+
+    pub fn egui_renderer(&self) -> &EguiRenderer {
+        self.world.resource::<EguiRenderer>()
+    }
+    pub fn egui_renderer_mut(&mut self) -> Mut<'_, EguiRenderer> {
+        self.world.resource_mut::<EguiRenderer>()
     }
 
     pub fn load_default_material(&mut self) {
@@ -192,18 +210,14 @@ impl State {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
+        let mut rs = self.world.resource_mut::<RenderState>();
         if new_size.width > 0 && new_size.height > 0 {
-            self.render_state.size = new_size;
-            self.render_state.config.width = new_size.width;
-            self.render_state.config.height = new_size.height;
-            self.render_state
-                .surface
-                .configure(&self.render_state.device, &self.render_state.config);
-            self.depth_texture = RenderState::create_depth_texture(
-                &self.render_state.device,
-                new_size.width,
-                new_size.height,
-            );
+            rs.size = new_size;
+            rs.config.width = new_size.width;
+            rs.config.height = new_size.height;
+            rs.surface.configure(&rs.device, &rs.config);
+            self.depth_texture =
+                RenderState::create_depth_texture(&rs.device, new_size.width, new_size.height);
         }
     }
 }
