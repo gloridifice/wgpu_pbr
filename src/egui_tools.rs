@@ -1,3 +1,4 @@
+use bevy_ecs::prelude::Resource;
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
@@ -5,6 +6,20 @@ use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
+
+#[derive(Resource)]
+pub struct EguiConfig{
+    pub egui_scale_factor: f32
+}
+impl Default for EguiConfig {
+    fn default() -> Self {
+        Self{
+            egui_scale_factor: 0.8,
+        }
+    }
+}
+
+#[derive(Resource)]
 pub struct EguiRenderer {
     state: State,
     renderer: Renderer,

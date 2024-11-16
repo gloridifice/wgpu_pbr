@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use crate::{bevy_ecs_ext::BevyEcsExt, egui_tools::EguiRenderer};
 use bevy_ecs::{system::Resource, world::World};
+use bevy_ecs::prelude::Res;
+use bevy_ecs::system::ResMut;
 use cgmath::{perspective, Matrix4, Point3, Vector3};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
@@ -63,9 +65,7 @@ impl Default for CameraConfig {
 }
 
 impl CameraConfig {
-    pub fn panel(world: &mut World, egui_renderer: &EguiRenderer) {
-        let mut camera_config = world.resource_or_default::<CameraConfig>();
-
+    pub fn sys_panel(mut camera_config: ResMut<CameraConfig>, egui_renderer: Res<EguiRenderer>){
         egui::Window::new("Camera").show(egui_renderer.context(), |ui| {
             ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
         });

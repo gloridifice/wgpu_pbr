@@ -21,7 +21,7 @@ derive_builder = "0.20.2"
 egui = "0.29.1"
 egui-wgpu = "0.29.1"
 egui-winit = "0.29.1"
-bevy_ecs = "0.14.2"
+bevy_ecs = "0.15.0-rc.3"
 tiny_bail = "0.4.3"
 rand = "0.8.5"
 

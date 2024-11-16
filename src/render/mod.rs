@@ -4,12 +4,8 @@ use bevy_ecs::{component::Component, world::World};
 use camera::RenderCamera;
 use light::RenderLight;
 use material_impl::{DefaultMaterial, DefaultMaterialInstance};
-use tiny_bail::or_return;
 use transform::TransformUniform;
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferUsages,
-    PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
-};
+use wgpu::{util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Device, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView};
 
 use crate::State;
 
@@ -32,33 +28,22 @@ pub trait DrawAble {
     fn draw(&self, context: &mut DrawContext);
 }
 
-#[derive(Component, Default)]
+#[derive(Component)]
 pub struct MeshRenderer {
     pub mesh: Option<Arc<UploadedMesh>>,
-    pub transform_bind_group: Option<Arc<BindGroup>>,
-    pub transform_buffer: Option<Arc<Buffer>>,
+    pub transform_bind_group: Arc<BindGroup>,
+    pub transform_buffer: Arc<Buffer>,
 }
 
 impl MeshRenderer {
-    pub fn new(mesh: Arc<UploadedMesh>) -> Self {
-        Self {
-            mesh: Some(mesh),
-            ..Default::default()
-        }
-    }
-
-    pub fn init_transform_buffer(
-        &mut self,
-        device: &wgpu::Device,
-        layout: &BindGroupLayout,
-        trans_mat: TransformUniform,
-    ) {
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[trans_mat]),
+    pub fn new(mesh: Arc<UploadedMesh>, device: &Device, layout: &BindGroupLayout) -> Self {
+        let buffer = device.create_buffer(&BufferDescriptor{
+            label: Some("transform buffer"),
+            size: size_of::<TransformUniform>() as u64,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
         });
-        self.transform_bind_group = Some(Arc::new(device.create_bind_group(
+        let transform_bind_group = device.create_bind_group(
             &wgpu::BindGroupDescriptor {
                 label: None,
                 layout,
@@ -67,13 +52,16 @@ impl MeshRenderer {
                     resource: buffer.as_entire_binding(),
                 }],
             },
-        )));
-        self.transform_buffer = Some(Arc::new(buffer));
+        );
+        Self {
+            mesh: Some(mesh),
+            transform_bind_group: Arc::new(transform_bind_group),
+            transform_buffer: Arc::new(buffer),
+        }
     }
 
     pub fn update_transform_buffer(&self, queue: &wgpu::Queue, uniform: TransformUniform) {
-        let transform_buffer = or_return!(self.transform_buffer.as_ref());
-        queue.write_buffer(transform_buffer, 0, bytemuck::cast_slice(&[uniform]));
+        queue.write_buffer(&self.transform_buffer, 0, bytemuck::cast_slice(&[uniform]));
     }
 }
 
@@ -209,7 +197,7 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn upload(&self, state: &State) -> UploadedMesh {
-        let device = &state.render_state.device;
+        let device = &state.render_state().device;
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -288,7 +276,7 @@ impl UploadedImage {
         };
 
         let texture = state
-            .render_state
+            .render_state()
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 label: None,
@@ -319,7 +307,7 @@ impl UploadedImage {
             _ => data.pixels.clone(),
         };
 
-        state.render_state.queue.write_texture(
+        state.render_state().queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -335,7 +323,7 @@ impl UploadedImage {
 
         // todo
         let sampler = state
-            .render_state
+            .render_state()
             .device
             .create_sampler(&UploadedImage::default_sampler_desc());
 

@@ -1,15 +1,7 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use bevy_ecs::{
-    change_detection::DetectChanges,
-    component::Component,
-    entity::Entity,
-    system::{Query, Res, ResMut, RunSystemOnce},
-};
-use cgmath::{InnerSpace, Point3, Quaternion, Rad, Rotation3, Vector3};
-use egui_wgpu::ScreenDescriptor;
-use winit::{event::WindowEvent, keyboard::KeyCode};
-
+use crate::egui_tools::{EguiConfig, EguiRenderer};
+use crate::render::transform::WorldTransform;
 use crate::{
     asset::{load::Loadable, AssetPath},
     input::Input,
@@ -22,8 +14,22 @@ use crate::{
         DrawAble, DrawContext, MeshRenderer,
     },
     time::Time,
-    State,
+    RenderState, State,
 };
+use bevy_ecs::query::Changed;
+use bevy_ecs::system::{In, IntoSystem, System};
+use bevy_ecs::world::{Mut, World};
+use bevy_ecs::{
+    change_detection::DetectChanges,
+    component::Component,
+    entity::Entity,
+    system::{Query, Res, ResMut, RunSystemOnce},
+};
+use cgmath::{InnerSpace, Point3, Quaternion, Rad, Rotation3, Vector3};
+use egui_wgpu::ScreenDescriptor;
+use wgpu::{CommandEncoder, TextureView};
+use winit::window::Window;
+use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component)]
 pub struct Rotation {
@@ -33,25 +39,26 @@ pub struct Rotation {
 impl State {
     pub fn init(&mut self) {
         // init resource
+        self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(Time::default());
         self.world.insert_resource(Input::default());
         self.world.insert_resource(CameraConfig::default());
-        let transform_bind_group = TransformBindGroupLayout::new(&self.render_state.device);
+        let transform_bind_group = TransformBindGroupLayout::new(&self.render_state().device);
         self.world.insert_resource(ShadowMappingContext::new(
-            &self.render_state.device,
+            &self.render_state().device,
             &transform_bind_group.0,
             1024,
             1024,
         ));
         self.world.insert_resource(transform_bind_group);
         {
-            let config = &self.render_state.config;
+            let config = &self.render_state().config;
             let aspect = config.width as f32 / config.height as f32;
             self.world
-                .insert_resource(RenderCamera::new(&self.render_state.device, aspect));
+                .insert_resource(RenderCamera::new(&self.render_state().device, aspect));
         }
         self.world
-            .insert_resource(RenderLight::new(&self.render_state.device));
+            .insert_resource(RenderLight::new(&self.render_state().device));
 
         self.world
             .spawn((Transform::default(), MainLight::default()));
@@ -69,7 +76,11 @@ impl State {
         for mesh in model.meshes {
             let uploaded = Arc::new(mesh.upload(self));
             self.world.spawn((
-                MeshRenderer::new(uploaded),
+                MeshRenderer::new(
+                    uploaded,
+                    &self.render_state().device,
+                    &self.world.resource::<TransformBindGroupLayout>().0.clone(),
+                ),
                 TransformBuilder::default()
                     .parent(Some(parent))
                     .build()
@@ -84,7 +95,8 @@ impl State {
     }
 
     pub fn handle_redraw(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        self.egui_renderer.begin_frame(&self.window);
+        let window = self.window.clone();
+        self.egui_renderer_mut().begin_frame(&window);
         self.pre_update();
         self.update();
         self.post_update();
@@ -92,7 +104,7 @@ impl State {
         match self.render() {
             Ok(_) => {}
             Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.resize(self.render_state.size)
+                self.resize(self.render_state().size)
             }
             Err(wgpu::SurfaceError::OutOfMemory) => {
                 log::error!("OutOfMemory");
@@ -110,48 +122,23 @@ impl State {
     }
 
     pub fn update(&mut self) {
-        CameraConfig::panel(&mut self.world, &self.egui_renderer);
+        self.world.run_system_once(CameraConfig::sys_panel);
         self.world.run_system_once(sys_update_camera);
         self.world.run_system_once(sys_update_rotation);
     }
 
     pub fn post_update(&mut self) {
         // Update transform unifrom
-        {
-            let transform_bind_group_layout =
-                self.world.resource::<TransformBindGroupLayout>().0.clone();
-            let matrix_cache = self
-                .world
-                .query::<(Entity, &MeshRenderer, &Transform)>()
-                .iter(&self.world)
-                .map(|(entity, _, trans)| (entity, trans.get_uniform(&self.world)))
-                .collect::<Vec<_>>();
-
-            for (entity, uniform) in matrix_cache.iter() {
-                let (mut mesh_renderer, transform) = self
-                    .world
-                    .query::<(&mut MeshRenderer, &mut Transform)>()
-                    .get_mut(&mut self.world, *entity)
-                    .unwrap();
-
-                if mesh_renderer.transform_bind_group.is_none() {
-                    mesh_renderer.init_transform_buffer(
-                        &self.render_state.device,
-                        &transform_bind_group_layout,
-                        *uniform,
-                    );
-                } else if transform.is_changed() {
-                    mesh_renderer.update_transform_buffer(&self.render_state.queue, *uniform);
-                }
-            }
-        }
+        self.world
+            .run_system_once(render::transform::sys_update_world_transform);
+        self.world.run_system_once(sys_update_transform_buffers);
 
         // Update camera uniform
         {
             if self.world.is_resource_changed::<RenderCamera>() {
                 self.world
                     .resource::<RenderCamera>()
-                    .update_uniform2gpu(&self.render_state.queue);
+                    .update_uniform2gpu(&self.render_state().queue);
             }
         }
 
@@ -166,19 +153,21 @@ impl State {
             if self.world.is_resource_changed::<RenderLight>() {
                 self.world
                     .resource::<RenderLight>()
-                    .write_buffer(&self.render_state.queue, uniform);
+                    .write_buffer(&self.render_state().queue, uniform);
                 // self.world.resource::<>()
             }
         }
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let output = self.render_state.surface.get_current_texture()?;
-        let view = output
-            .texture
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let output = self.render_state().surface.get_current_texture()?;
+        let view = Arc::new(
+            output
+                .texture
+                .create_view(&wgpu::TextureViewDescriptor::default()),
+        );
         let mut encoder =
-            self.render_state
+            self.render_state()
                 .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
@@ -206,17 +195,14 @@ impl State {
             let light_space_bind_group = shadow_mapping_ctx.light_space_bind_group.clone();
             for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
                 if let Some(mesh) = mesh_renderer.mesh.as_ref() {
-                    if let Some(transform_bind_group) = mesh_renderer.transform_bind_group.as_ref()
-                    {
-                        render_pass.set_bind_group(0, &transform_bind_group, &[]);
-                        render_pass.set_bind_group(1, &light_space_bind_group, &[]);
-                        mesh.draw_depth(&mut render_pass);
-                    }
+                    let transform_bind_group = mesh_renderer.transform_bind_group.clone();
+                    render_pass.set_bind_group(0, &transform_bind_group, &[]);
+                    render_pass.set_bind_group(1, &light_space_bind_group, &[]);
+                    mesh.draw_depth(&mut render_pass);
                 }
             }
         }
         {
-            // 1. Render Pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -244,39 +230,41 @@ impl State {
 
             for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
                 if let Some(mesh) = mesh_renderer.mesh.as_ref() {
-                    if let Some(transform_bind_group) = mesh_renderer.transform_bind_group.as_ref()
-                    {
-                        let mut ctx = DrawContext {
-                            render_pass: &mut render_pass,
-                            default_material: Arc::clone(&default_material),
-                            transform_bind_group,
-                            world: &self.world,
-                        };
-                        mesh.draw(&mut ctx);
-                    }
+                    let transform_bind_group = mesh_renderer.transform_bind_group.clone();
+                    let mut ctx = DrawContext {
+                        render_pass: &mut render_pass,
+                        default_material: Arc::clone(&default_material),
+                        transform_bind_group: &transform_bind_group,
+                        world: &self.world,
+                    };
+                    mesh.draw(&mut ctx);
                 }
             }
         }
-        let screen_descriptor = ScreenDescriptor {
-            size_in_pixels: [
-                self.render_state.config.width,
-                self.render_state.config.height,
-            ],
-            pixels_per_point: self.window.scale_factor() as f32 * self.egui_scale_factor,
-        };
-        {
-            self.egui_renderer.end_frame_and_draw(
-                &self.render_state.device,
-                &self.render_state.queue,
+
+        let world = &mut self.world;
+        let window = self.window.clone();
+
+        world.resource_scope(|world, mut egui_renderer: Mut<EguiRenderer>| {
+            let render_state = world.resource::<RenderState>();
+            let egui_config = world.resource::<EguiConfig>();
+
+            let screen_descriptor = ScreenDescriptor {
+                size_in_pixels: [render_state.config.width, render_state.config.height],
+                pixels_per_point: window.scale_factor() as f32 * egui_config.egui_scale_factor,
+            };
+            egui_renderer.end_frame_and_draw(
+                &render_state.device,
+                &render_state.queue,
                 &mut encoder,
-                &self.window,
+                &window,
                 &view,
                 screen_descriptor,
-            )
-        }
+            );
+        });
         // End Draw Objects
 
-        self.render_state
+        self.render_state()
             .queue
             .submit(std::iter::once(encoder.finish()));
         output.present();
@@ -326,4 +314,14 @@ pub fn sys_update_camera(
         render_camera.camera.eye += move_vec;
         render_camera.camera.target += move_vec;
     }
+}
+
+fn sys_update_transform_buffers(world: &mut World) {
+    world.resource_scope(|world, render_state: Mut<RenderState>| {
+        let mut query =
+            world.query_filtered::<(&WorldTransform, &MeshRenderer), Changed<WorldTransform>>();
+        for (world_trans, mesh_renderer) in query.iter(world) {
+            mesh_renderer.update_transform_buffer(&render_state.queue, world_trans.get_uniform());
+        }
+    });
 }
