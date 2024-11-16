@@ -9,7 +9,7 @@ use render::{
     material_impl::{DefaultMaterial, DefaultMaterialInstance},
     UploadedImage, UploadedMesh,
 };
-use wgpu::{Instance, Surface};
+use wgpu::{Device, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -20,6 +20,7 @@ mod bevy_ecs_ext;
 mod egui_tools;
 mod engine_lifetime;
 mod input;
+mod math_type;
 mod render;
 mod time;
 mod wgpu_init;
@@ -155,7 +156,7 @@ impl State {
         height: u32,
     ) -> State {
         let render_state = RenderState::new(instance, surface, width, height).await;
-        let depth_texture = render_state.create_depth_texture();
+        let depth_texture = RenderState::create_depth_texture(&render_state.device, width, height);
         let egui_renderer = EguiRenderer::new(
             &render_state.device,
             render_state.config.format,
@@ -198,7 +199,11 @@ impl State {
             self.render_state
                 .surface
                 .configure(&self.render_state.device, &self.render_state.config);
-            self.depth_texture = self.render_state.create_depth_texture();
+            self.depth_texture = RenderState::create_depth_texture(
+                &self.render_state.device,
+                new_size.width,
+                new_size.height,
+            );
         }
     }
 }
@@ -273,8 +278,12 @@ impl RenderState {
         }
     }
 
-    fn create_depth_texture(&self) -> UploadedImage {
-        let size = self.get_window_extend3d();
+    fn create_depth_texture(device: &Device, width: u32, height: u32) -> UploadedImage {
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
         let desc = wgpu::TextureDescriptor {
             label: None,
             size,
@@ -285,9 +294,9 @@ impl RenderState {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         };
-        let texture = self.device.create_texture(&desc);
+        let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = self.device.create_sampler(&wgpu::SamplerDescriptor {
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             // 4.
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,

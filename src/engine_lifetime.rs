@@ -16,7 +16,8 @@ use crate::{
     render::{
         self,
         camera::{CameraConfig, RenderCamera},
-        light::RenderLight,
+        light::{MainLight, RenderLight},
+        shadow_mapping::ShadowMappingContext,
         transform::{Transform, TransformBindGroupLayout, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
@@ -35,8 +36,14 @@ impl State {
         self.world.insert_resource(Time::default());
         self.world.insert_resource(Input::default());
         self.world.insert_resource(CameraConfig::default());
-        self.world
-            .insert_resource(TransformBindGroupLayout::new(&self.render_state.device));
+        let transform_bind_group = TransformBindGroupLayout::new(&self.render_state.device);
+        self.world.insert_resource(ShadowMappingContext::new(
+            &self.render_state.device,
+            &transform_bind_group.0,
+            1024,
+            1024,
+        ));
+        self.world.insert_resource(transform_bind_group);
         {
             let config = &self.render_state.config;
             let aspect = config.width as f32 / config.height as f32;
@@ -45,6 +52,9 @@ impl State {
         }
         self.world
             .insert_resource(RenderLight::new(&self.render_state.device));
+
+        self.world
+            .spawn((Transform::default(), MainLight::default()));
 
         self.load_default_material();
 
@@ -62,7 +72,6 @@ impl State {
                 MeshRenderer::new(uploaded),
                 TransformBuilder::default()
                     .parent(Some(parent))
-                    .position(Point3::new(0.0, 0.0, 0.0))
                     .build()
                     .unwrap(),
             ));
@@ -148,10 +157,17 @@ impl State {
 
         // Update light uniform
         {
+            let (transform, main_light) = self
+                .world
+                .query::<(&Transform, &MainLight)>()
+                .single(&self.world);
+            let uniform = main_light.get_uniform(transform);
+
             if self.world.is_resource_changed::<RenderLight>() {
                 self.world
                     .resource::<RenderLight>()
-                    .update_uniform2gpu(&self.render_state.queue);
+                    .write_buffer(&self.render_state.queue, uniform);
+                // self.world.resource::<>()
             }
         }
     }
@@ -168,6 +184,37 @@ impl State {
                     label: Some("Render Encoder"),
                 });
 
+        // Shadow Mapping light depth map
+        {
+            let shadow_mapping_ctx = self.world.resource::<ShadowMappingContext>();
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Shadow Mapping Light Depth Render Pass"),
+                color_attachments: &[],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(1.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    view: &shadow_mapping_ctx.light_depth_map.view,
+                    stencil_ops: None,
+                }),
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+
+            render_pass.set_pipeline(&shadow_mapping_ctx.pipeline);
+            let light_space_bind_group = shadow_mapping_ctx.light_space_bind_group.clone();
+            for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
+                if let Some(mesh) = mesh_renderer.mesh.as_ref() {
+                    if let Some(transform_bind_group) = mesh_renderer.transform_bind_group.as_ref()
+                    {
+                        render_pass.set_bind_group(0, &transform_bind_group, &[]);
+                        render_pass.set_bind_group(1, &light_space_bind_group, &[]);
+                        mesh.draw_depth(&mut render_pass);
+                    }
+                }
+            }
+        }
         {
             // 1. Render Pass
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

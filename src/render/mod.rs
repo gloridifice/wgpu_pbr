@@ -7,8 +7,8 @@ use material_impl::{DefaultMaterial, DefaultMaterialInstance};
 use tiny_bail::or_return;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer,
-    BufferUsages, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferUsages,
+    PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView,
 };
 
 use crate::State;
@@ -16,6 +16,7 @@ use crate::State;
 pub mod camera;
 pub mod light;
 pub mod material_impl;
+pub mod shadow_mapping;
 pub mod transform;
 
 pub struct DrawContext<'a, 'b> {
@@ -26,6 +27,8 @@ pub struct DrawContext<'a, 'b> {
 }
 
 pub trait DrawAble {
+    fn draw_depth(&self, render_pass: &mut RenderPass);
+
     fn draw(&self, context: &mut DrawContext);
 }
 
@@ -75,6 +78,15 @@ impl MeshRenderer {
 }
 
 impl DrawAble for UploadedMesh {
+    fn draw_depth(&self, render_pass: &mut RenderPass) {
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        for primitive in self.primitives.iter() {
+            let start = primitive.indices_start;
+            let num = primitive.indices_num;
+            render_pass.draw_indexed(start..(start + num), 0, 0..1);
+        }
+    }
     fn draw(&self, context: &mut DrawContext) {
         let default_material = &context.default_material;
         let render_pass = &mut context.render_pass;

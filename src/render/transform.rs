@@ -1,13 +1,14 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
-use cgmath::{
-    EuclideanSpace, Matrix3, Matrix4, Point3, Quaternion, Vector3,
-};
+use cgmath::{Matrix3, Matrix4, Quaternion, Rotation, Vector3};
 use derive_builder::Builder;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
-use crate::wgpu_init::bind_group_layout_entry_shader;
+use crate::{
+    math_type::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt},
+    wgpu_init::bind_group_layout_entry_shader,
+};
 
 #[derive(Component, Builder, Clone, Debug)]
 pub struct Transform {
@@ -15,12 +16,18 @@ pub struct Transform {
     pub parent: Option<Entity>,
     #[builder(default = vec![])]
     pub children: Vec<Entity>,
-    #[builder(default = Point3::<f32>::new(0.,0.,0.))]
-    pub position: Point3<f32>,
-    #[builder(default = Quaternion::<f32>::new(1., 0., 0., 0.))]
-    pub rotation: Quaternion<f32>,
-    #[builder(default = Vector3::<f32>::new(1.,1.,1.))]
-    pub scale: Vector3<f32>,
+    #[builder(default = Vec3::zero())]
+    pub position: Vec3,
+    #[builder(default = Quat::identity())]
+    pub rotation: Quat,
+    #[builder(default = Vec3::one())]
+    pub scale: Vec3,
+}
+
+pub struct WorldTransform {
+    pub position: Vec3,
+    pub rotation: Quat,
+    pub scale: Vec3,
 }
 
 impl Default for Transform {
@@ -30,15 +37,20 @@ impl Default for Transform {
 }
 
 impl Transform {
-    pub fn with_position(pos: Point3<f32>) -> Self {
+    pub fn with_position(pos: Vec3) -> Self {
         Self {
             position: pos,
             ..Default::default()
         }
     }
 
+    pub fn forward(&self) -> Vector3<f32> {
+        let fwd = Vector3::new_z(-1.);
+        self.rotation.rotate_vector(fwd)
+    }
+
     pub fn local_matrix(&self) -> (Matrix4<f32>, Quaternion<f32>) {
-        let translation = Matrix4::from_translation(self.position.to_vec());
+        let translation = Matrix4::from_translation(self.position);
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
         let ret = translation * rotation * scale;
