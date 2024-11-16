@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::transform::WorldTransform;
@@ -17,18 +17,13 @@ use crate::{
     RenderState, State,
 };
 use bevy_ecs::query::Changed;
-use bevy_ecs::system::{In, IntoSystem, System};
 use bevy_ecs::world::{Mut, World};
 use bevy_ecs::{
-    change_detection::DetectChanges,
     component::Component,
-    entity::Entity,
     system::{Query, Res, ResMut, RunSystemOnce},
 };
-use cgmath::{InnerSpace, Point3, Quaternion, Rad, Rotation3, Vector3};
+use cgmath::{InnerSpace, Quaternion, Rad, Rotation3, Vector3};
 use egui_wgpu::ScreenDescriptor;
-use wgpu::{CommandEncoder, TextureView};
-use winit::window::Window;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component)]

@@ -2,10 +2,8 @@ use std::sync::Arc;
 
 use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
 use bevy_ecs::prelude::Query;
-use bevy_ecs::query::QueryEntityError;
 use cgmath::{ElementWise, Matrix3, Matrix4, Quaternion, Rotation, Vector3};
 use derive_builder::Builder;
-use image::imageops::contrast;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
 use crate::{

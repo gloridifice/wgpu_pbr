@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use crate::{bevy_ecs_ext::BevyEcsExt, egui_tools::EguiRenderer};
-use bevy_ecs::{system::Resource, world::World};
+use crate::egui_tools::EguiRenderer;
+use bevy_ecs::system::Resource;
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::ResMut;
 use cgmath::{perspective, Matrix4, Point3, Vector3};
