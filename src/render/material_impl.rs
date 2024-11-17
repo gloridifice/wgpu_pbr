@@ -21,7 +21,7 @@ pub struct DefaultMaterial {
 impl DefaultMaterial {
     pub fn new(state: &State) -> Self {
         let device = &state.render_state().device;
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../shader.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../../assets/shaders/shader.wgsl"));
 
         let texture_bind_group_layout = Arc::new(device.create_bind_group_layout(
             &wgpu::BindGroupLayoutDescriptor {

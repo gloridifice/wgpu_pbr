@@ -67,7 +67,7 @@ impl ShadowMappingContext {
             push_constant_ranges: &[],
         });
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../light_depth_map.wgsl"));
+        let shader = device.create_shader_module(wgpu::include_wgsl!("../../assets/shaders/light_depth_map.wgsl"));
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Shadow mapping"),
