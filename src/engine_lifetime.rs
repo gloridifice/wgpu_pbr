@@ -4,7 +4,7 @@ use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::transform::WorldTransform;
 use crate::{
     asset::{load::Loadable, AssetPath},
-    input::Input,
+    engine::input::Input,
     render::{
         self,
         camera::{CameraConfig, RenderCamera},
@@ -13,7 +13,7 @@ use crate::{
         transform::{Transform, TransformBindGroupLayout, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
-    time::Time,
+    engine::time::Time,
     RenderState, State,
 };
 use bevy_ecs::query::Changed;
@@ -117,16 +117,16 @@ impl State {
     }
 
     pub fn update(&mut self) {
-        self.world.run_system_once(CameraConfig::sys_panel);
-        self.world.run_system_once(sys_update_camera);
-        self.world.run_system_once(sys_update_rotation);
+        self.world.run_system_once(CameraConfig::sys_panel).unwrap();
+        self.world.run_system_once(sys_update_camera).unwrap();
+        self.world.run_system_once(sys_update_rotation).unwrap();
     }
 
     pub fn post_update(&mut self) {
         // Update transform unifrom
         self.world
-            .run_system_once(render::transform::sys_update_world_transform);
-        self.world.run_system_once(sys_update_transform_buffers);
+            .run_system_once(render::transform::sys_update_world_transform).unwrap();
+        self.world.run_system_once(sys_update_transform_buffers).unwrap();
 
         // Update camera uniform
         {
