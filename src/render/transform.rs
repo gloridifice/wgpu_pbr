@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::Query;
-use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
-use cgmath::{ElementWise, Matrix3, Matrix4, Quaternion, Rotation, Vector3};
+use bevy_ecs::{component::Component, entity::Entity, system::Resource};
+use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, Vector3};
 use derive_builder::Builder;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
@@ -12,6 +12,7 @@ use crate::{
     wgpu_init::bind_group_layout_entry_shader,
 };
 
+#[allow(unused)]
 #[derive(Component, Builder, Clone, Debug)]
 #[require(WorldTransform)]
 pub struct Transform {
@@ -88,6 +89,7 @@ impl Default for Transform {
 }
 
 impl Transform {
+    #[allow(unused)]
     pub fn with_position(pos: Vec3) -> Self {
         Self {
             position: pos,
@@ -95,29 +97,11 @@ impl Transform {
         }
     }
 
+
+    #[allow(unused)]
     pub fn forward(&self) -> Vector3<f32> {
         let fwd = Vector3::new_z(-1.);
         self.rotation.rotate_vector(fwd)
-    }
-
-    pub fn local_matrix(&self) -> (Matrix4<f32>, Quaternion<f32>) {
-        let translation = Matrix4::from_translation(self.position);
-        let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
-        let rotation = Matrix4::from(self.rotation);
-        let ret = translation * rotation * scale;
-        (ret, self.rotation)
-    }
-
-    pub fn calculate_world_matrix(&self, world: &World) -> (Matrix4<f32>, Quaternion<f32>) {
-        let local_matrix = self.local_matrix();
-        if let Some(parent) = self.parent {
-            let par = world
-                .get::<Transform>(parent)
-                .expect("Transform's parent entity don't have Transform component")
-                .calculate_world_matrix(world);
-            return (local_matrix.0 * par.0, local_matrix.1 * par.1);
-        };
-        return local_matrix;
     }
 }
 

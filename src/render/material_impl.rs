@@ -11,16 +11,14 @@ use wgpu::{
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{
-    GltfMaterial, MaterialBindGroupLayout, ObjectBindGroupLayout, Vertex
-};
+use super::{GltfMaterial, MaterialBindGroupLayout, ObjectBindGroupLayout, Vertex};
 
+#[allow(unused)]
 #[derive(Resource)]
 pub struct MainPipeline {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
-    pub material_bind_group_layout: Arc<BindGroupLayout>,
 }
 
 impl FromWorld for MainPipeline {
@@ -114,7 +112,6 @@ impl FromWorld for MainPipeline {
             pipeline: render_pipeline,
             pipeline_layout: render_pipeline_layout,
             bind_group_layouts,
-            material_bind_group_layout,
         }
     }
 }

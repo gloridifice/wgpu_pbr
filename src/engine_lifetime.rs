@@ -45,12 +45,13 @@ impl State {
     }
 
     pub fn init(&mut self) {
+        self.insert_resource::<Input>();
+        self.world.insert_resource(Time::default());
+
         // init resource
         self.insert_resource::<MainPipeline>();
         self.insert_resource::<GlobalBindGroup>();
         self.world.insert_resource(EguiConfig::default());
-        self.world.insert_resource(Time::default());
-        self.world.insert_resource(Input::default());
         self.world.insert_resource(CameraConfig::default());
         let transform_bind_group = TransformBindGroupLayout::new(&self.render_state().device);
         self.world.insert_resource(transform_bind_group);

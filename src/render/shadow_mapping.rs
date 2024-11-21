@@ -5,13 +5,13 @@ use bevy_ecs::{
     world::{self, FromWorld, Mut},
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline,
+    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureSampleType
 };
 
-use crate::RenderState;
+use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
 use super::{
-    ObjectBindGroupLayout, UploadedImage, Vertex,
+    camera::RenderCamera, light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex
 };
 
 #[derive(Resource)]
@@ -29,12 +29,36 @@ pub struct ShadowMapGlobalBindGroup {
 #[derive(Resource)]
 pub struct ShadowMappingPipeline {
     pub pipeline: Arc<RenderPipeline>,
+    #[allow(unused)]
     pub layout: Arc<PipelineLayout>,
 }
 
 impl FromWorld for ShadowMapGlobalBindGroup {
     fn from_world(world: &mut world::World) -> Self {
-        todo!()
+        world.resource_scope(|world, render_state: Mut<RenderState>| {
+            let device = &render_state.device;
+
+            let layout =
+                Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
+                    ["Global Bind Group Layout"]
+                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
+                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
+                )));
+
+            let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;
+            let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
+
+            let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
+                ["Global Bind Group"] [ &layout ]
+                0: camera_uniform_buffer.as_entire_binding();
+                1: light_uniform_buffer.as_entire_binding();
+            )));
+
+            Self {
+                layout,
+                bind_group,
+            }
+        })
     }
 }
 

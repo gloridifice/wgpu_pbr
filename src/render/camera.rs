@@ -5,16 +5,12 @@ use bevy_ecs::system::Resource;
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::ResMut;
 use cgmath::{perspective, Matrix4, Point3, Vector3};
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-};
+use wgpu::util::DeviceExt;
 
 #[derive(Resource)]
 pub struct RenderCamera {
     pub camera: Camera,
     pub buffer: Arc<wgpu::Buffer>,
-    pub bind_group_layout: Arc<BindGroupLayout>,
-    pub bind_group: Arc<BindGroup>,
 }
 
 pub struct Camera {
@@ -82,22 +78,9 @@ impl RenderCamera {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
-        let camera_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&CameraUniform::layout_desc()));
-        let camera_bind_group = Arc::new(device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &camera_bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        }));
-
         RenderCamera {
             camera,
             buffer: Arc::new(camera_buffer),
-            bind_group_layout: camera_bind_group_layout,
-            bind_group: camera_bind_group,
         }
     }
 
@@ -114,23 +97,6 @@ impl RenderCamera {
 #[derive(Debug, Clone, Copy)]
 pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
-}
-impl CameraUniform {
-    pub fn layout_desc() -> BindGroupLayoutDescriptor<'static> {
-        BindGroupLayoutDescriptor {
-            label: Some("Camera Bind Group Layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-        }
-    }
 }
 unsafe impl bytemuck::Pod for CameraUniform {}
 unsafe impl bytemuck::Zeroable for CameraUniform {}
