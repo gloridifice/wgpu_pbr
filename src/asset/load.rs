@@ -1,12 +1,9 @@
 use std::{fs::File, io::Read, sync::Arc};
 
 use crate::RenderState;
-use crate::{
-    render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex},
-    State,
-};
+use crate::render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex};
 use anyhow::*;
-use bevy_ecs::world::{self, World};
+use bevy_ecs::world::{World};
 use cgmath::{Matrix3, Vector3};
 
 use super::AssetPath;

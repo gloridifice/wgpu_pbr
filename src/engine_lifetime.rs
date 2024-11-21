@@ -21,7 +21,7 @@ use crate::{
 };
 use bevy_ecs::query::Changed;
 use bevy_ecs::system::Resource;
-use bevy_ecs::world::{self, FromWorld, Mut, World};
+use bevy_ecs::world::{FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, ResMut, RunSystemOnce},

@@ -9,7 +9,7 @@ use wgpu::{
 
 use crate::{bgl_entries, macro_utils::BGLEntry};
 
-use super::transform::{Transform, WorldTransform};
+use super::transform::WorldTransform;
 
 #[derive(Resource)]
 pub struct RenderLight {

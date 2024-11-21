@@ -1,17 +1,17 @@
-use std::{ops::Deref, sync::Arc};
+use std::sync::Arc;
 
 use bevy_ecs::{
     component::Component,
     system::Resource,
-    world::{self, FromWorld, Mut, World},
+    world::{FromWorld, Mut, World},
 };
 use camera::RenderCamera;
-use light::{LightUniform, RenderLight};
-use material_impl::{MainPipeline, Material, PBRMaterial};
+use light::RenderLight;
+use material_impl::{Material, PBRMaterial};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout,
     BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, PipelineLayout, RenderPass,
     RenderPipeline, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
     TextureView,

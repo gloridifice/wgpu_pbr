@@ -1,13 +1,9 @@
-use asset::{load::Loadable, AssetPath, Assets};
 use bevy_ecs::system::Resource;
 use bevy_ecs::world::World;
 use egui::Visuals;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
-use render::{
-    material_impl::MainPipeline,
-    UploadedImage, UploadedMesh,
-};
+use render::UploadedImage;
 use std::sync::Arc;
 use bevy_ecs::change_detection::Mut;
 use wgpu::{Device, Instance, Surface};
