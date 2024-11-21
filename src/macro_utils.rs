@@ -1,4 +1,4 @@
-use wgpu::{naga::ShaderStage, BindGroupLayoutEntry, BindingType, ShaderStages};
+use wgpu::{BindGroupLayoutEntry, BindingType, ShaderStages};
 
 #[derive(Clone)]
 pub enum BGLEntry {

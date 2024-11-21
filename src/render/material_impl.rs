@@ -2,17 +2,17 @@ use std::sync::Arc;
 
 use bevy_ecs::{
     system::Resource,
-    world::{self, FromWorld, World},
+    world::{FromWorld, World},
 };
 use wgpu::{
     BindGroup, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
     SamplerBindingType, ShaderStages, TextureSampleType,
 };
 
-use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState, State};
+use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
 use super::{
-    GltfMaterial, MaterialBindGroupLayout, MaterialInstance, MaterialPipeline, ObjectBindGroupLayout, UploadedImage, Vertex
+    GltfMaterial, MaterialBindGroupLayout, ObjectBindGroupLayout, Vertex
 };
 
 #[derive(Resource)]
