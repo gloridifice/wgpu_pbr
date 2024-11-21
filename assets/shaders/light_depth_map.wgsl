@@ -15,11 +15,10 @@ struct LightUniform {
 }
 
 @group(0) @binding(0)
-var<uniform> transform: TransformUniform;
-
-@group(1) @binding(0)
 var<uniform> light: LightUniform;
 
+@group(1) @binding(0)
+var<uniform> transform: TransformUniform;
 
 @vertex
 fn vs_main(

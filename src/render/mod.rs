@@ -48,24 +48,23 @@ pub struct MeshRenderer {
 }
 
 impl MeshRenderer {
-    pub fn new(mesh: Arc<UploadedMesh>, device: &Device, layout: &BindGroupLayout) -> Self {
+    pub fn new(mesh: Arc<UploadedMesh>, world: &World) -> Self {
+        let device = &world.resource::<RenderState>().device;
+        let layout = &world.resource::<ObjectBindGroupLayout>().0;
+
         let buffer = device.create_buffer(&BufferDescriptor {
             label: Some("transform buffer"),
             size: size_of::<TransformUniform>() as u64,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: buffer.as_entire_binding(),
-            }],
-        });
+        let object_bind_group = device.create_bind_group(&bg_descriptor!(
+            ["Object Bind Group"] [layout]
+            0: buffer.as_entire_binding();
+        ));
         Self {
             mesh: Some(mesh),
-            object_bind_group: Arc::new(transform_bind_group),
+            object_bind_group: Arc::new(object_bind_group),
             transform_buffer: Arc::new(buffer),
         }
     }
@@ -370,16 +369,16 @@ impl FromWorld for MaterialBindGroupLayout {
 
 impl FromWorld for GlobalBindGroup {
     fn from_world(world: &mut World) -> Self {
-        world.resource_scope(|world, render_state: Mut<RenderState>| {
-            let device = &render_state.device;
+        world.resource_scope(|world, rs: Mut<RenderState>| {
+            let device = &rs.device;
 
             let bind_group_layout =
                 Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
                     ["Global Bind Group Layout"]
                     0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Camera Uniform
                     1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Global Light Uniform
-                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
-                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
+                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: false }); // Shadow Map
+                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::NonFiltering); // Shadow Map
                 )));
 
             let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;

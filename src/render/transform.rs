@@ -97,7 +97,6 @@ impl Transform {
         }
     }
 
-
     #[allow(unused)]
     pub fn forward(&self) -> Vector3<f32> {
         let fwd = Vector3::new_z(-1.);
@@ -139,33 +138,5 @@ pub struct TransformUniform {
     pub padding: [f32; 3],
 }
 
-impl TransformUniform {
-    const ENTRIES: [BindGroupLayoutEntry; 1] = [bind_group_layout_entry_shader(
-        0,
-        wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-    )];
-    pub fn layout_desc() -> BindGroupLayoutDescriptor<'static> {
-        BindGroupLayoutDescriptor {
-            label: Some("Transform Bind Group Layout"),
-            entries: &Self::ENTRIES,
-        }
-    }
-}
-
 unsafe impl bytemuck::Pod for TransformUniform {}
 unsafe impl bytemuck::Zeroable for TransformUniform {}
-
-#[derive(Resource, Clone, Debug)]
-pub struct TransformBindGroupLayout(pub Arc<BindGroupLayout>);
-
-impl TransformBindGroupLayout {
-    pub fn new(device: &Device) -> Self {
-        let transform_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&TransformUniform::layout_desc()));
-        Self(transform_bind_group_layout)
-    }
-}
