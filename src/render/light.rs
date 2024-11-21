@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::Vector4;
+use cgmath::{Matrix4, Vector4};
 use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor,
-    BindGroupLayoutEntry, BufferDescriptor, BufferUsages, ShaderStages,
+    BindGroup, BindGroupEntry, BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
+    BufferDescriptor, BufferUsages, ShaderStages,
 };
 
-use super::transform::{Transform};
+use crate::{bgl_entries, macro_utils::BGLEntry};
+
+use super::transform::{Transform, WorldTransform};
 
 #[derive(Resource)]
 pub struct RenderLight {
@@ -38,6 +40,7 @@ pub struct LightUniform {
     pub direction: [f32; 3],
     pub padding1: f32,
     pub color: [f32; 4],
+    pub space_matrix: [[f32; 4]; 4],
     pub intensity: f32,
     pub padding2: [f32; 3],
 }
@@ -72,28 +75,29 @@ impl RenderLight {
 }
 
 impl MainLight {
-    pub fn get_uniform(&self, transform: &Transform) -> LightUniform {
+    pub fn get_uniform(&self, transform: &WorldTransform) -> LightUniform {
         LightUniform {
             direction: transform.forward().into(),
             color: self.color.into(),
             intensity: self.intensity,
             padding2: [0f32; 3],
             padding1: 0.,
+            space_matrix: Self::light_space_matrix(&transform).into(),
         }
+    }
+
+    pub fn light_space_matrix(transform: &WorldTransform) -> Matrix4<f32> {
+        let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 1000.);
+        let view = transform.model_matrix();
+        view * proj
     }
 }
 
 impl LightUniform {
-    const ENTRIES: [BindGroupLayoutEntry; 1] = [BindGroupLayoutEntry {
-        binding: 0,
-        visibility: ShaderStages::FRAGMENT,
-        ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-        },
-        count: None,
-    }];
+    const ENTRIES: [BindGroupLayoutEntry; 1] = bgl_entries! {
+        0: ShaderStages::all() => BGLEntry::UniformBuffer();
+    };
+
     pub fn layout_desc() -> BindGroupLayoutDescriptor<'static> {
         BindGroupLayoutDescriptor {
             label: Some("Light Bind Group Layout"),

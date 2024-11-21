@@ -1,24 +1,27 @@
 use std::{fs::File, io::Read, sync::Arc};
 
+use crate::RenderState;
 use crate::{
     render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex},
     State,
 };
 use anyhow::*;
+use bevy_ecs::world::{self, World};
 use cgmath::{Matrix3, Vector3};
 
 use super::AssetPath;
 
 pub trait Loadable: Sized {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self>;
+    fn load(path: AssetPath, world: &mut World) -> Result<Self>;
 }
 
 impl Loadable for UploadedImage {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
+    fn load(path: AssetPath, world: &mut World) -> Result<Self> {
         let mut file = File::open(path.final_path())?;
         let mut buffer = Vec::new();
         file.read_to_end(&mut buffer)?;
         let image = image::load_from_memory(&buffer)?.to_rgba8();
+        let render_state = world.resource::<RenderState>();
 
         let dimensions = image.dimensions();
         let size = wgpu::Extent3d {
@@ -27,8 +30,7 @@ impl Loadable for UploadedImage {
             depth_or_array_layers: 1,
         };
 
-        let texture = state
-            .render_state()
+        let texture = render_state
             .device
             .create_texture(&wgpu::TextureDescriptor {
                 size,
@@ -41,7 +43,7 @@ impl Loadable for UploadedImage {
                 view_formats: &[],
             });
 
-        state.render_state().queue.write_texture(
+        render_state.queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -58,8 +60,8 @@ impl Loadable for UploadedImage {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = state
-            .render_state()
+        let sampler =
+            render_state
             .device
             .create_sampler(&UploadedImage::default_sampler_desc());
 
@@ -73,9 +75,10 @@ impl Loadable for UploadedImage {
 }
 
 impl Loadable for Model {
-    fn load(path: AssetPath, state: &mut State) -> Result<Self> {
+    fn load(path: AssetPath, world: &mut World) -> Result<Self> {
         let path = path.final_path();
         let (document, buffers, images) = gltf::import(path)?;
+        let render_state = world.resource::<RenderState>();
 
         let meshes = document
             .meshes()
@@ -131,7 +134,8 @@ impl Loadable for Model {
                             let uploaded_image = Arc::new(UploadedImage::from_glb_data(
                                 images.get(tex_info.texture().index()).unwrap(),
                                 &tex_info.texture().sampler(),
-                                state,
+                                &render_state.device,
+                                &render_state.queue
                             ));
                             GltfMaterial {
                                 base_color_texture: uploaded_image,

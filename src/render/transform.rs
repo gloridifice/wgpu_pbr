@@ -1,16 +1,16 @@
 use std::sync::Arc;
 
-use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
 use bevy_ecs::prelude::Query;
+use bevy_ecs::{component::Component, entity::Entity, system::Resource, world::World};
 use cgmath::{ElementWise, Matrix3, Matrix4, Quaternion, Rotation, Vector3};
 use derive_builder::Builder;
 use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
+use crate::math_type::{Mat3, Mat4};
 use crate::{
     math_type::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt},
     wgpu_init::bind_group_layout_entry_shader,
 };
-
 
 #[derive(Component, Builder, Clone, Debug)]
 #[require(WorldTransform)]
@@ -36,7 +36,7 @@ pub struct WorldTransform {
 
 impl Default for WorldTransform {
     fn default() -> Self {
-        Self{
+        Self {
             position: Vec3::zero(),
             rotation: Quat::identity(),
             scale: Vec3::zero(),
@@ -44,29 +44,37 @@ impl Default for WorldTransform {
     }
 }
 
-pub fn sys_update_world_transform(mut q_transform: Query<(Entity, &Transform, &mut WorldTransform)>){
-    let vec = q_transform.iter().map(|(id, trans, _)| {
-        let world_transform = cal_world_transform(trans, &q_transform);
-        (id, world_transform)
-    }).collect::<Vec<_>>();
+pub fn sys_update_world_transform(
+    mut q_transform: Query<(Entity, &Transform, &mut WorldTransform)>,
+) {
+    let vec = q_transform
+        .iter()
+        .map(|(id, trans, _)| {
+            let world_transform = cal_world_transform(trans, &q_transform);
+            (id, world_transform)
+        })
+        .collect::<Vec<_>>();
     vec.into_iter().for_each(|(id, world_transform)| {
         let (_, _, mut to_modified) = q_transform.get_mut(id).unwrap();
         *to_modified = world_transform;
     });
 }
 
-pub fn cal_world_transform(transform: &Transform, query: &Query<(Entity, &Transform, &mut WorldTransform)>) -> WorldTransform{
+pub fn cal_world_transform(
+    transform: &Transform,
+    query: &Query<(Entity, &Transform, &mut WorldTransform)>,
+) -> WorldTransform {
     if let Some(parent_id) = transform.parent {
         if let Ok((_, p_trans, _)) = query.get(parent_id) {
             let parent_world_trans = cal_world_transform(p_trans, query);
-            return WorldTransform{
+            return WorldTransform {
                 position: transform.position + parent_world_trans.position,
                 rotation: parent_world_trans.rotation * transform.rotation,
                 scale: parent_world_trans.scale.mul_element_wise(transform.scale),
             };
         }
     }
-    WorldTransform{
+    WorldTransform {
         position: transform.position,
         rotation: transform.rotation,
         scale: transform.scale,
@@ -115,16 +123,27 @@ impl Transform {
 
 impl WorldTransform {
     pub fn get_uniform(&self) -> TransformUniform {
+        TransformUniform {
+            model: self.model_matrix().into(),
+            rotation: self.rot_matrix().into(),
+            padding: [0.; 3],
+        }
+    }
+
+    pub fn forward(&self) -> Vector3<f32> {
+        let fwd = Vector3::new_z(-1.);
+        self.rotation.rotate_vector(fwd)
+    }
+
+    pub fn rot_matrix(&self) -> Mat3 {
+        Matrix3::from(self.rotation)
+    }
+
+    pub fn model_matrix(&self) -> Mat4 {
         let translation = Matrix4::from_translation(self.position);
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
-        let ret = translation * rotation * scale;
-
-        TransformUniform {
-            model: ret.into(),
-            rotation: Matrix3::from(self.rotation).into(),
-            padding: [0.; 3],
-        }
+        translation * rotation * scale
     }
 }
 

@@ -1,0 +1,14 @@
+[package]
+name = "wgpu_utils"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+syn = { version = "*", features = ["extra-traits"] }
+quote = "*"
+
+wgpu = "22"
+
+
+[lib]
+proc-macro = true

@@ -1,72 +1,56 @@
 use std::sync::Arc;
 
+use bevy_ecs::{
+    system::Resource,
+    world::{self, FromWorld, World},
+};
 use wgpu::{
-    BindGroup, BindGroupEntry, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
+    BindGroup, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
+    SamplerBindingType, ShaderStages, TextureSampleType,
 };
 
-use crate::{RenderState, State};
+use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState, State};
 
 use super::{
-    camera::RenderCamera, light::RenderLight, transform::TransformBindGroupLayout,
-    MaterialInstance, MaterialPipeline, UploadedImage, Vertex,
+    GltfMaterial, MaterialBindGroupLayout, MaterialInstance, MaterialPipeline, ObjectBindGroupLayout, UploadedImage, Vertex
 };
 
-pub struct DefaultMaterial {
+#[derive(Resource)]
+pub struct MainPipeline {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
-    pub texture_bind_group_layout: Arc<BindGroupLayout>,
+    pub material_bind_group_layout: Arc<BindGroupLayout>,
 }
 
-impl DefaultMaterial {
-    pub fn new(state: &State) -> Self {
-        let device = &state.render_state().device;
-        let shader = device.create_shader_module(wgpu::include_wgsl!("../../assets/shaders/shader.wgsl"));
+impl FromWorld for MainPipeline {
+    fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+        let rs = world.resource::<RenderState>();
 
-        let texture_bind_group_layout = Arc::new(device.create_bind_group_layout(
-            &wgpu::BindGroupLayoutDescriptor {
-                entries: &[
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 0,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Texture {
-                            multisampled: false,
-                            view_dimension: wgpu::TextureViewDimension::D2,
-                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        },
-                        count: None,
-                    },
-                    wgpu::BindGroupLayoutEntry {
-                        binding: 1,
-                        visibility: wgpu::ShaderStages::FRAGMENT,
-                        // This should match the filterable field of the
-                        // corresponding Texture entry above.
-                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-                        count: None,
-                    },
-                ],
-                label: Some("texture_bind_group_layout"),
-            },
-        ));
+        let device = &rs.device;
+        let shader =
+            device.create_shader_module(wgpu::include_wgsl!("../../assets/shaders/shader.wgsl"));
 
-        let tranform_bind_group_layout =
-            state.world.resource::<TransformBindGroupLayout>().0.clone();
-        let camera_bind_group_layout = state
-            .world
-            .resource::<RenderCamera>()
-            .bind_group_layout
-            .clone();
-        let light_bind_group_layout = state
-            .world
-            .resource::<RenderLight>()
-            .bind_group_layout
-            .clone();
+        let vert = ShaderStages::VERTEX;
+        let frag = ShaderStages::FRAGMENT;
+        let both = ShaderStages::all();
+
+        let global_bind_group_layout =
+            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
+                ["Global Bind Group Layout"]
+                0: vert => BGLEntry::UniformBuffer(); // Camera Uniform
+                1: both => BGLEntry::UniformBuffer(); // Global Light Uniform
+                2: frag => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
+                3: frag => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
+            )));
+
+        let material_bind_group_layout = Arc::clone(&world.resource::<MaterialBindGroupLayout>().0);
+        let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);
 
         let bind_group_layouts = vec![
-            tranform_bind_group_layout,
-            camera_bind_group_layout,
-            light_bind_group_layout,
-            Arc::clone(&texture_bind_group_layout),
+            global_bind_group_layout,
+            Arc::clone(&material_bind_group_layout),
+            object_bind_group_layout,
         ];
 
         let render_pipeline_layout =
@@ -92,7 +76,7 @@ impl DefaultMaterial {
                 module: &shader,
                 entry_point: "fs_main",
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: state.render_state().config.format,
+                    format: rs.config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -126,118 +110,40 @@ impl DefaultMaterial {
             cache: None,
         });
 
-        DefaultMaterial {
+        MainPipeline {
             pipeline: render_pipeline,
             pipeline_layout: render_pipeline_layout,
             bind_group_layouts,
-            texture_bind_group_layout,
-        }
-    }
-
-    pub fn create_depth_bind_group(state: &State) -> (BindGroupLayout, BindGroup) {
-        let layout =
-            state
-                .render_state()
-                .device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Depth texture bind group"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Texture {
-                                multisampled: false,
-                                view_dimension: wgpu::TextureViewDimension::D2,
-                                sample_type: wgpu::TextureSampleType::Depth,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::FRAGMENT,
-                            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Comparison),
-                            count: None,
-                        },
-                    ],
-                });
-
-        let bind_group = state
-            .render_state()
-            .device
-            .create_bind_group(&wgpu::BindGroupDescriptor {
-                label: None,
-                layout: &layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(&state.depth_texture.view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::Sampler(&state.depth_texture.sampler),
-                    },
-                ],
-            });
-
-        (layout, bind_group)
-    }
-
-    pub fn create_instance(
-        state: &State,
-        parent: Arc<Self>,
-        image: &UploadedImage,
-    ) -> DefaultMaterialInstance {
-        let layout = &parent.texture_bind_group_layout;
-        let texture_bind_group =
-            state
-                .render_state()
-                .device
-                .create_bind_group(&wgpu::BindGroupDescriptor {
-                    label: Some("Texture Bind Group"),
-                    layout,
-                    entries: &[
-                        wgpu::BindGroupEntry {
-                            binding: 0,
-                            resource: BindingResource::TextureView(&image.view),
-                        },
-                        wgpu::BindGroupEntry {
-                            binding: 1,
-                            resource: wgpu::BindingResource::Sampler(&image.sampler),
-                        },
-                    ],
-                });
-        DefaultMaterialInstance {
-            material: parent,
-            bind_groups: vec![Arc::new(texture_bind_group)],
+            material_bind_group_layout,
         }
     }
 }
 
-pub struct DefaultMaterialInstance {
-    pub material: Arc<DefaultMaterial>,
-    pub bind_groups: Vec<Arc<BindGroup>>,
+pub trait Material {
+    /// Return the material bind group
+    fn get_bind_group(&self) -> &BindGroup;
 }
 
-impl MaterialPipeline for DefaultMaterial {
-    fn pipeline(&self) -> &RenderPipeline {
-        &self.pipeline
-    }
+pub struct PBRMaterial {
+    pub bind_group: Arc<BindGroup>,
+}
 
-    fn pipeline_layout(&self) -> &PipelineLayout {
-        &self.pipeline_layout
-    }
-
-    fn bind_group_layouts(&self) -> &Vec<Arc<BindGroupLayout>> {
-        &self.bind_group_layouts
+impl PBRMaterial {
+    pub fn form_gltf(world: &World, gltf_material: &GltfMaterial) -> Self {
+        let base_color = &gltf_material.base_color_texture;
+        let device = &world.resource::<RenderState>().device;
+        let material_bind_group_layout = &world.resource::<MaterialBindGroupLayout>().0;
+        let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
+            ["PBR Material Bind Group"] [material_bind_group_layout]
+            0: BindingResource::TextureView(&base_color.view);
+            1: BindingResource::Sampler(&base_color.sampler);
+        )));
+        Self { bind_group }
     }
 }
 
-impl MaterialInstance<DefaultMaterial> for DefaultMaterialInstance {
-    fn parent(&self) -> Arc<DefaultMaterial> {
-        self.material.clone()
-    }
-
-    fn bind_groups(&self) -> Vec<Arc<BindGroup>> {
-        self.bind_groups.clone()
+impl Material for PBRMaterial {
+    fn get_bind_group(&self) -> &BindGroup {
+        &self.bind_group
     }
 }

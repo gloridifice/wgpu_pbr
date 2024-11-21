@@ -5,7 +5,7 @@ use egui::Visuals;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use render::{
-    material_impl::{DefaultMaterial, DefaultMaterialInstance},
+    material_impl::MainPipeline,
     UploadedImage, UploadedMesh,
 };
 use std::sync::Arc;
@@ -45,10 +45,10 @@ struct State {
     depth_texture: UploadedImage,
     // egui_renderer: EguiRenderer,
     // egui_scale_factor: f32,
-    materials: Assets<DefaultMaterial>,
-    material_instances: Assets<DefaultMaterialInstance>,
-    meshes: Assets<UploadedMesh>,
-    images: Assets<UploadedImage>,
+    // materials: Assets<MainPipeline>,
+    // material_instances: Assets<MaterialInstance>,
+    // meshes: Assets<UploadedMesh>,
+    // images: Assets<UploadedImage>,
     world: World,
 }
 
@@ -173,10 +173,10 @@ impl State {
         Self {
             window: Arc::clone(&window),
             depth_texture,
-            materials: Assets::new(),
-            material_instances: Assets::new(),
-            meshes: Assets::new(),
-            images: Assets::new(),
+            // materials: Assets::new(),
+            // material_instances: Assets::new(),
+            // meshes: Assets::new(),
+            // images: Assets::new(),
             world,
         }
     }
@@ -195,17 +195,6 @@ impl State {
     }
     pub fn egui_renderer_mut(&mut self) -> Mut<'_, EguiRenderer> {
         self.world.resource_mut::<EguiRenderer>()
-    }
-
-    pub fn load_default_material(&mut self) {
-        let image =
-            UploadedImage::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), self).unwrap();
-
-        let material = Arc::new(DefaultMaterial::new(self));
-        self.materials.insert_with_name("default", material.clone());
-        let instance = Arc::new(DefaultMaterial::create_instance(self, material, &image));
-        self.material_instances
-            .insert_with_name("default", instance);
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
