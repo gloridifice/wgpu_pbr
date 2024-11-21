@@ -28,14 +28,25 @@ struct LightUniform {
     intensity: f32,
 }
 @group(0) @binding(0)
-var<uniform> transform: TransformUniform;
-
-@group(1) @binding(0)
 var<uniform> camera: CameraUniform;
 
-// Fragment shader
-@group(2) @binding(0)
+@group(0) @binding(1)
 var<uniform> light: LightUniform;
+
+@group(0) @binding(2)
+var tex_shadow_map: texture_2d<f32>;
+
+@group(0) @binding(3)
+var samp_shadow_map: sampler;
+
+@group(1) @binding(0)
+var tex_0: texture_2d<f32>;
+
+@group(1) @binding(1)
+var samp_0: sampler;
+
+@group(2) @binding(0)
+var<uniform> transform: TransformUniform;
 
 @vertex
 fn vs_main(
@@ -51,17 +62,6 @@ fn vs_main(
     return out;
 }
 
-@group(3) @binding(0)
-var tex_shadow_map: texture_2d<f32>;
-@group(3) @binding(1)
-var samp_shadow_map: sampler;
-
-@group(4) @binding(0)
-var tex_0: texture_2d<f32>;
-@group(4) @binding(1)
-var samp_0: sampler;
-
-
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
@@ -69,14 +69,18 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let baseColor = textureSample(tex_0, samp_0, in.tex_coord);
     let shadow = calculate_shadow(in.light_space_clip_pos);
 
-    return lightFactor * baseColor * shadow;
+    var proj_coords = in.light_space_clip_pos.xyz / in.light_space_clip_pos.w;
+    proj_coords = proj_coords * 0.5 + 0.5;
+    var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
+    // return lightFactor * baseColor * shadow;
+    return vec4<f32>(closest_depth, closest_depth, closest_depth, 1.0);
 }
 
 // Range [0.0, 1.0]: 0.0 in shadow, 1.0 not in shadow
 fn calculate_shadow(light_space_pos: vec4<f32>) -> f32 {
     var proj_coords = light_space_pos.xyz / light_space_pos.w;
     proj_coords = proj_coords * 0.5 + 0.5;
-    var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).r;
+    var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
     var current_depth = proj_coords.z;
 
     var shadow = select(1., 0., current_depth > closest_depth);

@@ -6,7 +6,7 @@ use pollster::block_on;
 use render::UploadedImage;
 use std::sync::Arc;
 use bevy_ecs::change_detection::Mut;
-use wgpu::{Device, Instance, Surface};
+use wgpu::{CompareFunction, Device, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -153,7 +153,7 @@ impl State {
         height: u32,
     ) -> State {
         let render_state = RenderState::new(instance, surface, width, height).await;
-        let depth_texture = RenderState::create_depth_texture(&render_state.device, width, height);
+        let depth_texture = RenderState::create_depth_texture(&render_state.device, width, height, Some(wgpu::CompareFunction::LessEqual));
         let egui_renderer = EguiRenderer::new(
             &render_state.device,
             render_state.config.format,
@@ -193,7 +193,7 @@ impl State {
             rs.config.height = new_size.height;
             rs.surface.configure(&rs.device, &rs.config);
             self.depth_texture =
-                RenderState::create_depth_texture(&rs.device, new_size.width, new_size.height);
+                RenderState::create_depth_texture(&rs.device, new_size.width, new_size.height, Some(wgpu::CompareFunction::LessEqual));
         }
     }
 }
@@ -271,7 +271,7 @@ impl RenderState {
         }
     }
 
-    fn create_depth_texture(device: &Device, width: u32, height: u32) -> UploadedImage {
+    fn create_depth_texture(device: &Device, width: u32, height: u32, compare: Option<CompareFunction>) -> UploadedImage {
         let size = wgpu::Extent3d {
             width,
             height,
@@ -285,7 +285,7 @@ impl RenderState {
             dimension: wgpu::TextureDimension::D2,
             format: Self::DEPTH_FORMAT,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
+            view_formats: &[Self::DEPTH_FORMAT],
         };
         let texture = device.create_texture(&desc);
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
@@ -294,10 +294,10 @@ impl RenderState {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
+            mag_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Nearest,
             mipmap_filter: wgpu::FilterMode::Nearest,
-            compare: Some(wgpu::CompareFunction::LessEqual), // 5.
+            compare, // 5.
             lod_min_clamp: 0.0,
             lod_max_clamp: 100.0,
             ..Default::default()

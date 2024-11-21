@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::egui_tools::EguiRenderer;
-use bevy_ecs::system::Resource;
+use bevy_ecs::{system::Resource, world::FromWorld};
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::ResMut;
 use cgmath::{perspective, Matrix4, Point3, Vector3};
@@ -21,6 +21,15 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+}
+
+impl FromWorld for RenderCamera {
+    fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+        let rs = world.resource::<crate::RenderState>();
+        let config = &rs.config;
+        let aspect = config.width as f32 / config.height as f32;
+        RenderCamera::new(&rs.device, aspect)
+    }
 }
 
 impl Camera {

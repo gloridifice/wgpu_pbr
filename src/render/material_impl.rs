@@ -6,12 +6,11 @@ use bevy_ecs::{
 };
 use wgpu::{
     BindGroup, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline,
-    SamplerBindingType, ShaderStages, TextureSampleType,
 };
 
-use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
+use crate::{bg_descriptor, RenderState};
 
-use super::{GltfMaterial, MaterialBindGroupLayout, ObjectBindGroupLayout, Vertex};
+use super::{GlobalBindGroup, GltfMaterial, MaterialBindGroupLayout, ObjectBindGroupLayout, Vertex};
 
 #[allow(unused)]
 #[derive(Resource)]
@@ -29,19 +28,7 @@ impl FromWorld for MainPipeline {
         let shader =
             device.create_shader_module(wgpu::include_wgsl!("../../assets/shaders/shader.wgsl"));
 
-        let vert = ShaderStages::VERTEX;
-        let frag = ShaderStages::FRAGMENT;
-        let both = ShaderStages::all();
-
-        let global_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
-                ["Global Bind Group Layout"]
-                0: vert => BGLEntry::UniformBuffer(); // Camera Uniform
-                1: both => BGLEntry::UniformBuffer(); // Global Light Uniform
-                2: frag => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
-                3: frag => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
-            )));
-
+        let global_bind_group_layout = Arc::clone(&world.resource::<GlobalBindGroup>().layout);
         let material_bind_group_layout = Arc::clone(&world.resource::<MaterialBindGroupLayout>().0);
         let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);
 

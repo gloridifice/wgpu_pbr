@@ -4,7 +4,7 @@ use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::material_impl::MainPipeline;
 use crate::render::shadow_mapping::{ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::transform::WorldTransform;
-use crate::render::GlobalBindGroup;
+use crate::render::{DefaultMainPipelineMaterial, GlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout};
 use crate::{
     asset::{load::Loadable, AssetPath},
     engine::input::Input,
@@ -14,14 +14,14 @@ use crate::{
         camera::{CameraConfig, RenderCamera},
         light::{MainLight, RenderLight},
         shadow_mapping::ShadowMap,
-        transform::{Transform, TransformBindGroupLayout, TransformBuilder},
+        transform::{Transform, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
     RenderState, State,
 };
 use bevy_ecs::query::Changed;
-use bevy_ecs::system::Resource;
-use bevy_ecs::world::{FromWorld, Mut, World};
+use bevy_ecs::system::{Commands, Resource};
+use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, ResMut, RunSystemOnce},
@@ -45,53 +45,56 @@ impl State {
     }
 
     pub fn init(&mut self) {
-        self.insert_resource::<Input>();
-        self.world.insert_resource(Time::default());
-
-        // init resource
-        self.insert_resource::<MainPipeline>();
-        self.insert_resource::<GlobalBindGroup>();
-        self.world.insert_resource(EguiConfig::default());
-        self.world.insert_resource(CameraConfig::default());
-        let transform_bind_group = TransformBindGroupLayout::new(&self.render_state().device);
-        self.world.insert_resource(transform_bind_group);
-        {
-            let config = &self.render_state().config;
-            let aspect = config.width as f32 / config.height as f32;
-            self.world
-                .insert_resource(RenderCamera::new(&self.render_state().device, aspect));
-        }
+        // --- Render resource ---
+        self.insert_resource::<RenderCamera>();
         self.world
             .insert_resource(RenderLight::new(&self.render_state().device));
-
-        // let shadow_mapping_ctx = ShadowMappingContext::from_world(&mut self.world);
         self.insert_resource::<ShadowMap>();
 
-        self.world
-            .spawn((Transform::default(), MainLight::default()));
+        // 0. Layouts
+        self.insert_resource::<ObjectBindGroupLayout>();
+        self.insert_resource::<MaterialBindGroupLayout>();
 
-        let model = render::Model::load(AssetPath::Assets("ship.glb".to_string()), &mut self.world).unwrap();
+        // 1. Globals
+        self.insert_resource::<GlobalBindGroup>();
+        self.insert_resource::<ShadowMapGlobalBindGroup>();
 
-        // let trans = Transform::with_position(Point3::new(0.2, 0.2, 0.0));
-        let parent = self
-            .world
+        // 2. Pipelines
+        self.insert_resource::<MainPipeline>();
+        self.insert_resource::<ShadowMappingPipeline>();
+
+        // --- Other resources ---
+        self.insert_resource::<Input>();
+        self.world.insert_resource(Time::default());
+        self.world.insert_resource(EguiConfig::default());
+        self.world.insert_resource(CameraConfig::default());
+        self.insert_resource::<DefaultMainPipelineMaterial>();
+
+        let model = render::Model::load(AssetPath::Assets("ship.glb".to_string()), &mut self.world)
+            .unwrap();
+
+        let mut queue = CommandQueue::from_world(&mut self.world);
+        let mut cmd = Commands::new(&mut queue, &self.world);
+
+        cmd.spawn((Transform::default(), MainLight::default()));
+
+        let parent = cmd
             .spawn((Transform::default(), Rotation { speed: 1.0 }))
             .id();
 
         for mesh in model.meshes {
             let uploaded = Arc::new(mesh.upload(self));
-            self.world.spawn((
-                MeshRenderer::new(
-                    uploaded,
-                    &self.render_state().device,
-                    &self.world.resource::<TransformBindGroupLayout>().0.clone(),
-                ),
+
+            cmd.spawn((
+                MeshRenderer::new(uploaded, &self.world),
                 TransformBuilder::default()
                     .parent(Some(parent))
                     .build()
                     .unwrap(),
             ));
         }
+
+        queue.apply(&mut self.world);
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
