@@ -1,13 +1,28 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
-use bevy_ecs::{component::Component, world::World};
+use bevy_ecs::{
+    component::Component,
+    system::Resource,
+    world::{self, FromWorld, Mut, World},
+};
 use camera::RenderCamera;
-use light::RenderLight;
-use material_impl::{DefaultMaterial, DefaultMaterialInstance};
+use light::{LightUniform, RenderLight};
+use material_impl::{MainPipeline, Material, PBRMaterial};
+use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
-use wgpu::{util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Device, PipelineLayout, RenderPass, RenderPipeline, Sampler, Texture, TextureView};
+use wgpu::{
+    util::DeviceExt, BindGroup, BindGroupDescriptor, BindGroupEntry, BindGroupLayout,
+    BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, PipelineLayout, RenderPass,
+    RenderPipeline, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
+    TextureView,
+};
 
-use crate::State;
+use crate::{
+    asset::{load::Loadable, AssetPath},
+    bg_descriptor, bg_layout_descriptor,
+    macro_utils::BGLEntry,
+    RenderState, State,
+};
 
 pub mod camera;
 pub mod light;
@@ -17,45 +32,41 @@ pub mod transform;
 
 pub struct DrawContext<'a, 'b> {
     pub render_pass: &'b mut RenderPass<'a>,
-    pub default_material: Arc<DefaultMaterialInstance>,
-    pub transform_bind_group: &'b BindGroup,
     pub world: &'b World,
 }
 
 pub trait DrawAble {
     fn draw_depth(&self, render_pass: &mut RenderPass);
 
-    fn draw(&self, context: &mut DrawContext);
+    fn draw_main(&self, context: &mut DrawContext);
 }
 
 #[derive(Component)]
 pub struct MeshRenderer {
     pub mesh: Option<Arc<UploadedMesh>>,
-    pub transform_bind_group: Arc<BindGroup>,
+    pub object_bind_group: Arc<BindGroup>,
     pub transform_buffer: Arc<Buffer>,
 }
 
 impl MeshRenderer {
     pub fn new(mesh: Arc<UploadedMesh>, device: &Device, layout: &BindGroupLayout) -> Self {
-        let buffer = device.create_buffer(&BufferDescriptor{
+        let buffer = device.create_buffer(&BufferDescriptor {
             label: Some("transform buffer"),
             size: size_of::<TransformUniform>() as u64,
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let transform_bind_group = device.create_bind_group(
-            &wgpu::BindGroupDescriptor {
-                label: None,
-                layout,
-                entries: &[BindGroupEntry {
-                    binding: 0,
-                    resource: buffer.as_entire_binding(),
-                }],
-            },
-        );
+        let transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        });
         Self {
             mesh: Some(mesh),
-            transform_bind_group: Arc::new(transform_bind_group),
+            object_bind_group: Arc::new(transform_bind_group),
             transform_buffer: Arc::new(buffer),
         }
     }
@@ -65,44 +76,48 @@ impl MeshRenderer {
     }
 }
 
-impl DrawAble for UploadedMesh {
+impl DrawAble for MeshRenderer {
     fn draw_depth(&self, render_pass: &mut RenderPass) {
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        for primitive in self.primitives.iter() {
+        let Some(mesh) = self.mesh.as_ref() else {
+            return;
+        };
+
+        render_pass.set_bind_group(1, &self.object_bind_group, &[]);
+        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        for primitive in mesh.primitives.iter() {
             let start = primitive.indices_start;
             let num = primitive.indices_num;
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
-    fn draw(&self, context: &mut DrawContext) {
-        let default_material = &context.default_material;
+    fn draw_main(&self, context: &mut DrawContext) {
+        let Some(mesh) = self.mesh.as_ref() else {
+            return;
+        };
+
+        let default_material = &context.world.resource::<DefaultMainPipelineMaterial>().0;
         let render_pass = &mut context.render_pass;
-        let camera_bind_group = Arc::clone(&context.world.resource::<RenderCamera>().bind_group);
-        let light_bind_group = Arc::clone(&context.world.resource::<RenderLight>().bind_group);
 
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_bind_group(2, &self.object_bind_group, &[]);
 
-        for primitive in self.primitives.iter() {
-            let material_instance = match &primitive.material_instance {
-                Some(arc) => arc.clone(),
-                None => default_material.clone(),
+        let mut last_material: Option<Arc<PBRMaterial>> = None;
+
+        for primitive in mesh.primitives.iter() {
+            let material_instance = match primitive.material_instance.as_ref() {
+                Some(a) => a,
+                None => default_material,
             };
 
-            let uniform_bind_groups = vec![
-                context.transform_bind_group,
-                &camera_bind_group,
-                &light_bind_group,
-            ];
-            uniform_bind_groups.iter().enumerate().for_each(|(i, it)| {
-                render_pass.set_bind_group(i as u32, it, &[]);
-            });
-
-            render_pass.set_pipeline(&material_instance.material.pipeline());
-            for (i, bind_group) in material_instance.bind_groups().iter().enumerate() {
-                render_pass.set_bind_group((i + uniform_bind_groups.len()) as u32, bind_group, &[]);
+            if last_material.is_none()
+                || Arc::ptr_eq(last_material.as_ref().unwrap(), material_instance)
+            {
+                last_material = Some(Arc::clone(&material_instance));
+                render_pass.set_bind_group(1, material_instance.get_bind_group(), &[]);
             }
+
             let start = primitive.indices_start;
             let num = primitive.indices_num;
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
@@ -165,7 +180,7 @@ pub struct UploadedMesh {
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub material_instance: Option<Arc<DefaultMaterialInstance>>,
+    pub material_instance: Option<Arc<PBRMaterial>>,
 }
 
 pub struct UploadedImage {
@@ -210,7 +225,7 @@ impl Mesh {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let default_material = state.materials.get_by_name("default").unwrap();
+        let default_material = Arc::clone(&state.world.resource::<DefaultMainPipelineMaterial>().0);
 
         let primitives = self
             .primitives
@@ -219,13 +234,9 @@ impl Mesh {
                 indices_start: it.indices_start,
                 indices_num: it.indices_num,
                 material_instance: {
-                    it.material.as_ref().map(|gltf_mat| {
-                        Arc::new(DefaultMaterial::create_instance(
-                            state,
-                            Arc::clone(&default_material),
-                            &gltf_mat.base_color_texture,
-                        ))
-                    })
+                    it.material
+                        .as_ref()
+                        .map(|gltf_mat| Arc::new(PBRMaterial::form_gltf(&state.world, &gltf_mat)))
                 },
             })
             .collect::<Vec<_>>();
@@ -267,7 +278,8 @@ impl UploadedImage {
     pub fn from_glb_data(
         data: &gltf::image::Data,
         gltf_sampler: &gltf::texture::Sampler,
-        state: &State,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
     ) -> Self {
         let size = wgpu::Extent3d {
             width: data.width,
@@ -275,19 +287,16 @@ impl UploadedImage {
             depth_or_array_layers: 1,
         };
 
-        let texture = state
-            .render_state()
-            .device
-            .create_texture(&wgpu::TextureDescriptor {
-                label: None,
-                size,
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                view_formats: &[],
-            });
+        let texture = device.create_texture(&wgpu::TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
 
         let pixels = match data.format {
             gltf::image::Format::R8G8B8 => {
@@ -307,7 +316,7 @@ impl UploadedImage {
             _ => data.pixels.clone(),
         };
 
-        state.render_state().queue.write_texture(
+        queue.write_texture(
             wgpu::ImageCopyTexture {
                 texture: &texture,
                 mip_level: 0,
@@ -322,10 +331,7 @@ impl UploadedImage {
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // todo
-        let sampler = state
-            .render_state()
-            .device
-            .create_sampler(&UploadedImage::default_sampler_desc());
+        let sampler = device.create_sampler(&UploadedImage::default_sampler_desc());
 
         Self {
             size,
@@ -333,5 +339,96 @@ impl UploadedImage {
             view,
             sampler,
         }
+    }
+}
+
+#[derive(Resource, Clone)]
+pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
+
+#[derive(Resource, Clone)]
+pub struct MaterialBindGroupLayout(Arc<BindGroupLayout>);
+
+#[derive(Resource, Clone)]
+pub struct GlobalBindGroup {
+    pub layout: Arc<BindGroupLayout>,
+    pub bind_group: Arc<BindGroup>,
+}
+
+impl FromWorld for ObjectBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let device = &rs.device;
+        let object_bind_group_layout =
+            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
+                ["Object Bind Group Layout"]
+                0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Transform
+            )));
+        Self(object_bind_group_layout)
+    }
+}
+
+impl FromWorld for MaterialBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let device = &rs.device;
+        let material_bind_group_layout =
+            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
+                ["Material Bind Group Layout"]
+                0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: true });
+                1: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
+            )));
+        Self(material_bind_group_layout)
+    }
+}
+
+impl FromWorld for GlobalBindGroup {
+    fn from_world(world: &mut World) -> Self {
+        world.resource_scope(|world, render_state: Mut<RenderState>| {
+            let device = &render_state.device;
+
+            let bind_group_layout =
+                Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
+                    ["Global Bind Group Layout"]
+                    0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Camera Uniform
+                    1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Global Light Uniform
+                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
+                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
+                )));
+
+            let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;
+            let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
+            let shadow_map_image = &world.resource::<ShadowMap>().image;
+
+            let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
+                ["Global Bind Group"] [ &bind_group_layout ]
+                0: camera_uniform_buffer.as_entire_binding();
+                1: light_uniform_buffer.as_entire_binding();
+                2: BindingResource::TextureView(&shadow_map_image.view);
+                3: BindingResource::Sampler(&shadow_map_image.sampler);
+            )));
+
+            GlobalBindGroup {
+                layout: bind_group_layout,
+                bind_group,
+            }
+        })
+    }
+}
+
+#[derive(Resource, Clone)]
+pub struct DefaultMainPipelineMaterial(Arc<PBRMaterial>);
+
+impl FromWorld for DefaultMainPipelineMaterial {
+    fn from_world(world: &mut World) -> Self {
+        let image =
+            UploadedImage::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), world).unwrap();
+
+        let mat = PBRMaterial::form_gltf(
+            world,
+            &GltfMaterial {
+                base_color_texture: Arc::new(image),
+            },
+        );
+        Self(Arc::new(mat))
     }
 }

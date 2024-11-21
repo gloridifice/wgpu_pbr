@@ -1,23 +1,27 @@
 use std::sync::Arc;
 
 use crate::egui_tools::{EguiConfig, EguiRenderer};
+use crate::render::material_impl::MainPipeline;
+use crate::render::shadow_mapping::{ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::transform::WorldTransform;
+use crate::render::GlobalBindGroup;
 use crate::{
     asset::{load::Loadable, AssetPath},
     engine::input::Input,
+    engine::time::Time,
     render::{
         self,
         camera::{CameraConfig, RenderCamera},
         light::{MainLight, RenderLight},
-        shadow_mapping::ShadowMappingContext,
+        shadow_mapping::ShadowMap,
         transform::{Transform, TransformBindGroupLayout, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
     },
-    engine::time::Time,
     RenderState, State,
 };
 use bevy_ecs::query::Changed;
-use bevy_ecs::world::{Mut, World};
+use bevy_ecs::system::Resource;
+use bevy_ecs::world::{self, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, ResMut, RunSystemOnce},
@@ -32,19 +36,23 @@ pub struct Rotation {
 }
 
 impl State {
+    pub fn insert_resource<R>(&mut self)
+    where
+        R: Resource + FromWorld,
+    {
+        let r = R::from_world(&mut self.world);
+        self.world.insert_resource(r);
+    }
+
     pub fn init(&mut self) {
         // init resource
+        self.insert_resource::<MainPipeline>();
+        self.insert_resource::<GlobalBindGroup>();
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(Time::default());
         self.world.insert_resource(Input::default());
         self.world.insert_resource(CameraConfig::default());
         let transform_bind_group = TransformBindGroupLayout::new(&self.render_state().device);
-        self.world.insert_resource(ShadowMappingContext::new(
-            &self.render_state().device,
-            &transform_bind_group.0,
-            1024,
-            1024,
-        ));
         self.world.insert_resource(transform_bind_group);
         {
             let config = &self.render_state().config;
@@ -55,12 +63,13 @@ impl State {
         self.world
             .insert_resource(RenderLight::new(&self.render_state().device));
 
+        // let shadow_mapping_ctx = ShadowMappingContext::from_world(&mut self.world);
+        self.insert_resource::<ShadowMap>();
+
         self.world
             .spawn((Transform::default(), MainLight::default()));
 
-        self.load_default_material();
-
-        let model = render::Model::load(AssetPath::Assets("ship.glb".to_string()), self).unwrap();
+        let model = render::Model::load(AssetPath::Assets("ship.glb".to_string()), &mut self.world).unwrap();
 
         // let trans = Transform::with_position(Point3::new(0.2, 0.2, 0.0));
         let parent = self
@@ -125,8 +134,11 @@ impl State {
     pub fn post_update(&mut self) {
         // Update transform unifrom
         self.world
-            .run_system_once(render::transform::sys_update_world_transform).unwrap();
-        self.world.run_system_once(sys_update_transform_buffers).unwrap();
+            .run_system_once(render::transform::sys_update_world_transform)
+            .unwrap();
+        self.world
+            .run_system_once(sys_update_transform_buffers)
+            .unwrap();
 
         // Update camera uniform
         {
@@ -141,7 +153,7 @@ impl State {
         {
             let (transform, main_light) = self
                 .world
-                .query::<(&Transform, &MainLight)>()
+                .query::<(&WorldTransform, &MainLight)>()
                 .single(&self.world);
             let uniform = main_light.get_uniform(transform);
 
@@ -170,7 +182,11 @@ impl State {
 
         // Shadow Mapping light depth map
         {
-            let shadow_mapping_ctx = self.world.resource::<ShadowMappingContext>();
+            let shadow_map = self.world.resource::<ShadowMap>();
+            let shadow_mapping_pipeline = self.world.resource::<ShadowMappingPipeline>();
+            let sm_global_bg = self.world.resource::<ShadowMapGlobalBindGroup>();
+
+            // let render_light = self.world.resource::<RenderLight>();
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Shadow Mapping Light Depth Render Pass"),
                 color_attachments: &[],
@@ -179,22 +195,17 @@ impl State {
                         load: wgpu::LoadOp::Clear(1.0),
                         store: wgpu::StoreOp::Store,
                     }),
-                    view: &shadow_mapping_ctx.light_depth_map.view,
+                    view: &shadow_map.image.view,
                     stencil_ops: None,
                 }),
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
 
-            render_pass.set_pipeline(&shadow_mapping_ctx.pipeline);
-            let light_space_bind_group = shadow_mapping_ctx.light_space_bind_group.clone();
+            render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
+            render_pass.set_bind_group(0, &sm_global_bg.bind_group, &[]);
             for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
-                if let Some(mesh) = mesh_renderer.mesh.as_ref() {
-                    let transform_bind_group = mesh_renderer.transform_bind_group.clone();
-                    render_pass.set_bind_group(0, &transform_bind_group, &[]);
-                    render_pass.set_bind_group(1, &light_space_bind_group, &[]);
-                    mesh.draw_depth(&mut render_pass);
-                }
+                mesh_renderer.draw_depth(&mut render_pass);
             }
         }
         {
@@ -220,20 +231,17 @@ impl State {
                 timestamp_writes: None,
             });
 
-            // Draw Objects
-            let default_material = self.material_instances.get_by_name("default").unwrap();
+            let main_pipeline = self.world.resource::<MainPipeline>();
+            let global_bind_group = &self.world.resource::<GlobalBindGroup>().bind_group;
+            render_pass.set_pipeline(&main_pipeline.pipeline);
+            render_pass.set_bind_group(0, global_bind_group, &[]);
 
             for mesh_renderer in self.world.query::<&MeshRenderer>().iter(&self.world) {
-                if let Some(mesh) = mesh_renderer.mesh.as_ref() {
-                    let transform_bind_group = mesh_renderer.transform_bind_group.clone();
-                    let mut ctx = DrawContext {
-                        render_pass: &mut render_pass,
-                        default_material: Arc::clone(&default_material),
-                        transform_bind_group: &transform_bind_group,
-                        world: &self.world,
-                    };
-                    mesh.draw(&mut ctx);
-                }
+                let mut ctx = DrawContext {
+                    render_pass: &mut render_pass,
+                    world: &self.world,
+                };
+                mesh_renderer.draw_main(&mut ctx);
             }
         }
 

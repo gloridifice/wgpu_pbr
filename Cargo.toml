@@ -28,3 +28,6 @@ rand = "0.8.5"
 [dependencies.gltf]
 version = "1.4"
 features = ["extras", "names"]
+
+[workspace]
+members = ["crates/wgpu_utils"]
