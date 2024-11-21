@@ -181,14 +181,6 @@ impl State {
         self.world.resource::<RenderState>()
     }
 
-    pub fn render_state_mut(&mut self) -> Mut<'_, RenderState> {
-        self.world.resource_mut::<RenderState>()
-    }
-
-
-    pub fn egui_renderer(&self) -> &EguiRenderer {
-        self.world.resource::<EguiRenderer>()
-    }
     pub fn egui_renderer_mut(&mut self) -> Mut<'_, EguiRenderer> {
         self.world.resource_mut::<EguiRenderer>()
     }
@@ -268,6 +260,9 @@ impl RenderState {
             size: PhysicalSize { width, height },
         }
     }
+
+
+    #[allow(unused)]
     fn get_window_extend3d(&self) -> wgpu::Extent3d {
         wgpu::Extent3d {
             width: self.config.width.max(1),

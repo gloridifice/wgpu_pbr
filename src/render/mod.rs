@@ -12,8 +12,7 @@ use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout,
-    BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, PipelineLayout, RenderPass,
-    RenderPipeline, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
+    BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
     TextureView,
 };
 
@@ -157,20 +156,6 @@ impl Vertex {
     }
 }
 
-pub trait MaterialPipeline: Sized {
-    fn pipeline(&self) -> &RenderPipeline;
-    fn pipeline_layout(&self) -> &PipelineLayout;
-    fn bind_group_layouts(&self) -> &Vec<Arc<BindGroupLayout>>;
-}
-
-pub trait MaterialInstance<Parent>: Sized
-where
-    Parent: MaterialPipeline,
-{
-    fn parent(&self) -> Arc<Parent>;
-    fn bind_groups(&self) -> Vec<Arc<BindGroup>>;
-}
-
 pub struct UploadedMesh {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
@@ -184,7 +169,9 @@ pub struct UploadedPrimitive {
 }
 
 pub struct UploadedImage {
+    #[allow(unused)]
     pub size: wgpu::Extent3d,
+    #[allow(unused)]
     pub texture: Texture,
     pub view: TextureView,
     pub sampler: Sampler,
@@ -224,8 +211,6 @@ impl Mesh {
             contents: bytemuck::cast_slice(&self.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
-
-        let default_material = Arc::clone(&state.world.resource::<DefaultMainPipelineMaterial>().0);
 
         let primitives = self
             .primitives
@@ -277,6 +262,7 @@ impl UploadedImage {
 
     pub fn from_glb_data(
         data: &gltf::image::Data,
+        #[allow(unused)]
         gltf_sampler: &gltf::texture::Sampler,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -350,6 +336,7 @@ pub struct MaterialBindGroupLayout(Arc<BindGroupLayout>);
 
 #[derive(Resource, Clone)]
 pub struct GlobalBindGroup {
+    #[allow(unused)]
     pub layout: Arc<BindGroupLayout>,
     pub bind_group: Arc<BindGroup>,
 }

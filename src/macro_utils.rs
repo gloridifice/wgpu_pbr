@@ -1,5 +1,7 @@
 use wgpu::{BindGroupLayoutEntry, BindingType, ShaderStages};
 
+
+#[allow(unused)]
 #[derive(Clone)]
 pub enum BGLEntry {
     UniformBuffer(),

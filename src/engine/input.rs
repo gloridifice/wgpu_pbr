@@ -1,16 +1,22 @@
 use std::collections::HashSet;
 
-use bevy_ecs::system::Resource;
+use bevy_ecs::{system::Resource, world::FromWorld};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct Input {
     pub down_keys: HashSet<KeyCode>,
     pub hold_keys: HashSet<KeyCode>,
     pub up_keys: HashSet<KeyCode>,
+}
+
+impl FromWorld for Input {
+    fn from_world(_world: &mut bevy_ecs::world::World) -> Self {
+        Input::new()
+    }
 }
 
 impl Input {
@@ -22,9 +28,12 @@ impl Input {
         }
     }
 
+    #[allow(unused)]
     pub fn is_key_down(&self, key: KeyCode) -> bool {
         return self.down_keys.contains(&key);
     }
+
+    #[allow(unused)]
     pub fn is_key_up(&self, key: KeyCode) -> bool {
         return self.up_keys.contains(&key);
     }
