@@ -1,19 +1,22 @@
 use bevy_ecs::prelude::Resource;
-use egui::Context;
+use bevy_ecs::world::Mut;
+use cgmath::{Deg, Euler, Rotation3, Vector3};
+use egui::{Context, DragValue, Ui};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
+use crate::render::transform::Transform;
 
 #[derive(Resource)]
-pub struct EguiConfig{
-    pub egui_scale_factor: f32
+pub struct EguiConfig {
+    pub egui_scale_factor: f32,
 }
 impl Default for EguiConfig {
     fn default() -> Self {
-        Self{
+        Self {
             egui_scale_factor: 0.8,
         }
     }
@@ -21,9 +24,9 @@ impl Default for EguiConfig {
 
 #[derive(Resource)]
 pub struct EguiRenderer {
-    state: State,
-    renderer: Renderer,
-    frame_started: bool,
+    pub state: State,
+    pub renderer: Renderer,
+    pub frame_started: bool,
 }
 
 impl EguiRenderer {
@@ -130,4 +133,30 @@ impl EguiRenderer {
 
         self.frame_started = false;
     }
+}
+
+pub fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
+    ui.horizontal(|ui| {
+        ui.label("Pos");
+        ui.add(DragValue::new(&mut transform.position.x));
+        ui.add(DragValue::new(&mut transform.position.y));
+        ui.add(DragValue::new(&mut transform.position.z));
+    });
+    ui.horizontal(|ui| {
+        let euler = Euler::from(transform.rotation);
+        ui.label("Rot");
+        let mut x = Deg::from(euler.x);
+        let mut y = Deg::from(euler.y);
+        let mut z = Deg::from(euler.z);
+        ui.add(DragValue::new(&mut x.0));
+        ui.add(DragValue::new(&mut y.0));
+        ui.add(DragValue::new(&mut z.0));
+        transform.rotation = Euler::new(x, y, z).into();
+    });
+    ui.horizontal(|ui| {
+        ui.label("Scale");
+        ui.add(DragValue::new(&mut transform.scale.x));
+        ui.add(DragValue::new(&mut transform.scale.y));
+        ui.add(DragValue::new(&mut transform.scale.z));
+    });
 }

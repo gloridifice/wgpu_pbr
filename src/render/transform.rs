@@ -118,6 +118,11 @@ impl WorldTransform {
         self.rotation.rotate_vector(fwd)
     }
 
+    pub fn up(&self) -> Vec3 {
+        let up = Vector3::new_y(1.);
+        self.rotation.rotate_vector(up)
+    }
+
     pub fn rot_matrix(&self) -> Mat3 {
         Matrix3::from(self.rotation)
     }

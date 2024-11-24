@@ -47,7 +47,7 @@ impl Camera {
             aspect,
             fovy: 45.0,
             znear: 0.01,
-            zfar: 1000.0,
+            zfar: 100.0,
         }
     }
 

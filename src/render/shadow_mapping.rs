@@ -1,18 +1,18 @@
 use std::sync::Arc;
 
 use bevy_ecs::{
+    component::Component,
     system::Resource,
     world::{self, FromWorld, Mut},
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureSampleType
+    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages,
+    TextureSampleType,
 };
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{
-    camera::RenderCamera, light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex
-};
+use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex};
 
 #[derive(Resource)]
 pub struct ShadowMap {
@@ -33,16 +33,18 @@ pub struct ShadowMappingPipeline {
     pub layout: Arc<PipelineLayout>,
 }
 
+#[derive(Component, Clone, Default)]
+pub struct CastShadow;
+
 impl FromWorld for ShadowMapGlobalBindGroup {
     fn from_world(world: &mut world::World) -> Self {
         world.resource_scope(|world, render_state: Mut<RenderState>| {
             let device = &render_state.device;
 
-            let layout =
-                Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
-                    ["Shadow Mapping Global Bind Group Layout"]
-                    0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Light
-                )));
+            let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
+                ["Shadow Mapping Global Bind Group Layout"]
+                0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Light
+            )));
 
             let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
 
@@ -51,10 +53,7 @@ impl FromWorld for ShadowMapGlobalBindGroup {
                 0: light_uniform_buffer.as_entire_binding();
             )));
 
-            Self {
-                layout,
-                bind_group,
-            }
+            Self { layout, bind_group }
         })
     }
 }
@@ -88,7 +87,16 @@ impl FromWorld for ShadowMappingPipeline {
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[Vertex::desc()],
                 },
-                primitive: wgpu::PrimitiveState::default(),
+                fragment: None,
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Back),
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    unclipped_depth: false,
+                    conservative: false,
+                },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: RenderState::DEPTH_FORMAT,
                     depth_write_enabled: true,
@@ -97,7 +105,6 @@ impl FromWorld for ShadowMappingPipeline {
                     bias: Default::default(),
                 }),
                 multisample: wgpu::MultisampleState::default(),
-                fragment: None,
                 multiview: None,
                 cache: None,
             }),
@@ -115,3 +122,18 @@ impl FromWorld for ShadowMap {
         })
     }
 }
+
+// #[derive(Resource, Clone)]
+// pub struct ShadowMapEguiTextureId(pub egui::TextureId);
+
+// impl FromWorld for ShadowMapEguiTextureId {
+//     fn from_world(world: &mut world::World) -> Self {
+//         world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
+//             let image = world.resource::<ShadowMap>();
+//             let rs = world.resource::<crate::RenderState>();
+//             let id = egui.renderer
+//                 .register_native_texture_with_sampler_options(&rs.device, &image.image.view);
+//             Self(id)
+//         })
+//     }
+// }
