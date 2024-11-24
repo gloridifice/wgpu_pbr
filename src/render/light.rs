@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{Matrix4, Vector4};
+use cgmath::{Matrix, Matrix4, Point3, Vector4};
 use wgpu::{
     BufferDescriptor, BufferUsages,
 };
 
-use super::transform::WorldTransform;
+use crate::math_type::{Mat4, Vector3Ext};
+
+use super::{camera::OPENGL_TO_WGPU_MATRIX, transform::WorldTransform};
 
 #[derive(Resource)]
 pub struct RenderLight {
@@ -71,9 +73,9 @@ impl MainLight {
     }
 
     pub fn light_space_matrix(transform: &WorldTransform) -> Matrix4<f32> {
-        let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 1000.);
-        let view = transform.model_matrix();
-        view * proj
+        let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 100.);
+        let view = Matrix4::look_at_rh(transform.position.into_point() , (transform.position + transform.forward()).into_point(), transform.up());
+        OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }
 

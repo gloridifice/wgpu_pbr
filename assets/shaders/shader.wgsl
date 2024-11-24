@@ -67,13 +67,19 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     let lightFactor = (dot(light.direction, in.normal) + 1.0) / 2.0 * light.color * light.intensity;
     let baseColor = textureSample(tex_0, samp_0, in.tex_coord);
-    let shadow = calculate_shadow(in.light_space_clip_pos);
+    // let shadow = calculate_shadow(in.light_space_clip_pos);
 
-    var proj_coords = in.light_space_clip_pos.xyz / in.light_space_clip_pos.w;
+    var light_space_pos = in.light_space_clip_pos;
+    var proj_coords = light_space_pos.xyz / light_space_pos.w;
     proj_coords = proj_coords * 0.5 + 0.5;
     var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
-    // return lightFactor * baseColor * shadow;
-    return vec4<f32>(closest_depth, closest_depth, closest_depth, 1.0);
+    var current_depth = proj_coords.z;
+
+    var shadow = select(1., 0., current_depth > closest_depth);
+
+    // return vec4<f32>((lightFactor * baseColor * shadow).xyz, 1.0);
+    return vec4<f32>(vec3<f32>(closest_depth), 1.0);
+    // return vec4<f32>(vec3<f32>(closest_depth), 1.0);
 }
 
 // Range [0.0, 1.0]: 0.0 in shadow, 1.0 not in shadow

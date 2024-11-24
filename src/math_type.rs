@@ -1,3 +1,5 @@
+use cgmath::Point3;
+
 pub type Vec2 = cgmath::Vector2<f32>;
 pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec4 = cgmath::Vector4<f32>;
@@ -22,11 +24,13 @@ pub trait VectorExt: Sized {
 #[allow(unused)]
 pub trait Vector3Ext {
     fn new_z(z: f32) -> Self;
+    fn into_point(&self) -> Point3<f32>;
 }
 
 
 #[allow(unused)]
 pub trait Vector4Ext {
+    fn new_z(z: f32) -> Self;
     fn new_w(w: f32) -> Self;
 }
 
@@ -61,6 +65,10 @@ impl Vector3Ext for Vec3 {
     fn new_z(z: f32) -> Self {
         Self { x: 0., y: 0., z }
     }
+
+    fn into_point(&self) -> Point3<f32> {
+        Point3 { x: self.x, y: self.y, z: self.z }
+    }
 }
 
 impl VectorExt for Vec4 {
@@ -76,13 +84,12 @@ impl VectorExt for Vec4 {
         Self::new(0., y, 0., 0.)
     }
 }
-impl Vector3Ext for Vec4 {
+
+impl Vector4Ext for Vec4 {
     fn new_z(z: f32) -> Self {
         Self::new(0., 0., z, 0.)
     }
-}
 
-impl Vector4Ext for Vec4 {
     fn new_w(w: f32) -> Self {
         Self::new(0., 0., 0., w)
     }
