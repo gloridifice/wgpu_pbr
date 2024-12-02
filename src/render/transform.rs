@@ -1,16 +1,11 @@
-use std::sync::Arc;
 
 use bevy_ecs::prelude::Query;
-use bevy_ecs::{component::Component, entity::Entity, system::Resource};
+use bevy_ecs::{component::Component, entity::Entity};
 use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, Vector3};
 use derive_builder::Builder;
-use wgpu::{BindGroupLayout, BindGroupLayoutDescriptor, BindGroupLayoutEntry, Device};
 
 use crate::math_type::{Mat3, Mat4};
-use crate::{
-    math_type::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt},
-    wgpu_init::bind_group_layout_entry_shader,
-};
+use crate::math_type::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt};
 
 #[allow(unused)]
 #[derive(Component, Builder, Clone, Debug)]

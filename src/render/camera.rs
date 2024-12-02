@@ -6,11 +6,10 @@ use bevy_ecs::component::Component;
 use bevy_ecs::prelude::Res;
 use bevy_ecs::system::{ResMut, Single};
 use bevy_ecs::{system::Resource, world::FromWorld};
-use cgmath::{perspective, Matrix4, Point3, Vector3};
-use wgpu::util::DeviceExt;
+use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;
 
-use super::transform::{self, Transform, WorldTransform};
+use super::transform::{Transform, WorldTransform};
 
 #[derive(Resource)]
 pub struct RenderCamera {

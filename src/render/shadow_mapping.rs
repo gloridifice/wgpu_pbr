@@ -6,8 +6,7 @@ use bevy_ecs::{
     world::{self, FromWorld, Mut},
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages,
-    TextureSampleType,
+    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages,
 };
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};

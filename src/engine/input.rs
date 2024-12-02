@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use bevy_ecs::{system::{Res, ResMut, Resource}, world::FromWorld};
+use bevy_ecs::{system::{ResMut, Resource}, world::FromWorld};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},

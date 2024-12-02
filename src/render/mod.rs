@@ -11,8 +11,8 @@ use material_impl::{Material, PBRMaterial};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupEntry, BindGroupLayout,
-    BindingResource, Buffer, BufferDescriptor, BufferUsages, Device, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
+    util::DeviceExt, BindGroup, BindGroupLayout,
+    BindingResource, Buffer, BufferDescriptor, BufferUsages, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
     TextureView,
 };
 

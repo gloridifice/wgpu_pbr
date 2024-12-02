@@ -5,7 +5,7 @@ use crate::math_type::Vec3;
 use crate::render::camera::{Camera, CameraController};
 use crate::render::material_impl::MainPipeline;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
-use crate::render::transform::{self, WorldTransform};
+use crate::render::transform::WorldTransform;
 use crate::render::{
     DefaultMainPipelineMaterial, GlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout,
 };
@@ -23,16 +23,14 @@ use crate::{
     },
     RenderState, State,
 };
-use bevy_ecs::change_detection::DetectChanges;
 use bevy_ecs::query::{Changed, Or, With};
 use bevy_ecs::system::{Commands, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
-    system::{Query, Res, ResMut, RunSystemOnce},
+    system::{Query, Res, RunSystemOnce},
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
-use egui::epaint::QuadraticBezierShape;
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -341,9 +339,9 @@ pub fn sys_update_camera(
     config: Res<CameraConfig>,
     input: Res<Input>,
     time: Res<Time>,
-    camera_query: Single<(&mut Camera, &mut Transform, &mut CameraController)>,
+    camera_query: Single<(&Camera, &mut Transform, &mut CameraController)>,
 ) {
-    let (mut camera, mut cam_transform, mut controller) = camera_query.into_inner();
+    let (_, mut cam_transform, mut controller) = camera_query.into_inner();
 
     let speed = config.speed;
 
