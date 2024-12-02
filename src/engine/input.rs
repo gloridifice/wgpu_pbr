@@ -1,16 +1,21 @@
 use std::collections::HashSet;
 
-use bevy_ecs::{system::Resource, world::FromWorld};
+use bevy_ecs::{system::{Res, ResMut, Resource}, world::FromWorld};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
+
+use crate::math_type::{Vec2, VectorExt};
 
 #[derive(Resource)]
 pub struct Input {
     pub down_keys: HashSet<KeyCode>,
     pub hold_keys: HashSet<KeyCode>,
     pub up_keys: HashSet<KeyCode>,
+    pub last_cursor_position: Vec2,
+    pub cursor_position: Vec2,
+    pub cursor_offset: Vec2,
 }
 
 impl FromWorld for Input {
@@ -25,6 +30,9 @@ impl Input {
             down_keys: HashSet::with_capacity(100),
             hold_keys: HashSet::with_capacity(100),
             up_keys: HashSet::with_capacity(100),
+            last_cursor_position: Vec2::zero(),
+            cursor_position: Vec2::zero(),
+            cursor_offset: Vec2::zero(),
         }
     }
 
@@ -46,6 +54,9 @@ impl Input {
         self.up_keys.clear();
 
         match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
+            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -72,5 +83,10 @@ impl Input {
             }
             _ => {}
         };
+    }
+
+    pub fn sys_pre_update(mut input: ResMut<Input>){
+        input.cursor_offset = input.cursor_position - input.last_cursor_position;
+        input.last_cursor_position = input.cursor_position;
     }
 }
