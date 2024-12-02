@@ -1,10 +1,10 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{Matrix, Matrix4, Point3, Vector4};
+use cgmath::{Matrix4, Vector4};
 use wgpu::{BufferDescriptor, BufferUsages};
 
-use crate::math_type::{Mat4, Vec3, Vector3Ext};
+use crate::math_type::Vector3Ext;
 
 use super::{camera::OPENGL_TO_WGPU_MATRIX, transform::WorldTransform};
 

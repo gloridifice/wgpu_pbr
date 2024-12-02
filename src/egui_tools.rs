@@ -1,6 +1,5 @@
 use bevy_ecs::prelude::Resource;
-use bevy_ecs::world::Mut;
-use cgmath::{Deg, Euler, Rotation3, Vector3};
+use cgmath::{Deg, Euler};
 use egui::{Context, DragValue, Ui};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
