@@ -2,9 +2,10 @@ use std::sync::Arc;
 
 use crate::egui_tools::{self, EguiConfig, EguiRenderer};
 use crate::math_type::Vec3;
+use crate::render::camera::{Camera, CameraController};
 use crate::render::material_impl::MainPipeline;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
-use crate::render::transform::WorldTransform;
+use crate::render::transform::{self, WorldTransform};
 use crate::render::{
     DefaultMainPipelineMaterial, GlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout,
 };
@@ -22,14 +23,16 @@ use crate::{
     },
     RenderState, State,
 };
-use bevy_ecs::query::{Changed, With};
+use bevy_ecs::change_detection::DetectChanges;
+use bevy_ecs::query::{Changed, Or, With};
 use bevy_ecs::system::{Commands, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, ResMut, RunSystemOnce},
 };
-use cgmath::{InnerSpace, Quaternion, Rad, Rotation3, Vector3};
+use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
+use egui::epaint::QuadraticBezierShape;
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -75,7 +78,7 @@ impl State {
         self.insert_resource::<DefaultMainPipelineMaterial>();
 
         let ship_model = render::Model::load(
-            AssetPath::Assets("models/ship.glb".to_string()),
+            AssetPath::Assets("models/test_scene.glb".to_string()),
             &mut self.world,
         )
         .unwrap();
@@ -87,10 +90,14 @@ impl State {
 
         let mut queue = CommandQueue::from_world(&mut self.world);
         let mut cmd = Commands::new(&mut queue, &self.world);
+        let rs = &self.world.resource::<RenderState>().config;
+        let aspect = rs.width as f32 / rs.height as f32;
+
+        cmd.spawn((Camera::new(aspect), CameraController::default()));
 
         let main_light_id = cmd
             .spawn((
-                Transform::with_position(Vec3::new(0., 0., -10.)),
+                Transform::with_position(Vec3::new(0., 0., 3.)),
                 MainLight::default(),
             ))
             .id();
@@ -105,7 +112,14 @@ impl State {
             ));
         }
 
-        let parent = cmd.spawn(Transform::default()).id();
+        let parent = cmd
+            .spawn(
+                TransformBuilder::default()
+                    .rotation(Quaternion::from_angle_x(Deg(-90.0)))
+                    .build()
+                    .unwrap(),
+            )
+            .id();
 
         for mesh in ship_model.meshes {
             let uploaded = Arc::new(mesh.upload(self));
@@ -153,6 +167,7 @@ impl State {
 
     pub fn pre_update(&mut self) {
         self.world.resource_mut::<Time>().update();
+        self.world.run_system_cached(Input::sys_pre_update).unwrap();
     }
 
     pub fn update(&mut self) {
@@ -161,6 +176,7 @@ impl State {
         self.world.run_system_once(sys_update_rotation).unwrap();
 
         self.world.run_system_once(sys_light_panel).unwrap();
+        self.world.run_system_once(sys_input_panel).unwrap();
     }
 
     pub fn post_update(&mut self) {
@@ -173,13 +189,9 @@ impl State {
             .unwrap();
 
         // Update camera uniform
-        {
-            if self.world.is_resource_changed::<RenderCamera>() {
-                self.world
-                    .resource::<RenderCamera>()
-                    .update_uniform2gpu(&self.render_state().queue);
-            }
-        }
+        self.world
+            .run_system_cached(sys_update_camera_uniform)
+            .unwrap();
 
         // Update light uniform
         {
@@ -219,29 +231,30 @@ impl State {
             let sm_global_bg = self.world.resource::<ShadowMapGlobalBindGroup>();
 
             // let render_light = self.world.resource::<RenderLight>();
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("Shadow Mapping Light Depth Render Pass"),
-                color_attachments: &[],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
+            let mut shadow_map_render_pass =
+                encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some("Shadow Mapping Light Depth Render Pass"),
+                    color_attachments: &[],
+                    depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                        depth_ops: Some(wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(1.0),
+                            store: wgpu::StoreOp::Store,
+                        }),
+                        view: &shadow_map.image.view,
+                        stencil_ops: None,
                     }),
-                    view: &shadow_map.image.view,
-                    stencil_ops: None,
-                }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
+                    occlusion_query_set: None,
+                    timestamp_writes: None,
+                });
 
-            render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
-            render_pass.set_bind_group(0, &sm_global_bg.bind_group, &[]);
+            shadow_map_render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
+            shadow_map_render_pass.set_bind_group(0, &sm_global_bg.bind_group, &[]);
             for mesh_renderer in self
                 .world
                 .query_filtered::<&MeshRenderer, With<CastShadow>>()
                 .iter(&self.world)
             {
-                mesh_renderer.draw_depth(&mut render_pass);
+                mesh_renderer.draw_depth(&mut shadow_map_render_pass);
             }
         }
         {
@@ -252,9 +265,9 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.5,
-                            g: 0.5,
-                            b: 0.5,
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
                             a: 1.0,
                         }),
                         store: wgpu::StoreOp::Store,
@@ -319,7 +332,6 @@ impl State {
 
 pub fn sys_update_rotation(mut q: Query<(&mut Transform, &Rotation)>, time: Res<Time>) {
     for (mut trans, rot) in q.iter_mut() {
-        //todo delta time
         trans.rotation = Quaternion::from_angle_y(Rad(rot.speed) * time.delta_time.as_secs_f32())
             * trans.rotation;
     }
@@ -329,8 +341,10 @@ pub fn sys_update_camera(
     config: Res<CameraConfig>,
     input: Res<Input>,
     time: Res<Time>,
-    mut render_camera: ResMut<RenderCamera>,
+    camera_query: Single<(&mut Camera, &mut Transform, &mut CameraController)>,
 ) {
+    let (mut camera, mut cam_transform, mut controller) = camera_query.into_inner();
+
     let speed = config.speed;
 
     let mut move_vec = Vector3::new(0., 0., 0.);
@@ -353,11 +367,17 @@ pub fn sys_update_camera(
             move_vec += Vector3::new(0.0, 1.0, 1.0);
         }
     }
+    let delta_time_sec = time.delta_time.as_secs_f32();
     if move_vec != Vector3::new(0., 0., 0.) {
-        move_vec = move_vec.normalize() * speed * time.delta_time.as_secs_f32();
-        render_camera.camera.eye += move_vec;
-        render_camera.camera.target += move_vec;
+        move_vec = move_vec.normalize() * speed * delta_time_sec;
+        cam_transform.position += move_vec;
     }
+
+    let factor = vec2(0.6, 0.4);
+    controller.row -= input.cursor_offset.x * factor.x;
+    controller.yaw = (controller.yaw - input.cursor_offset.y * factor.y).clamp(-40.0, 80.0);
+    cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
+        * Quaternion::from_angle_x(Deg(controller.yaw));
 }
 
 fn sys_update_transform_buffers(world: &mut World) {
@@ -375,5 +395,22 @@ fn sys_light_panel(light: Single<(&MainLight, &mut Transform)>, egui: Res<EguiRe
     let ctx = egui.context();
     egui::Window::new("Light").show(ctx, |ui| {
         egui_tools::transform_ui(ui, &mut trans);
+    });
+}
+
+fn sys_update_camera_uniform(
+    render_camera: Res<RenderCamera>,
+    single: Single<(&Camera, &WorldTransform), Or<(Changed<Camera>, Changed<WorldTransform>)>>,
+    rs: Res<RenderState>,
+) {
+    let (camera, transform) = single.into_inner();
+    render_camera.update_uniform2gpu(camera, transform, &rs.queue);
+}
+
+fn sys_input_panel(input: Res<Input>, egui: Res<EguiRenderer>) {
+    let ctx = egui.context();
+    egui::Window::new("Input").show(ctx, |ui| {
+        ui.label(format!("Offset: {:?}", input.cursor_offset));
+        ui.label(format!("Position: {:?}", input.cursor_position));
     });
 }

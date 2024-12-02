@@ -2,11 +2,9 @@ use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
 use cgmath::{Matrix, Matrix4, Point3, Vector4};
-use wgpu::{
-    BufferDescriptor, BufferUsages,
-};
+use wgpu::{BufferDescriptor, BufferUsages};
 
-use crate::math_type::{Mat4, Vector3Ext};
+use crate::math_type::{Mat4, Vec3, Vector3Ext};
 
 use super::{camera::OPENGL_TO_WGPU_MATRIX, transform::WorldTransform};
 
@@ -74,7 +72,11 @@ impl MainLight {
 
     pub fn light_space_matrix(transform: &WorldTransform) -> Matrix4<f32> {
         let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 100.);
-        let view = Matrix4::look_at_rh(transform.position.into_point() , (transform.position + transform.forward()).into_point(), transform.up());
+        let view = Matrix4::look_at_rh(
+            transform.position.into_point(),
+            (transform.position + transform.forward()).into_point(),
+            transform.up(),
+        );
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }

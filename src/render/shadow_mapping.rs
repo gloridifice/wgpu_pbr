@@ -104,7 +104,11 @@ impl FromWorld for ShadowMappingPipeline {
                     stencil: Default::default(),
                     bias: Default::default(),
                 }),
-                multisample: wgpu::MultisampleState::default(),
+                multisample: wgpu::MultisampleState{
+                    count: 1,
+                    mask: !0,
+                    alpha_to_coverage_enabled: false,
+                },
                 multiview: None,
                 cache: None,
             }),
@@ -118,6 +122,7 @@ impl FromWorld for ShadowMap {
     fn from_world(world: &mut world::World) -> Self {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
             let image = RenderState::create_depth_texture(&render_state.device, 1024, 1024, None);
+
             Self { image }
         })
     }

@@ -78,8 +78,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var shadow = select(1., 0., current_depth > closest_depth);
 
     // return vec4<f32>((lightFactor * baseColor * shadow).xyz, 1.0);
-    return vec4<f32>(vec3<f32>(closest_depth), 1.0);
     // return vec4<f32>(vec3<f32>(closest_depth), 1.0);
+    return vec4<f32>(vec3<f32>(proj_coords.xy, 0.0), 1.0);
 }
 
 // Range [0.0, 1.0]: 0.0 in shadow, 1.0 not in shadow
