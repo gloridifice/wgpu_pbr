@@ -1,16 +1,12 @@
 use bevy_ecs::{
     prelude::*,
-    system::{CachedSystemId, RunSystemOnce, SystemId},
-    world,
+    system::RunSystemOnce,
 };
 use egui::load::SizedTexture;
-use egui_tiles::Behavior;
-use winit::{keyboard::KeyCode, platform::pump_events};
 
 use crate::{
     egui_tools::{self, EguiRenderer},
     engine::input::{CursorButton, Input},
-    engine_lifetime::ControlState,
     math_type::{Vec2, VectorExt},
     render::{
         self, camera::CameraConfig, light::MainLight, transform::Transform, ColorRenderTarget,

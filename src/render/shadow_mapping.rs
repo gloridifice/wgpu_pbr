@@ -12,7 +12,7 @@ use wgpu::{
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex};
+use super::{ObjectBindGroupLayout, UploadedImage, Vertex};
 
 #[derive(Resource)]
 pub struct ShadowMap {

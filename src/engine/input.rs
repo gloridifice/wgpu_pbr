@@ -66,7 +66,7 @@ impl Input {
 
     pub fn input(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::CursorMoved { position, .. } => {
+            WindowEvent::CursorMoved {  .. } => {
                 // self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
             }
             WindowEvent::KeyboardInput {

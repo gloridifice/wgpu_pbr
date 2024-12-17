@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
-use crate::egui_tools::{self, EguiConfig, EguiRenderer};
-use crate::math_type::{Mat4, Vec3};
+use crate::egui_tools::{EguiConfig, EguiRenderer};
+use crate::math_type::Vec3;
 use crate::render::camera::{Camera, CameraController};
 use crate::render::material_impl::MainPipeline;
 use crate::render::shadow_mapping::{
@@ -27,7 +27,6 @@ use crate::{
     },
     RenderState, State,
 };
-use bevy_ecs::event::signal_event_update_system;
 use bevy_ecs::query::{Changed, Or, With};
 use bevy_ecs::system::{Commands, ResMut, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
@@ -35,7 +34,7 @@ use bevy_ecs::{
     component::Component,
     system::{Query, Res, RunSystemOnce},
 };
-use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, SquareMatrix, Vector3};
+use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, Vector3};
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
