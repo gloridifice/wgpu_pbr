@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{Matrix4, Vector4};
+use cgmath::{Deg, Matrix4, Vector4};
 use wgpu::{BufferDescriptor, BufferUsages};
 
 use crate::math_type::Vector3Ext;
@@ -18,6 +18,9 @@ pub struct RenderLight {
 pub struct MainLight {
     pub intensity: f32,
     pub color: Vector4<f32>,
+    pub fov: f32,
+    pub near: f32,
+    pub far: f32,
 }
 
 impl Default for MainLight {
@@ -25,6 +28,9 @@ impl Default for MainLight {
         Self {
             intensity: 1.0,
             color: Vector4::new(0.6, 0.6, 0.5, 1.0),
+            fov: 120.,
+            near: 1.,
+            far: 100.,
         }
     }
 }
@@ -66,12 +72,13 @@ impl MainLight {
             intensity: self.intensity,
             padding2: [0f32; 3],
             padding1: 0.,
-            space_matrix: Self::light_space_matrix(&transform).into(),
+            space_matrix: self.light_space_matrix(&transform).into(),
         }
     }
 
-    pub fn light_space_matrix(transform: &WorldTransform) -> Matrix4<f32> {
-        let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 100.);
+    pub fn light_space_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
+        let proj = cgmath::perspective(Deg(self.fov), 1.0, self.near, self.far);
+        // let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 100.);
         let view = Matrix4::look_at_rh(
             transform.position.into_point(),
             (transform.position + transform.forward()).into_point(),

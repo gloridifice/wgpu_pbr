@@ -24,6 +24,7 @@ egui-winit = "0.29.1"
 bevy_ecs = "0.15"
 tiny_bail = "0.4.3"
 rand = "0.8.5"
+egui_tiles = "0.10.1"
 
 [dependencies.gltf]
 version = "1.4"
