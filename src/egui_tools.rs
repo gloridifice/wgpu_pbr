@@ -153,7 +153,7 @@ pub fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
         transform.rotation = Euler::new(x, y, z).into();
     });
     ui.horizontal(|ui| {
-        ui.label("Scale");
+        ui.label("Sca");
         ui.add(DragValue::new(&mut transform.scale.x));
         ui.add(DragValue::new(&mut transform.scale.y));
         ui.add(DragValue::new(&mut transform.scale.z));

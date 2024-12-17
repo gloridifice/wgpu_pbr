@@ -18,15 +18,15 @@ struct LightUniform {
 }
 
 @group(0) @binding(0)
-var<uniform> light: LightUniform;
+var<uniform> light: mat4x4<f32>;
 
 @group(1) @binding(0)
 var<uniform> transform: TransformUniform;
 
 @vertex
 fn vs_main(
-    model: VertexInput,
+    in: VertexInput,
 ) -> @builtin(position) vec4<f32> {
-    var clip_position = light.view_proj * transform.model * vec4<f32>(model.position, 1.0);
+    var clip_position = light * transform.model * vec4<f32>(in.position, 1.0);
     return clip_position;
 }

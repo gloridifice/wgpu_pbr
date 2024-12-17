@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use bevy_ecs::{system::{ResMut, Resource}, world::FromWorld};
+use bevy_ecs::{
+    system::{ResMut, Resource},
+    world::FromWorld,
+};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
@@ -16,6 +19,12 @@ pub struct Input {
     pub last_cursor_position: Vec2,
     pub cursor_position: Vec2,
     pub cursor_offset: Vec2,
+    pub down_cursor_buttons: HashSet<CursorButton>
+}
+
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub enum CursorButton {
+    Left, Middle, Right
 }
 
 impl FromWorld for Input {
@@ -33,6 +42,7 @@ impl Input {
             last_cursor_position: Vec2::zero(),
             cursor_position: Vec2::zero(),
             cursor_offset: Vec2::zero(),
+            down_cursor_buttons: HashSet::with_capacity(8),
         }
     }
 
@@ -45,17 +55,19 @@ impl Input {
     pub fn is_key_up(&self, key: KeyCode) -> bool {
         return self.up_keys.contains(&key);
     }
+
     pub fn is_key_hold(&self, key: KeyCode) -> bool {
         return self.hold_keys.contains(&key);
     }
 
-    pub fn update(&mut self, event: &WindowEvent) {
-        self.down_keys.clear();
-        self.up_keys.clear();
+    pub fn is_cursor_button_down(&self, button: CursorButton) -> bool {
+        return self.down_cursor_buttons.contains(&button);
+    }
 
+    pub fn input(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
+                // self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
             }
             WindowEvent::KeyboardInput {
                 event:
@@ -85,8 +97,13 @@ impl Input {
         };
     }
 
-    pub fn sys_pre_update(mut input: ResMut<Input>){
+    pub fn sys_pre_update(mut input: ResMut<Input>) {
         input.cursor_offset = input.cursor_position - input.last_cursor_position;
         input.last_cursor_position = input.cursor_position;
+    }
+    pub fn sys_post_update(mut input: ResMut<Input>) {
+        input.down_keys.clear();
+        input.up_keys.clear();
+        input.down_cursor_buttons.clear();
     }
 }

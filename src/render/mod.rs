@@ -11,9 +11,10 @@ use material_impl::{Material, PBRMaterial};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout,
-    BindingResource, Buffer, BufferDescriptor, BufferUsages, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture, TextureSampleType,
-    TextureView,
+    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor,
+    BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture,
+    TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView,
+    TextureViewDescriptor,
 };
 
 use crate::{
@@ -28,6 +29,149 @@ pub mod light;
 pub mod material_impl;
 pub mod shadow_mapping;
 pub mod transform;
+
+#[derive(Resource)]
+pub struct ColorRenderTarget(pub Option<UploadedImage>);
+#[derive(Resource)]
+pub struct DepthRenderTarget(pub Option<UploadedImage>);
+
+#[derive(Resource)]
+pub struct RenderTargetSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl Default for RenderTargetSize {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            height: 512,
+        }
+    }
+}
+
+pub fn create_render_target(
+    width: u32,
+    height: u32,
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) -> UploadedImage {
+    let size = Extent3d {
+        width: width,
+        height: height,
+        depth_or_array_layers: 1,
+    };
+    let desc = TextureDescriptor {
+        label: Some("Render Target"),
+        size,
+        format: config.format,
+        usage: config.usage | TextureUsages::TEXTURE_BINDING,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        view_formats: &[],
+    };
+    let texture = device.create_texture(&desc);
+    let view = texture.create_view(&TextureViewDescriptor::default());
+
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        // 4.
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
+        mipmap_filter: wgpu::FilterMode::Linear,
+        compare: None, // 5.
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 100.0,
+        ..Default::default()
+    });
+
+    UploadedImage {
+        size,
+        texture,
+        view,
+        sampler,
+    }
+}
+
+pub fn create_depth_texture(
+    device: &wgpu::Device,
+    width: u32,
+    height: u32,
+    compare: Option<wgpu::CompareFunction>,
+) -> UploadedImage {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let desc = wgpu::TextureDescriptor {
+        label: None,
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: RenderState::DEPTH_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[RenderState::DEPTH_FORMAT],
+    };
+    let texture = device.create_texture(&desc);
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+        // 4.
+        address_mode_u: wgpu::AddressMode::ClampToEdge,
+        address_mode_v: wgpu::AddressMode::ClampToEdge,
+        address_mode_w: wgpu::AddressMode::ClampToEdge,
+        mag_filter: wgpu::FilterMode::Nearest,
+        min_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
+        compare, // 5.
+        lod_min_clamp: 0.0,
+        lod_max_clamp: 100.0,
+        ..Default::default()
+    });
+
+    UploadedImage {
+        size,
+        texture,
+        view,
+        sampler,
+    }
+}
+
+impl FromWorld for ColorRenderTarget {
+    fn from_world(world: &mut World) -> Self {
+        let render_state = world.resource::<RenderState>();
+        let size = world.resource::<RenderTargetSize>();
+
+        let target = create_render_target(
+            size.width,
+            size.height,
+            &render_state.device,
+            &render_state.config,
+        );
+
+        Self(Some(target))
+    }
+}
+
+impl FromWorld for DepthRenderTarget {
+    fn from_world(world: &mut World) -> Self {
+        let render_state = world.resource::<RenderState>();
+        let size = world.resource::<RenderTargetSize>();
+
+        let target = create_depth_texture(
+            &render_state.device,
+            size.width,
+            size.height,
+            Some(wgpu::CompareFunction::Less)
+        );
+
+        Self(Some(target))
+    }
+}
 
 pub struct DrawContext<'a, 'b> {
     pub render_pass: &'b mut RenderPass<'a>,
@@ -261,8 +405,7 @@ impl UploadedImage {
 
     pub fn from_glb_data(
         data: &gltf::image::Data,
-        #[allow(unused)]
-        gltf_sampler: &gltf::texture::Sampler,
+        #[allow(unused)] gltf_sampler: &gltf::texture::Sampler,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {

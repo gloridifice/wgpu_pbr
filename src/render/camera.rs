@@ -4,7 +4,7 @@ use crate::egui_tools::{self, EguiRenderer};
 use crate::math_type::Vector3Ext;
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::Res;
-use bevy_ecs::system::{ResMut, Single};
+use bevy_ecs::system::{In, InMut, ResMut, Single};
 use bevy_ecs::{system::Resource, world::FromWorld};
 use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;
@@ -73,20 +73,6 @@ pub struct CameraConfig {
 impl Default for CameraConfig {
     fn default() -> Self {
         Self { speed: 5.0 }
-    }
-}
-
-impl CameraConfig {
-    pub fn sys_panel(
-        mut camera_config: ResMut<CameraConfig>,
-        egui_renderer: Res<EguiRenderer>,
-        single: Single<(&mut Camera, &mut CameraController, &mut Transform)>,
-    ) {
-        let (_, _, mut cam_trans) = single.into_inner();
-        egui::Window::new("Camera").show(egui_renderer.context(), |ui| {
-            ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
-            egui_tools::transform_ui(ui, &mut cam_trans);
-        });
     }
 }
 
