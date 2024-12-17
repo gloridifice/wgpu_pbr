@@ -1,10 +1,7 @@
 use std::sync::Arc;
 
-use crate::egui_tools::{self, EguiRenderer};
 use crate::math_type::Vector3Ext;
 use bevy_ecs::component::Component;
-use bevy_ecs::prelude::Res;
-use bevy_ecs::system::{In, InMut, ResMut, Single};
 use bevy_ecs::{system::Resource, world::FromWorld};
 use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;

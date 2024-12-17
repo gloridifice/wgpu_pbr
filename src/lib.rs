@@ -1,12 +1,10 @@
 use bevy_ecs::system::Resource;
 use bevy_ecs::world::World;
-use egui::Visuals;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
-use render::UploadedImage;
 use std::sync::Arc;
 use bevy_ecs::change_detection::Mut;
-use wgpu::{CompareFunction, Device, Instance, Surface};
+use wgpu::{Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
