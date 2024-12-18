@@ -231,10 +231,10 @@ impl State {
         let window = self.window.clone();
         let world = &mut self.world;
 
-        world.resource_scope(|world, render_state: Mut<RenderState>| {
+        let mut ctx = world.resource_scope(|_world, render_state: Mut<RenderState>| {
             let output = render_state.surface.get_current_texture()?;
             let output_view = output.texture.create_view(&Default::default());
-            let mut encoder =
+            let encoder =
                 render_state
                     .device
                     .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -242,25 +242,26 @@ impl State {
                     });
 
             let ctx = PassRenderContext {
-                encoder: &mut encoder,
-                render_state: &mut render_state,
-                output_view: &output_view,
-                window: &window,
+                encoder,
+                output_view,
+                output_texture: output,
+                window: Arc::clone(&window),
             };
+            Ok(ctx)
+        })?;
 
-            // PASS: Shadow Mapping
-            world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx);
+        // PASS: Shadow Mapping
+        world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx);
 
-            // PASS: Main
-            world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx);
+        // PASS: Main
+        world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx);
 
-            // PASS: Render Egui
-            world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx);
+        // PASS: Render Egui
+        world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx);
 
-            // End Draw Objects
-            render_state.queue.submit(std::iter::once(encoder.finish()));
-            output.present();
-        });
+        // End Draw Objects
+        world.resource::<RenderState>().queue.submit(std::iter::once(ctx.encoder.finish()));
+        ctx.output_texture.present();
 
         Ok(())
     }
