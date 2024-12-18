@@ -251,13 +251,13 @@ impl State {
         })?;
 
         // PASS: Shadow Mapping
-        world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx);
+        world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx).unwrap();
 
         // PASS: Main
-        world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx);
+        world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx).unwrap();
 
         // PASS: Render Egui
-        world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx);
+        world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx).unwrap();
 
         // End Draw Objects
         world.resource::<RenderState>().queue.submit(std::iter::once(ctx.encoder.finish()));
