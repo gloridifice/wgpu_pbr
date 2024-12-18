@@ -4,10 +4,11 @@ use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::math_type::Vec3;
 use crate::render::camera::{Camera, CameraController};
-use crate::render::material_impl::MainPipeline;
+use crate::render::pbr_pipeline::MainPipeline;
 use crate::render::shadow_mapping::{
     CastShadow, LightMatrixBuffer, ShadowMapGlobalBindGroup, ShadowMappingPipeline,
 };
+use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, GlobalBindGroup,
@@ -35,6 +36,7 @@ use bevy_ecs::{
     system::{Query, Res, RunSystemOnce},
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, Vector3};
+use egui::Visuals;
 use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
@@ -85,6 +87,14 @@ impl State {
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(CameraConfig::default());
         self.insert_resource::<DefaultMainPipelineMaterial>();
+
+        {
+            // Set egui visual / style / theme
+            let egui = self.world.resource_mut::<EguiRenderer>();
+            let mut visual = Visuals::dark();
+            visual.widgets.noninteractive.bg_stroke.width = 0.0;
+            egui.context().set_visuals(visual);
+        }
 
         let ship_model = render::Model::load(
             AssetPath::Assets("models/test_scene.glb".to_string()),
@@ -219,133 +229,40 @@ impl State {
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         let window = self.window.clone();
-        self.world
-            .resource_scope(|world, depth_target: Mut<DepthRenderTarget>| {
-                let depth_view = &depth_target.0.as_ref().unwrap().view;
-                world.resource_scope(|world, target: Mut<ColorRenderTarget>| {
-                    let output = world
-                        .resource::<RenderState>()
-                        .surface
-                        .get_current_texture()?;
-                    let output_view = output.texture.create_view(&Default::default());
-                    let view = &target.0.as_ref().unwrap().view;
-                    let mut encoder = world
-                        .resource::<RenderState>()
-                        .device
-                        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                            label: Some("Render Encoder"),
-                        });
+        let world = &mut self.world;
 
-                    // Shadow Mapping light depth map
-                    {
-                        let shadow_map = world.resource::<ShadowMap>();
-                        let shadow_mapping_pipeline = world.resource::<ShadowMappingPipeline>();
-                        let sm_global_bg = world.resource::<ShadowMapGlobalBindGroup>();
-
-                        // let render_light = world.resource::<RenderLight>();
-                        let mut shadow_map_render_pass =
-                            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Shadow Mapping Light Depth Render Pass"),
-                                color_attachments: &[],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(1.0),
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        view: &shadow_map.image.view,
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                occlusion_query_set: None,
-                                timestamp_writes: None,
-                            });
-
-                        shadow_map_render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
-                        shadow_map_render_pass.set_bind_group(0, &sm_global_bg.bind_group, &[]);
-                        for mesh_renderer in world
-                            .query_filtered::<&MeshRenderer, With<CastShadow>>()
-                            .iter(&world)
-                        {
-                            mesh_renderer.draw_depth(&mut shadow_map_render_pass);
-                        }
-                    }
-                    {
-                        let mut render_pass =
-                            encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                                label: Some("Render Pass"),
-                                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                                    view: &view,
-                                    resolve_target: None,
-                                    ops: wgpu::Operations {
-                                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                                            r: 0.0,
-                                            g: 0.0,
-                                            b: 0.0,
-                                            a: 1.0,
-                                        }),
-                                        store: wgpu::StoreOp::Store,
-                                    },
-                                })],
-                                depth_stencil_attachment: Some(
-                                    wgpu::RenderPassDepthStencilAttachment {
-                                        depth_ops: Some(wgpu::Operations {
-                                            load: wgpu::LoadOp::Clear(1.0),
-                                            store: wgpu::StoreOp::Store,
-                                        }),
-                                        view: depth_view,
-                                        stencil_ops: None,
-                                    },
-                                ),
-                                occlusion_query_set: None,
-                                timestamp_writes: None,
-                            });
-
-                        let main_pipeline = world.resource::<MainPipeline>();
-                        let global_bind_group = &world.resource::<GlobalBindGroup>().bind_group;
-                        render_pass.set_pipeline(&main_pipeline.pipeline);
-                        render_pass.set_bind_group(0, global_bind_group, &[]);
-
-                        for mesh_renderer in world.query::<&MeshRenderer>().iter(&world) {
-                            let mut ctx = DrawContext {
-                                render_pass: &mut render_pass,
-                                world: &world,
-                            };
-                            mesh_renderer.draw_main(&mut ctx);
-                        }
-                    }
-
-                    world.resource_scope(|world, mut egui_renderer: Mut<EguiRenderer>| {
-                        let render_state = world.resource::<RenderState>();
-                        let egui_config = world.resource::<EguiConfig>();
-
-                        let screen_descriptor = ScreenDescriptor {
-                            size_in_pixels: [render_state.config.width, render_state.config.height],
-                            pixels_per_point: window.scale_factor() as f32
-                                * egui_config.egui_scale_factor,
-                        };
-
-                        egui_renderer.end_frame_and_draw(
-                            &render_state.device,
-                            &render_state.queue,
-                            &mut encoder,
-                            &window,
-                            &output_view,
-                            screen_descriptor,
-                        );
+        world.resource_scope(|world, render_state: Mut<RenderState>| {
+            let output = render_state.surface.get_current_texture()?;
+            let output_view = output.texture.create_view(&Default::default());
+            let mut encoder =
+                render_state
+                    .device
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Render Encoder"),
                     });
-                    // End Draw Objects
 
-                    world
-                        .resource::<RenderState>()
-                        .queue
-                        .submit(std::iter::once(encoder.finish()));
+            let ctx = PassRenderContext {
+                encoder: &mut encoder,
+                render_state: &mut render_state,
+                output_view: &output_view,
+                window: &window,
+            };
 
-                    output.present();
+            // PASS: Shadow Mapping
+            world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx);
 
-                    Ok(())
-                })
-            })
+            // PASS: Main
+            world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx);
+
+            // PASS: Render Egui
+            world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx);
+
+            // End Draw Objects
+            render_state.queue.submit(std::iter::once(encoder.finish()));
+            output.present();
+        });
+
+        Ok(())
     }
 }
 
@@ -373,7 +290,7 @@ pub fn sys_update_camera(
     mut control_state: ResMut<ControlState>,
     camera_query: Single<(&Camera, &mut Transform, &mut CameraController)>,
 ) {
-    if input.is_key_down(KeyCode::Escape)  {
+    if input.is_key_down(KeyCode::Escape) {
         control_state.is_focused = !control_state.is_focused;
     }
     if !control_state.is_focused {

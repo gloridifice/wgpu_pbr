@@ -1,7 +1,4 @@
-use bevy_ecs::{
-    prelude::*,
-    system::RunSystemOnce,
-};
+use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use egui::load::SizedTexture;
 
 use crate::{
@@ -55,7 +52,11 @@ impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
 fn sys_control_panel_ui(
     InMut(mut ui): InMut<egui::Ui>,
     mut camera_config: ResMut<CameraConfig>,
-    cam_single: Single<(&mut render::camera::Camera, &mut render::camera::CameraController, &mut Transform)>,
+    cam_single: Single<(
+        &mut render::camera::Camera,
+        &mut render::camera::CameraController,
+        &mut Transform,
+    )>,
     light_single: Single<(&MainLight, &mut Transform), Without<render::camera::Camera>>,
 ) {
     let (_, _, mut cam_trans) = cam_single.into_inner();
@@ -142,8 +143,10 @@ fn create_tree() -> egui_tiles::Tree<Pane> {
     let mut tiles = egui_tiles::Tiles::default();
 
     let mut left_tabs_id_vec = vec![];
-    left_tabs_id_vec.push(tiles.insert_pane(Pane::ControlPanel));
-    left_tabs_id_vec.push(tiles.insert_pane(Pane::MainView));
+    let control_pane = tiles.insert_pane(Pane::ControlPanel);
+    let main_view_pane = tiles.insert_pane(Pane::MainView);
+    left_tabs_id_vec.push(tiles.insert_vertical_tile(vec![control_pane]));
+    left_tabs_id_vec.push(tiles.insert_vertical_tile(vec![main_view_pane]));
 
     let left_tabs = tiles.insert_tab_tile(left_tabs_id_vec);
 
