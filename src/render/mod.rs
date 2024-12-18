@@ -7,7 +7,7 @@ use bevy_ecs::{
 };
 use camera::RenderCamera;
 use light::RenderLight;
-use material_impl::{Material, PBRMaterial};
+use pbr_pipeline::{Material, PBRMaterial};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
@@ -26,9 +26,10 @@ use crate::{
 
 pub mod camera;
 pub mod light;
-pub mod material_impl;
+pub mod pbr_pipeline;
 pub mod shadow_mapping;
 pub mod transform;
+pub mod systems;
 
 #[derive(Resource)]
 pub struct ColorRenderTarget(pub Option<UploadedImage>);
@@ -181,7 +182,7 @@ pub struct DrawContext<'a, 'b> {
 pub trait DrawAble {
     fn draw_depth(&self, render_pass: &mut RenderPass);
 
-    fn draw_main(&self, context: &mut DrawContext);
+    fn draw_main(&self, render_pass: &mut RenderPass, default_material: Arc<PBRMaterial>);
 }
 
 #[derive(Component)]
@@ -233,13 +234,10 @@ impl DrawAble for MeshRenderer {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
-    fn draw_main(&self, context: &mut DrawContext) {
+    fn draw_main(&self, render_pass: &mut RenderPass, default_material: Arc<PBRMaterial>) {
         let Some(mesh) = self.mesh.as_ref() else {
             return;
         };
-
-        let default_material = &context.world.resource::<DefaultMainPipelineMaterial>().0;
-        let render_pass = &mut context.render_pass;
 
         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -250,7 +248,7 @@ impl DrawAble for MeshRenderer {
         for primitive in mesh.primitives.iter() {
             let material_instance = match primitive.material_instance.as_ref() {
                 Some(a) => a,
-                None => default_material,
+                None => &default_material,
             };
 
             if last_material.is_none()
