@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bevy_ecs::prelude::*;
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, TextureView};
@@ -15,11 +17,11 @@ use super::{
     GlobalBindGroup, MeshRenderer,
 };
 
-pub struct PassRenderContext<'a> {
-    pub encoder: &'a mut CommandEncoder,
-    pub render_state: &'a mut RenderState,
-    pub output_view: &'a TextureView,
-    pub window: &'a Window,
+pub struct PassRenderContext {
+    pub encoder: CommandEncoder,
+    pub output_view: TextureView,
+    pub output_texture: wgpu::SurfaceTexture,
+    pub window: Arc<Window>,
 }
 
 pub fn sys_render_shadow_mapping_pass(
@@ -111,8 +113,8 @@ pub fn sys_render_egui(
     InMut(ctx): InMut<PassRenderContext>,
     mut egui_renderer: ResMut<EguiRenderer>,
     egui_config: Res<EguiConfig>,
+    render_state: Res<RenderState>,
 ) {
-    let render_state = &mut ctx.render_state;
     let window = &ctx.window;
     let screen_descriptor = ScreenDescriptor {
         size_in_pixels: [render_state.config.width, render_state.config.height],
