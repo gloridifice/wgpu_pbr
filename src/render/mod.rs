@@ -548,7 +548,7 @@ pub struct DefaultMainPipelineMaterial(Arc<PBRMaterial>);
 impl FromWorld for DefaultMainPipelineMaterial {
     fn from_world(world: &mut World) -> Self {
         let image =
-            UploadedImage::load(AssetPath::Assets("@7ife_l-0.jpg".to_string()), world).unwrap();
+            UploadedImage::load(AssetPath::Assets("textures/default.png".to_string()), world).unwrap();
 
         let mat = PBRMaterial::form_gltf(
             world,

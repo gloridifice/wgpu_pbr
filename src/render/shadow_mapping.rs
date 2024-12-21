@@ -120,7 +120,11 @@ impl FromWorld for ShadowMappingPipeline {
                     depth_write_enabled: true,
                     depth_compare: wgpu::CompareFunction::Less,
                     stencil: Default::default(),
-                    bias: Default::default(),
+                    bias: wgpu::DepthBiasState{
+                        constant: 2,
+                        slope_scale: 2.0,
+                        clamp: 0.0
+                    },
                 }),
                 multisample: wgpu::MultisampleState {
                     count: 1,

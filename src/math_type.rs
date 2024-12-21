@@ -7,7 +7,6 @@ pub type Quat = cgmath::Quaternion<f32>;
 pub type Mat4 = cgmath::Matrix4<f32>;
 pub type Mat3 = cgmath::Matrix3<f32>;
 
-
 #[allow(unused)]
 pub trait VectorExt: Sized {
     fn zero() -> Self {
@@ -26,7 +25,6 @@ pub trait Vector3Ext {
     fn new_z(z: f32) -> Self;
     fn into_point(&self) -> Point3<f32>;
 }
-
 
 #[allow(unused)]
 pub trait Vector4Ext {
@@ -67,7 +65,11 @@ impl Vector3Ext for Vec3 {
     }
 
     fn into_point(&self) -> Point3<f32> {
-        Point3 { x: self.x, y: self.y, z: self.z }
+        Point3 {
+            x: self.x,
+            y: self.y,
+            z: self.z,
+        }
     }
 }
 

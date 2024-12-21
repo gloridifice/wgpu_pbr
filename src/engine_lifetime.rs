@@ -14,6 +14,7 @@ use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, GlobalBindGroup,
     MaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
 };
+use crate::MainWindow;
 use crate::{
     asset::{load::Loadable, AssetPath},
     engine::input::Input,
@@ -97,7 +98,7 @@ impl State {
         }
 
         let ship_model = render::Model::load(
-            AssetPath::Assets("models/test_scene.glb".to_string()),
+            AssetPath::Assets("models/ship.glb".to_string()),
             &mut self.world,
         )
         .unwrap();
@@ -134,7 +135,7 @@ impl State {
         let parent = cmd
             .spawn(
                 TransformBuilder::default()
-                    .rotation(Quaternion::from_angle_x(Deg(-90.0)))
+                    // .rotation(Quaternion::from_angle_x(Deg(-90.0)))
                     .build()
                     .unwrap(),
             )
@@ -251,16 +252,25 @@ impl State {
         })?;
 
         // PASS: Shadow Mapping
-        world.run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx).unwrap();
+        world
+            .run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx)
+            .unwrap();
 
         // PASS: Main
-        world.run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx).unwrap();
+        world
+            .run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx)
+            .unwrap();
 
         // PASS: Render Egui
-        world.run_system_cached_with(render::systems::sys_render_egui, &mut ctx).unwrap();
+        world
+            .run_system_cached_with(render::systems::sys_render_egui, &mut ctx)
+            .unwrap();
 
         // End Draw Objects
-        world.resource::<RenderState>().queue.submit(std::iter::once(ctx.encoder.finish()));
+        world
+            .resource::<RenderState>()
+            .queue
+            .submit(std::iter::once(ctx.encoder.finish()));
         ctx.output_texture.present();
 
         Ok(())
@@ -288,11 +298,13 @@ pub fn sys_update_camera(
     config: Res<CameraConfig>,
     input: Res<Input>,
     time: Res<Time>,
+    main_window: Res<MainWindow>,
     mut control_state: ResMut<ControlState>,
     camera_query: Single<(&Camera, &mut Transform, &mut CameraController)>,
 ) {
     if input.is_key_down(KeyCode::Escape) {
         control_state.is_focused = !control_state.is_focused;
+        main_window.0.set_cursor_visible(!control_state.is_focused);
     }
     if !control_state.is_focused {
         return;

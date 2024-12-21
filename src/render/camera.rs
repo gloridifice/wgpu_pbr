@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::math_type::Vector3Ext;
 use bevy_ecs::component::Component;
 use bevy_ecs::{system::Resource, world::FromWorld};
-use cgmath::{perspective, Matrix4};
+use cgmath::{perspective, Matrix, Matrix4};
 use wgpu::BufferDescriptor;
 
 use super::transform::{Transform, WorldTransform};
@@ -16,6 +16,7 @@ pub struct RenderCamera {
 #[derive(Component)]
 #[require(Transform)]
 pub struct Camera {
+    // Height / Width
     pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
@@ -42,7 +43,10 @@ impl Camera {
             (transform.position + transform.forward()).into_point(),
             transform.up(),
         );
-        let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
+         let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
+        // let height = 1.;
+        // let width = height * self.aspect;
+        // let proj = cgmath::ortho::<f32>(-width, width, -height, height, 0.1, 100.).transpose();
         return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
 
