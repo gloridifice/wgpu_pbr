@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{Deg, Matrix4, Vector4};
+use cgmath::{Deg, Matrix, Matrix4, SquareMatrix, Vector4};
 use wgpu::{BufferDescriptor, BufferUsages};
 
 use crate::math_type::Vector3Ext;
@@ -77,13 +77,11 @@ impl MainLight {
     }
 
     pub fn light_space_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
-        let proj = cgmath::perspective(Deg(self.fov), 1.0, self.near, self.far);
-        // let proj = cgmath::ortho::<f32>(-10., 10., -10., 10., 0.1, 100.);
-        let view = Matrix4::look_at_rh(
-            transform.position.into_point(),
-            (transform.position + transform.forward()).into_point(),
-            transform.up(),
-        );
+        // let proj = cgmath::perspective(Deg(self.fov), 1.0, self.near, self.far);
+        // let proj = ortho(1., 10., 0.1, 100.);
+        let size = 3.;
+        let proj = cgmath::ortho::<f32>(-size, size, -size, size, 0.1, 20.).transpose();
+        let view = transform.model_matrix().invert().unwrap();
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }

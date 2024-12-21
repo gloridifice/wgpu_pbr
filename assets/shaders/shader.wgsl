@@ -71,12 +71,16 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     var light_space_pos = in.light_space_clip_pos;
     var proj_coords = light_space_pos.xyz / light_space_pos.w;
-    var uv = proj_coords.xy * 0.5 + 0.5; // map [-1, 1] to [0, 1]
+
+    let flip_correction = vec2<f32>(0.5, -0.5);
+
+    var uv = proj_coords.xy * flip_correction + vec2<f32>(0.5); // reverse y and map [-1, 1] to [0, 1]
     var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, uv).x;
     var current_depth = proj_coords.z;
 
     var shadow = select(1., 0.5, current_depth > closest_depth);
 
+    // return vec4<f32>(vec3<f32>(closest_depth), 1.0);
     return vec4<f32>(baseColor * shadow, 1.0);
 }
 

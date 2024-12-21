@@ -93,6 +93,7 @@ impl App {
             State::new(&self.instance, surface, window.clone(), i_width, i_height).await;
 
         state.init();
+        state.world.insert_resource(MainWindow(Arc::clone(&window)));
 
         window.request_redraw();
 
@@ -267,3 +268,6 @@ impl RenderState {
         }
     }
 }
+
+#[derive(Resource, Clone)]
+pub struct MainWindow(pub Arc<Window>);
