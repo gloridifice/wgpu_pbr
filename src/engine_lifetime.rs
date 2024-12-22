@@ -6,7 +6,7 @@ use crate::math_type::Vec3;
 use crate::render::camera::{Camera, CameraController};
 use crate::render::pbr_pipeline::MainPipeline;
 use crate::render::shadow_mapping::{
-    CastShadow, LightMatrixBuffer, ShadowMapGlobalBindGroup, ShadowMappingPipeline,
+    CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline,
 };
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
@@ -22,7 +22,7 @@ use crate::{
     render::{
         self,
         camera::{CameraConfig, RenderCamera},
-        light::{MainLight, RenderLight},
+        light::{ParallelLight, RenderLight},
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
         DrawAble, DrawContext, MeshRenderer,
@@ -65,7 +65,6 @@ impl State {
         self.insert_resource::<RenderCamera>();
         self.world
             .insert_resource(RenderLight::new(&self.render_state().device));
-        self.insert_resource::<LightMatrixBuffer>();
         self.insert_resource::<ShadowMap>();
         // self.insert_resource::<ShadowMapEguiTextureId>();
 
@@ -118,7 +117,7 @@ impl State {
         let main_light_id = cmd
             .spawn((
                 Transform::with_position(Vec3::new(0., 0., 3.)),
-                MainLight::default(),
+                ParallelLight::default(),
             ))
             .id();
         for mesh in light_bulb.meshes {
@@ -368,21 +367,14 @@ fn sys_update_camera_uniform(
 }
 
 fn sys_update_light_uniform(
-    single: Single<(&WorldTransform, &MainLight)>,
+    single: Single<(&WorldTransform, &ParallelLight)>,
     render_light: Res<RenderLight>,
     rs: Res<RenderState>,
-    light_matrix: Res<LightMatrixBuffer>,
 ) {
     let (transform, main_light) = single.into_inner();
     let uniform = main_light.get_uniform(transform);
 
     render_light.write_buffer(&rs.queue, uniform);
-    // let cast: [[f32; 4];4] = Mat4::from(uniform.space_matrix).invert().unwrap().into();
-    rs.queue.write_buffer(
-        &light_matrix.buffer,
-        0,
-        bytemuck::cast_slice(&[uniform.space_matrix]),
-    );
 }
 
 fn sys_input_panel(input: Res<Input>, egui: Res<EguiRenderer>) {

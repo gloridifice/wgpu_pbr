@@ -6,7 +6,7 @@ use crate::{
     engine::input::{CursorButton, Input},
     math_type::{Vec2, VectorExt},
     render::{
-        self, camera::CameraConfig, light::MainLight, transform::Transform, ColorRenderTarget,
+        self, camera::CameraConfig, light::ParallelLight, transform::Transform, ColorRenderTarget,
         DepthRenderTarget, RenderTargetSize,
     },
     RenderState,
@@ -57,7 +57,7 @@ fn sys_control_panel_ui(
         &mut render::camera::CameraController,
         &mut Transform,
     )>,
-    light_single: Single<(&MainLight, &mut Transform), Without<render::camera::Camera>>,
+    light_single: Single<(&ParallelLight, &mut Transform), Without<render::camera::Camera>>,
 ) {
     let (_, _, mut cam_trans) = cam_single.into_inner();
     let (_, mut light_trans) = light_single.into_inner();
@@ -128,7 +128,6 @@ pub fn sys_on_resize_render_target(
             device,
             target_size.width,
             target_size.height,
-            Some(wgpu::CompareFunction::Less),
         ));
 
         let id = egui.renderer.register_native_texture(

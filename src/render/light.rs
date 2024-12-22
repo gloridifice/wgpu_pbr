@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
 use bevy_ecs::{component::Component, system::Resource};
-use cgmath::{Deg, Matrix, Matrix4, SquareMatrix, Vector4};
+use cgmath::{Matrix, Matrix4, Vector4};
 use wgpu::{BufferDescriptor, BufferUsages};
-
-use crate::math_type::Vector3Ext;
 
 use super::{camera::OPENGL_TO_WGPU_MATRIX, transform::WorldTransform};
 
@@ -15,22 +13,22 @@ pub struct RenderLight {
 }
 
 #[derive(Component)]
-pub struct MainLight {
+pub struct ParallelLight {
     pub intensity: f32,
     pub color: Vector4<f32>,
-    pub fov: f32,
+    pub size: f32,
     pub near: f32,
     pub far: f32,
 }
 
-impl Default for MainLight {
+impl Default for ParallelLight {
     fn default() -> Self {
         Self {
             intensity: 1.0,
             color: Vector4::new(0.6, 0.6, 0.5, 1.0),
-            fov: 120.,
+            size: 3.,
             near: 1.,
-            far: 100.,
+            far: 20.,
         }
     }
 }
@@ -64,7 +62,7 @@ impl RenderLight {
     }
 }
 
-impl MainLight {
+impl ParallelLight {
     pub fn get_uniform(&self, transform: &WorldTransform) -> LightUniform {
         LightUniform {
             direction: transform.forward().into(),
@@ -77,11 +75,9 @@ impl MainLight {
     }
 
     pub fn light_space_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
-        // let proj = cgmath::perspective(Deg(self.fov), 1.0, self.near, self.far);
-        // let proj = ortho(1., 10., 0.1, 100.);
-        let size = 3.;
-        let proj = cgmath::ortho::<f32>(-size, size, -size, size, 0.1, 20.).transpose();
-        let view = transform.model_matrix().invert().unwrap();
+        let size = self.size / 2.;
+        let proj = cgmath::ortho::<f32>(-size, size, -size, size, self.near, self.far).transpose();
+        let view = transform.view_transform();
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }

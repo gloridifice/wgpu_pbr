@@ -1,7 +1,7 @@
 
 use bevy_ecs::prelude::Query;
 use bevy_ecs::{component::Component, entity::Entity};
-use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, Vector3};
+use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
 
 use crate::math_type::{Mat3, Mat4};
@@ -127,6 +127,12 @@ impl WorldTransform {
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
         translation * rotation * scale
+    }
+
+    pub fn view_transform(&self) -> Mat4 {
+        let translation = Mat4::from_translation(-self.position);
+        let rotation = Matrix4::from(self.rotation).invert().unwrap();
+        rotation * translation
     }
 }
 
