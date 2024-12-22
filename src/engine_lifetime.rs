@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
-use crate::math_type::Vec3;
+use crate::math_type::{Quat, Vec3};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::pbr_pipeline::MainPipeline;
 use crate::render::shadow_mapping::{
@@ -101,8 +101,8 @@ impl State {
             &mut self.world,
         )
         .unwrap();
-        let light_bulb = render::Model::load(
-            AssetPath::Assets("models/monkey.glb".to_string()),
+        let light_arrow = render::Model::load(
+            AssetPath::Assets("models/arrow.glb".to_string()),
             &mut self.world,
         )
         .unwrap();
@@ -120,11 +120,11 @@ impl State {
                 ParallelLight::default(),
             ))
             .id();
-        for mesh in light_bulb.meshes {
+        for mesh in light_arrow.meshes {
             let uploaded = Arc::new(mesh.upload(&self));
             cmd.spawn((
                 TransformBuilder::default()
-                    .parent(Some(main_light_id))
+                    .parent(Some(main_light_id)).rotation(Quat::from_angle_x(Deg(-90.)))
                     .build()
                     .unwrap(),
                 MeshRenderer::new(uploaded, &self.world),

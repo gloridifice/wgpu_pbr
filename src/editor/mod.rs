@@ -99,8 +99,10 @@ pub fn sys_egui_tiles(world: &mut World) {
                     .unwrap_or(Vec2::zero());
             }
             let mut target_size = world.resource_mut::<RenderTargetSize>();
-            target_size.height = size.x as u32;
-            target_size.width = size.y as u32;
+            if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
+                target_size.height = size.x as u32;
+                target_size.width = size.y as u32;
+            }
         });
     });
 }
