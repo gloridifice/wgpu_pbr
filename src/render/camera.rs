@@ -38,15 +38,8 @@ impl FromWorld for RenderCamera {
 
 impl Camera {
     pub fn build_view_projection_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
-        let view = Matrix4::look_at_rh(
-            transform.position.into_point(),
-            (transform.position + transform.forward()).into_point(),
-            transform.up(),
-        );
-         let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        // let height = 1.;
-        // let width = height * self.aspect;
-        // let proj = cgmath::ortho::<f32>(-width, width, -height, height, 0.1, 100.).transpose();
+        let view = transform.view_transform();
+        let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
         return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
 

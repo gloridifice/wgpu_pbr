@@ -34,10 +34,10 @@ var<uniform> camera: CameraUniform;
 var<uniform> light: LightUniform;
 
 @group(0) @binding(2)
-var tex_shadow_map: texture_2d<f32>;
+var tex_shadow_map: texture_depth_2d;
 
 @group(0) @binding(3)
-var samp_shadow_map: sampler;
+var samp_shadow_map: sampler_comparison;
 
 @group(1) @binding(0)
 var tex_0: texture_2d<f32>;
@@ -75,22 +75,20 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let flip_correction = vec2<f32>(0.5, -0.5);
 
     var uv = proj_coords.xy * flip_correction + vec2<f32>(0.5); // reverse y and map [-1, 1] to [0, 1]
-    var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, uv).x;
-    var current_depth = proj_coords.z;
+    var shadow = textureSampleCompare(tex_shadow_map, samp_shadow_map, uv, proj_coords.z);
+    let shadow_color = vec3<f32>(0.5);
+    var shadow_factor = mix(shadow_color, vec3<f32>(1.0), shadow);
 
-    var shadow = select(1., 0.5, current_depth > closest_depth);
-
-    // return vec4<f32>(vec3<f32>(closest_depth), 1.0);
-    return vec4<f32>(baseColor * shadow, 1.0);
+    return vec4<f32>(baseColor * shadow_factor, 1.0);
 }
 
 // Range [0.0, 1.0]: 0.0 in shadow, 1.0 not in shadow
 fn calculate_shadow(light_space_pos: vec4<f32>) -> f32 {
-    var proj_coords = light_space_pos.xyz / light_space_pos.w;
-    proj_coords = proj_coords * 0.5 + 0.5;
-    var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
-    var current_depth = proj_coords.z;
+    // var proj_coords = light_space_pos.xyz / light_space_pos.w;
+    // proj_coords = proj_coords * 0.5 + 0.5;
+    // var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
+    // var current_depth = proj_coords.z;
 
-    var shadow = select(1., 0., current_depth > closest_depth);
-    return shadow;
+    // var shadow = select(1., 0., current_depth > closest_depth);
+    return 1.0;
 }

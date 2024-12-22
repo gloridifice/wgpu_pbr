@@ -12,7 +12,7 @@ use wgpu::{
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{ObjectBindGroupLayout, UploadedImage, Vertex};
+use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex};
 
 #[derive(Resource)]
 pub struct ShadowMap {
@@ -33,26 +33,10 @@ pub struct ShadowMappingPipeline {
     pub layout: Arc<PipelineLayout>,
 }
 
-#[derive(Resource)]
-pub struct LightMatrixBuffer {
-    pub buffer: Arc<wgpu::Buffer>,
-}
 
 #[derive(Component, Clone, Default)]
 pub struct CastShadow;
 
-impl FromWorld for LightMatrixBuffer {
-    fn from_world(world: &mut world::World) -> Self {
-        let rs = world.resource::<RenderState>();
-        let buffer = Arc::new(rs.device.create_buffer(&BufferDescriptor {
-            label: Some("Light Matrix Buffer"),
-            size: size_of::<[[f32; 4]; 4]>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        }));
-        Self { buffer }
-    }
-}
 
 impl FromWorld for ShadowMapGlobalBindGroup {
     fn from_world(world: &mut world::World) -> Self {
@@ -64,7 +48,7 @@ impl FromWorld for ShadowMapGlobalBindGroup {
                 0: ShaderStages::all() => BGLEntry::UniformBuffer(); // Light
             )));
 
-            let light_uniform_buffer = &world.resource::<LightMatrixBuffer>().buffer;
+            let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
 
             let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
                 ["Shadow Mapping Global Bind Group"] [ &layout ]
@@ -143,7 +127,7 @@ impl FromWorld for ShadowMappingPipeline {
 impl FromWorld for ShadowMap {
     fn from_world(world: &mut world::World) -> Self {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
-            let image = crate::render::create_depth_texture(&render_state.device, 1024, 1024, None);
+            let image = crate::render::create_depth_texture(&render_state.device, 1024, 1024);
 
             Self { image }
         })

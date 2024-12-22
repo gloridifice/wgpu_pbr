@@ -29,6 +29,7 @@ pub mod light;
 pub mod pbr_pipeline;
 pub mod shadow_mapping;
 pub mod transform;
+pub mod post_processing;
 pub mod systems;
 
 #[derive(Resource)]
@@ -101,7 +102,6 @@ pub fn create_depth_texture(
     device: &wgpu::Device,
     width: u32,
     height: u32,
-    compare: Option<wgpu::CompareFunction>,
 ) -> UploadedImage {
     let size = wgpu::Extent3d {
         width,
@@ -109,7 +109,7 @@ pub fn create_depth_texture(
         depth_or_array_layers: 1,
     };
     let desc = wgpu::TextureDescriptor {
-        label: None,
+        label: Some("Depth Texture"),
         size,
         mip_level_count: 1,
         sample_count: 1,
@@ -121,16 +121,14 @@ pub fn create_depth_texture(
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        // 4.
+        label: Some("Shadow Map"),
         address_mode_u: wgpu::AddressMode::ClampToEdge,
         address_mode_v: wgpu::AddressMode::ClampToEdge,
         address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Nearest,
-        min_filter: wgpu::FilterMode::Nearest,
+        mag_filter: wgpu::FilterMode::Linear,
+        min_filter: wgpu::FilterMode::Linear,
         mipmap_filter: wgpu::FilterMode::Nearest,
-        compare, // 5.
-        lod_min_clamp: 0.0,
-        lod_max_clamp: 100.0,
+        compare: Some(wgpu::CompareFunction::LessEqual), // 5.
         ..Default::default()
     });
 
@@ -167,7 +165,6 @@ impl FromWorld for DepthRenderTarget {
             &render_state.device,
             size.width,
             size.height,
-            Some(wgpu::CompareFunction::Less)
         );
 
         Self(Some(target))
@@ -518,8 +515,8 @@ impl FromWorld for GlobalBindGroup {
                     ["Global Bind Group Layout"]
                     0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Camera Uniform
                     1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Global Light Uniform
-                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: false }); // Shadow Map
-                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::NonFiltering); // Shadow Map
+                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
+                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
                 )));
 
             let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;
