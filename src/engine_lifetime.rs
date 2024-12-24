@@ -23,12 +23,11 @@ use crate::{
         camera::{CameraConfig, RenderCamera},
         light::{ParallelLight, RenderLight},
         shadow_mapping::ShadowMap,
-        transform::{Transform, TransformBuilder},
-        DrawAble, DrawContext, MeshRenderer,
+        transform::{Transform, TransformBuilder}, MeshRenderer,
     },
     RenderState, State,
 };
-use bevy_ecs::query::{Changed, Or, With};
+use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{Commands, ResMut, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
@@ -37,7 +36,6 @@ use bevy_ecs::{
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, Vector3};
 use egui::Visuals;
-use egui_wgpu::ScreenDescriptor;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component)]

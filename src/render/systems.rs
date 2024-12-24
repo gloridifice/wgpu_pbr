@@ -14,7 +14,7 @@ use super::{
     pbr_pipeline::MainPipeline,
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, DrawAble, DrawContext,
+    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, DrawAble,
     GlobalBindGroup, MeshRenderer,
 };
 
