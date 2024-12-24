@@ -113,6 +113,7 @@ impl WorldTransform {
         self.rotation.rotate_vector(fwd)
     }
 
+    #[allow(unused)]
     pub fn up(&self) -> Vec3 {
         let up = Vector3::new_y(1.);
         self.rotation.rotate_vector(up)

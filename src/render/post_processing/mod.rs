@@ -39,12 +39,6 @@ impl PostProcessingManager {
             _ => Arc::clone(&self.temp_texture_1),
         }
     }
-    pub fn get_current_target_texture(&self) -> Arc<UploadedImage> {
-        match self.temp_texture_index {
-            0 => Arc::clone(&self.temp_texture_1),
-            _ => Arc::clone(&self.temp_texture_0),
-        }
-    }
     pub fn next_source_and_target(&mut self) -> (Arc<BindGroup>, Arc<UploadedImage>) {
         let ret = match self.temp_texture_index {
             0 => (
@@ -203,35 +197,3 @@ impl FromWorld for PostProcessingManager {
 pub struct PostProcessingPipeline {
     pub pipeline: Arc<RenderPipeline>,
 }
-
-// #[repr(C)]
-// #[derive(Clone, Copy, Debug, Default)]
-// pub struct ScreenVertex {
-//     pub position: [f32; 3],
-// }
-// unsafe impl bytemuck::Zeroable for ScreenVertex {}
-// unsafe impl bytemuck::Pod for ScreenVertex {}
-// impl ScreenVertex {
-//     const ATTRIBS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Float32x3];
-//     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-//         wgpu::VertexBufferLayout {
-//             array_stride: std::mem::size_of::<ScreenVertex>() as wgpu::BufferAddress,
-//             step_mode: wgpu::VertexStepMode::Vertex,
-//             attributes: &Self::ATTRIBS,
-//         }
-//     }
-//     pub fn new(x: f32, y: f32, z: f32) -> Self {
-//         Self {
-//             position: [x, y, z],
-//         }
-//     }
-// }
-
-// lazy_static! {
-//     pub static ref SCREEN_VERTEX: [ScreenVertex; 4] = [
-//         ScreenVertex::new(0., 0., 0.),
-//         ScreenVertex::new(0., 0., 0.),
-//         ScreenVertex::new(0., 0., 0.),
-//         ScreenVertex::new(0., 0., 0.),
-//     ];
-// }

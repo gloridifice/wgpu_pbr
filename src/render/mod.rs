@@ -171,11 +171,6 @@ impl FromWorld for DepthRenderTarget {
     }
 }
 
-pub struct DrawContext<'a, 'b> {
-    pub render_pass: &'b mut RenderPass<'a>,
-    pub world: &'b World,
-}
-
 pub trait DrawAble {
     fn draw_depth(&self, render_pass: &mut RenderPass);
 
