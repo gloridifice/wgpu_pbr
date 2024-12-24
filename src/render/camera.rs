@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use crate::math_type::Vector3Ext;
 use bevy_ecs::component::Component;
 use bevy_ecs::{system::Resource, world::FromWorld};
-use cgmath::{perspective, Matrix, Matrix4};
+use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;
 
 use super::transform::{Transform, WorldTransform};

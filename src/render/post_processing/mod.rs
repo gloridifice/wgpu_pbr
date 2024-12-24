@@ -1,13 +1,12 @@
 use std::{collections::HashMap, sync::Arc};
 
 use bevy_ecs::prelude::*;
-use lazy_static::lazy_static;
 use wgpu::{
     BindGroup, BindGroupLayout, BindingResource, Device, PipelineLayout, PipelineLayoutDescriptor,
     RenderPipeline, ShaderModule, ShaderStages, SurfaceConfiguration, VertexState,
 };
 
-use crate::{bg_descriptor, bg_layout_descriptor, render::BGLEntry, RenderState};
+use crate::{bg_descriptor, bg_layout_descriptor, render::BGLEntry};
 
 use super::{create_color_render_target_image, RenderTargetSize, UploadedImage};
 

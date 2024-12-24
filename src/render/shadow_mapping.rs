@@ -6,7 +6,7 @@ use bevy_ecs::{
     world::{self, FromWorld, Mut},
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, BufferDescriptor, BufferUsages, PipelineLayout, RenderPipeline,
+    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline,
     ShaderStages,
 };
 

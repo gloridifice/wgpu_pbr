@@ -9,7 +9,7 @@ use crate::{
         self,
         camera::{Camera, CameraConfig},
         light::ParallelLight,
-        post_processing::{self, PostProcessingManager},
+        post_processing::{PostProcessingManager},
         transform::Transform,
         ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
     },
