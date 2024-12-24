@@ -6,8 +6,12 @@ use crate::{
     engine::input::{CursorButton, Input},
     math_type::{Vec2, VectorExt},
     render::{
-        self, camera::CameraConfig, light::ParallelLight, transform::Transform, ColorRenderTarget,
-        DepthRenderTarget, RenderTargetSize,
+        self,
+        camera::{Camera, CameraConfig},
+        light::ParallelLight,
+        post_processing::{self, PostProcessingManager},
+        transform::Transform,
+        ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
     },
     RenderState,
 };
@@ -113,31 +117,31 @@ pub struct RenderTargetEguiTexId(Option<egui::TextureId>);
 pub fn sys_on_resize_render_target(
     target_size: Res<RenderTargetSize>,
     render_state: Res<RenderState>,
-    mut render_target: ResMut<ColorRenderTarget>,
+    mut color_target: ResMut<ColorRenderTarget>,
     mut depth_target: ResMut<DepthRenderTarget>,
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
     mut egui: ResMut<EguiRenderer>,
+    mut camera: Single<&mut Camera>,
+    mut post_processing_manager: ResMut<PostProcessingManager>,
 ) {
     if target_size.is_changed() {
         let device = &render_state.device;
-        render_target.0 = Some(render::create_render_target(
-            target_size.width,
-            target_size.height,
-            device,
-            &render_state.config,
+        let config = &render_state.config;
+        let width = target_size.width;
+        let height = target_size.height;
+        color_target.0 = Some(render::create_color_render_target_image(
+            width, height, device, config,
         ));
-        depth_target.0 = Some(render::create_depth_texture(
-            device,
-            target_size.width,
-            target_size.height,
-        ));
+        depth_target.0 = Some(render::create_depth_texture(device, width, height));
 
         let id = egui.renderer.register_native_texture(
-            &render_state.device,
-            &render_target.0.as_ref().unwrap().view,
+            device,
+            &color_target.0.as_ref().unwrap().view,
             wgpu::FilterMode::Linear,
         );
         egui_tex_id.0 = Some(id);
+        camera.aspect = height as f32 / width as f32;
+        post_processing_manager.resize(width, height, device, config);
     };
 }
 fn create_tree() -> egui_tiles::Tree<Pane> {

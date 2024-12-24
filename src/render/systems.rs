@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use egui_wgpu::ScreenDescriptor;
-use wgpu::{CommandEncoder, TextureView};
+use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
 use winit::window::Window;
 
 use crate::{
@@ -12,6 +12,7 @@ use crate::{
 
 use super::{
     pbr_pipeline::MainPipeline,
+    post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, DrawAble, DrawContext,
     GlobalBindGroup, MeshRenderer,
@@ -22,6 +23,7 @@ pub struct PassRenderContext {
     pub output_view: TextureView,
     pub output_texture: wgpu::SurfaceTexture,
     pub window: Arc<Window>,
+    pub stage: RenderStage,
 }
 
 pub fn sys_render_shadow_mapping_pass(
@@ -128,5 +130,89 @@ pub fn sys_render_egui(
         &window,
         &ctx.output_view,
         screen_descriptor,
+    );
+}
+
+pub fn sys_render_post_processing(
+    InMut(ctx): InMut<PassRenderContext>,
+    mut manager: ResMut<PostProcessingManager>,
+    color_target: Res<ColorRenderTarget>,
+) {
+    let Some(color_target) = color_target.0.as_ref() else {
+        return;
+    };
+    let stage = ctx.stage;
+    let pi = manager.pipelines.get(&stage);
+    if pi.is_none() || pi.unwrap().len() <= 0 {
+        return;
+    }
+
+    let encoder = &mut ctx.encoder;
+
+    copy_texture(
+        encoder,
+        &color_target.texture,
+        &manager.get_current_source_texture().texture,
+        color_target.size,
+    );
+
+    let pipelines = manager.pipelines.get(&stage).cloned();
+    pipelines.inspect(|it| {
+        for pipeline in it.iter() {
+            let (source, target) = manager.next_source_and_target();
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Render Pass"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &target.view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.0,
+                            g: 0.0,
+                            b: 0.0,
+                            a: 1.0,
+                        }),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                occlusion_query_set: None,
+                timestamp_writes: None,
+            });
+
+            render_pass.set_pipeline(&pipeline.pipeline);
+            render_pass.set_bind_group(0, &source, &[]);
+            render_pass.draw(0..3, 0..1);
+        }
+    });
+
+    copy_texture(
+        encoder,
+        &manager.get_current_source_texture().texture,
+        &color_target.texture,
+        color_target.size,
+    );
+}
+
+pub fn copy_texture(
+    encoder: &mut wgpu::CommandEncoder,
+    source: &wgpu::Texture,
+    target: &wgpu::Texture,
+    size: Extent3d,
+) {
+    encoder.copy_texture_to_texture(
+        ImageCopyTexture {
+            texture: source,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        ImageCopyTexture {
+            texture: target,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        size,
     );
 }

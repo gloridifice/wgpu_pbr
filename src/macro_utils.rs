@@ -81,7 +81,13 @@ macro_rules! bgl_entries {
 
     () => ()
 }
-
+/// ```
+/// let descriptor = bg_layout_descriptor!{
+///     ["Post Processing"]
+///     0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true });
+///     1: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Filtering);
+/// };
+/// ```
 #[macro_export]
 macro_rules! bg_layout_descriptor {
     ([$name:literal] $($i:literal: $vis:expr => $c:expr;)*) => {
@@ -96,6 +102,15 @@ macro_rules! bg_layout_descriptor {
     () => ()
 }
 
+/// ## Usage
+/// ```
+/// let bind_group_layout = ...;
+/// let bind_group_desc = bg_descriptor!(
+///     ["PBR Material Bind Group"] [bind_group_layout]
+///     0: BindingResource::TextureView(&base_color.view);
+///     1: BindingResource::Sampler(&base_color.sampler);
+/// );
+/// ```
 #[macro_export]
 macro_rules! bg_descriptor {
     ([$name:literal] [$layout:expr] $($i:literal: $c:expr;)*) => {

@@ -52,7 +52,7 @@ impl Default for RenderTargetSize {
     }
 }
 
-pub fn create_render_target(
+pub fn create_color_render_target_image(
     width: u32,
     height: u32,
     device: &wgpu::Device,
@@ -67,7 +67,7 @@ pub fn create_render_target(
         label: Some("Render Target"),
         size,
         format: config.format,
-        usage: config.usage | TextureUsages::TEXTURE_BINDING,
+        usage: config.usage | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC | TextureUsages::COPY_DST,
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
@@ -145,7 +145,7 @@ impl FromWorld for ColorRenderTarget {
         let render_state = world.resource::<RenderState>();
         let size = world.resource::<RenderTargetSize>();
 
-        let target = create_render_target(
+        let target = create_color_render_target_image(
             size.width,
             size.height,
             &render_state.device,
