@@ -5,9 +5,8 @@ use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::math_type::{Quat, Vec3};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::pbr_pipeline::MainPipeline;
-use crate::render::shadow_mapping::{
-    CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline,
-};
+use crate::render::post_processing::{PostProcessingManager, RenderStage};
+use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
@@ -80,6 +79,9 @@ impl State {
         self.insert_resource::<MainPipeline>();
         self.insert_resource::<ShadowMappingPipeline>();
 
+        // Post Processing
+        self.insert_resource::<PostProcessingManager>();
+
         // --- Other resources ---
         self.insert_resource::<Input>();
         self.insert_resource::<ControlState>();
@@ -87,6 +89,10 @@ impl State {
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(CameraConfig::default());
         self.insert_resource::<DefaultMainPipelineMaterial>();
+
+        self.world
+            .run_system_once(sys_insert_post_processing_pipelines)
+            .unwrap();
 
         {
             // Set egui visual / style / theme
@@ -124,7 +130,8 @@ impl State {
             let uploaded = Arc::new(mesh.upload(&self));
             cmd.spawn((
                 TransformBuilder::default()
-                    .parent(Some(main_light_id)).rotation(Quat::from_angle_x(Deg(-90.)))
+                    .parent(Some(main_light_id))
+                    .rotation(Quat::from_angle_x(Deg(-90.)))
                     .build()
                     .unwrap(),
                 MeshRenderer::new(uploaded, &self.world),
@@ -196,10 +203,6 @@ impl State {
     pub fn update(&mut self) {
         self.world.run_system_once(sys_update_camera).unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
-
-        // self.world.run_system_once(CameraConfig::sys_panel).unwrap();
-        // self.world.run_system_once(sys_light_panel).unwrap();
-        // self.world.run_system_once(sys_input_panel).unwrap();
     }
 
     pub fn post_update(&mut self) {
@@ -246,26 +249,49 @@ impl State {
                 output_view,
                 output_texture: output,
                 window: Arc::clone(&window),
+                stage: RenderStage::BeforeOpaque,
             };
             Ok(ctx)
         })?;
 
-        // PASS: Shadow Mapping
+        // PASS: Shadow Mapping -----
         world
             .run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx)
             .unwrap();
+        // --------------------------
 
-        // PASS: Main
+        ctx.stage = RenderStage::BeforeOpaque;
+        world
+            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        // PASS: Main ---------------
         world
             .run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx)
             .unwrap();
+        // -------------------------
 
-        // PASS: Render Egui
+        ctx.stage = RenderStage::AfterOpaque;
+        world
+            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        ctx.stage = RenderStage::BeforeTransparent;
+        world
+            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        ctx.stage = RenderStage::AfterTransparent;
+        world
+            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        // PASS: Render Egui ----------
         world
             .run_system_cached_with(render::systems::sys_render_egui, &mut ctx)
             .unwrap();
 
-        // End Draw Objects
+        // End Draw Objects ------------
         world
             .resource::<RenderState>()
             .queue
@@ -377,10 +403,18 @@ fn sys_update_light_uniform(
     render_light.write_buffer(&rs.queue, uniform);
 }
 
-fn sys_input_panel(input: Res<Input>, egui: Res<EguiRenderer>) {
-    let ctx = egui.context();
-    egui::Window::new("Input").show(ctx, |ui| {
-        ui.label(format!("Offset: {:?}", input.cursor_offset));
-        ui.label(format!("Position: {:?}", input.cursor_position));
-    });
+fn sys_insert_post_processing_pipelines(
+    rs: Res<RenderState>,
+    mut manager: ResMut<PostProcessingManager>,
+) {
+    let fs_shader = rs
+        .device
+        .create_shader_module(wgpu::include_wgsl!("../assets/shaders/post_test.wgsl"));
+    manager.add_pipeline_from_shader(
+        None,
+        render::post_processing::RenderStage::AfterTransparent,
+        fs_shader,
+        &rs.device,
+        &rs.config,
+    );
 }

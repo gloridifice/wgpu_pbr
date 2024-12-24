@@ -36,13 +36,6 @@ struct App {
 
 struct State {
     window: Arc<Window>,
-    // render_state: RenderState,
-    // egui_renderer: EguiRenderer,
-    // egui_scale_factor: f32,
-    // materials: Assets<MainPipeline>,
-    // material_instances: Assets<MaterialInstance>,
-    // meshes: Assets<UploadedMesh>,
-    // images: Assets<UploadedImage>,
     world: World,
 }
 
