@@ -60,6 +60,7 @@ impl Input {
         return self.hold_keys.contains(&key);
     }
 
+    #[allow(unused)]
     pub fn is_cursor_button_down(&self, button: CursorButton) -> bool {
         return self.down_cursor_buttons.contains(&button);
     }
