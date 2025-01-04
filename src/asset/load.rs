@@ -1,7 +1,7 @@
 use std::{fs::File, io::Read, sync::Arc};
 
+use crate::render::{self, GltfMaterial, Model, Primitive, UploadedImageWithSampler, Vertex};
 use crate::RenderState;
-use crate::render::{self, GltfMaterial, Model, Primitive, UploadedImage, Vertex};
 use anyhow::*;
 use bevy_ecs::world::World;
 use cgmath::{Matrix3, Vector3};
@@ -12,7 +12,7 @@ pub trait Loadable: Sized {
     fn load(path: AssetPath, world: &mut World) -> Result<Self>;
 }
 
-impl Loadable for UploadedImage {
+impl Loadable for UploadedImageWithSampler {
     fn load(path: AssetPath, world: &mut World) -> Result<Self> {
         let mut file = File::open(path.final_path())?;
         let mut buffer = Vec::new();
@@ -57,12 +57,11 @@ impl Loadable for UploadedImage {
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler =
-            render_state
+        let sampler = render_state
             .device
-            .create_sampler(&UploadedImage::default_sampler_desc());
+            .create_sampler(&UploadedImageWithSampler::default_sampler_desc());
 
-        Ok(UploadedImage {
+        Ok(UploadedImageWithSampler {
             size,
             texture,
             view,
@@ -128,11 +127,11 @@ impl Loadable for Model {
                             .pbr_metallic_roughness()
                             .base_color_texture();
                         base_color.map(|tex_info| {
-                            let uploaded_image = Arc::new(UploadedImage::from_glb_data(
+                            let uploaded_image = Arc::new(UploadedImageWithSampler::from_glb_data(
                                 images.get(tex_info.texture().index()).unwrap(),
                                 &tex_info.texture().sampler(),
                                 &render_state.device,
-                                &render_state.queue
+                                &render_state.queue,
                             ));
                             GltfMaterial {
                                 base_color_texture: uploaded_image,

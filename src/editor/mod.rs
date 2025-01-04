@@ -8,6 +8,7 @@ use crate::{
     render::{
         self,
         camera::{Camera, CameraConfig},
+        defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
         light::ParallelLight,
         post_processing::PostProcessingManager,
         transform::Transform,
@@ -119,6 +120,7 @@ pub fn sys_on_resize_render_target(
     render_state: Res<RenderState>,
     mut color_target: ResMut<ColorRenderTarget>,
     mut depth_target: ResMut<DepthRenderTarget>,
+    mut g_buffer_textures: ResMut<GBufferTexturesBindGroup>,
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
     mut egui: ResMut<EguiRenderer>,
     mut camera: Single<&mut Camera>,
@@ -132,7 +134,7 @@ pub fn sys_on_resize_render_target(
         color_target.0 = Some(render::create_color_render_target_image(
             width, height, device, config,
         ));
-        depth_target.0 = Some(render::create_depth_texture(device, width, height));
+        depth_target.0 = Some(render::create_depth_texture(device, width, height, None));
 
         let id = egui.renderer.register_native_texture(
             device,
@@ -141,7 +143,9 @@ pub fn sys_on_resize_render_target(
         );
         egui_tex_id.0 = Some(id);
         camera.aspect = height as f32 / width as f32;
+
         post_processing_manager.resize(width, height, device, config);
+        g_buffer_textures.resize(width, height, device);
     };
 }
 fn create_tree() -> egui_tiles::Tree<Pane> {

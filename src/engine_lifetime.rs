@@ -4,14 +4,17 @@ use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::math_type::{Quat, Vec3};
 use crate::render::camera::{Camera, CameraController};
-use crate::render::pbr_pipeline::MainPipeline;
+use crate::render::defered_rendering::write_g_buffer_pipeline::{
+    GBufferTexturesBindGroup, WriteGBufferPipeline,
+};
+use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, GlobalBindGroup,
-    MaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
+    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
+    GBufferGlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
 };
 use crate::MainWindow;
 use crate::{
@@ -23,7 +26,8 @@ use crate::{
         camera::{CameraConfig, RenderCamera},
         light::{ParallelLight, RenderLight},
         shadow_mapping::ShadowMap,
-        transform::{Transform, TransformBuilder}, MeshRenderer,
+        transform::{Transform, TransformBuilder},
+        MeshRenderer,
     },
     RenderState, State,
 };
@@ -65,15 +69,22 @@ impl State {
         self.insert_resource::<ShadowMap>();
         // self.insert_resource::<ShadowMapEguiTextureId>();
 
+        self.insert_resource::<FullScreenVertexShader>();
+
         // 0. Layouts
         self.insert_resource::<ObjectBindGroupLayout>();
         self.insert_resource::<MaterialBindGroupLayout>();
 
         // 1. Globals
-        self.insert_resource::<GlobalBindGroup>();
+        self.insert_resource::<GBufferGlobalBindGroup>();
         self.insert_resource::<ShadowMapGlobalBindGroup>();
 
+        // 1.5
+        self.insert_resource::<GBufferTexturesBindGroup>();
+        self.insert_resource::<MainGlobalBindGroup>();
+
         // 2. Pipelines
+        self.insert_resource::<WriteGBufferPipeline>();
         self.insert_resource::<MainPipeline>();
         self.insert_resource::<ShadowMappingPipeline>();
 
@@ -264,6 +275,9 @@ impl State {
             .unwrap();
 
         // PASS: Main ---------------
+        world
+            .run_system_cached_with(render::systems::sys_render_write_g_buffer_pass, &mut ctx)
+            .unwrap();
         world
             .run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx)
             .unwrap();
