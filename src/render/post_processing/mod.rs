@@ -3,12 +3,15 @@ use std::{collections::HashMap, sync::Arc};
 use bevy_ecs::prelude::*;
 use wgpu::{
     BindGroup, BindGroupLayout, BindingResource, Device, PipelineLayout, PipelineLayoutDescriptor,
-    RenderPipeline, ShaderModule, ShaderStages, SurfaceConfiguration, VertexState,
+    RenderPipeline, ShaderModule, ShaderStages, SurfaceConfiguration,
 };
 
-use crate::{bg_descriptor, bg_layout_descriptor, render::BGLEntry};
+use crate::{bg_descriptor, bg_layout_descriptor, render::BGLEntry, wgpu_init};
 
-use super::{create_color_render_target_image, RenderTargetSize, UploadedImage};
+use super::{
+    create_color_render_target_image, FullScreenVertexShader, RenderTargetSize,
+    UploadedImageWithSampler,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RenderStage {
@@ -26,20 +29,20 @@ pub struct PostProcessingManager {
     pub bind_group_layout: Arc<BindGroupLayout>,
     bind_group_0: Arc<BindGroup>,
     bind_group_1: Arc<BindGroup>,
-    temp_texture_0: Arc<UploadedImage>,
-    temp_texture_1: Arc<UploadedImage>,
+    temp_texture_0: Arc<UploadedImageWithSampler>,
+    temp_texture_1: Arc<UploadedImageWithSampler>,
     temp_texture_index: usize,
     pub vs_shader: Arc<ShaderModule>,
 }
 
 impl PostProcessingManager {
-    pub fn get_current_source_texture(&self) -> Arc<UploadedImage> {
+    pub fn get_current_source_texture(&self) -> Arc<UploadedImageWithSampler> {
         match self.temp_texture_index {
             0 => Arc::clone(&self.temp_texture_0),
             _ => Arc::clone(&self.temp_texture_1),
         }
     }
-    pub fn next_source_and_target(&mut self) -> (Arc<BindGroup>, Arc<UploadedImage>) {
+    pub fn next_source_and_target(&mut self) -> (Arc<BindGroup>, Arc<UploadedImageWithSampler>) {
         let ret = match self.temp_texture_index {
             0 => (
                 Arc::clone(&self.bind_group_0),
@@ -61,43 +64,15 @@ impl PostProcessingManager {
         device: &Device,
         config: &SurfaceConfiguration,
     ) {
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+        let pipeline = device.create_render_pipeline(&wgpu_init::full_screen_pipeline_desc(
             label,
-            layout: Some(&self.pipeline_layout),
-            vertex: VertexState {
-                module: &self.vs_shader,
-                entry_point: "vs_main",
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState {
-                count: 1,
-                mask: 0,
-                alpha_to_coverage_enabled: false,
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &fs_shader,
-                entry_point: "fs_main",
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview: None,
-            cache: None,
-        });
+            &self.pipeline_layout,
+            &self.vs_shader,
+            &fs_shader,
+            &[Some(wgpu_init::color_target_replace_write_all(
+                config.format,
+            ))],
+        ));
 
         self.pipelines
             .entry(stage)
@@ -107,19 +82,19 @@ impl PostProcessingManager {
             });
     }
 
-    pub fn resize(&mut self, width: u32, height: u32, device: &Device, config: &SurfaceConfiguration) {
+    pub fn resize(
+        &mut self,
+        width: u32,
+        height: u32,
+        device: &Device,
+        config: &SurfaceConfiguration,
+    ) {
         let bind_group_layout = &self.bind_group_layout;
         self.temp_texture_0 = Arc::new(create_color_render_target_image(
-            width,
-            height,
-            device,
-            config,
+            width, height, device, config,
         ));
         self.temp_texture_1 = Arc::new(create_color_render_target_image(
-            width,
-            height,
-            device,
-            config,
+            width, height, device, config,
         ));
 
         self.bind_group_0 = Arc::new(device.create_bind_group(&bg_descriptor! {
@@ -139,9 +114,7 @@ impl FromWorld for PostProcessingManager {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<crate::RenderState>();
 
-        let vs_shader = rs.device.create_shader_module(wgpu::include_wgsl!(
-            "../../../assets/shaders/post_processing_vert.wgsl"
-        ));
+        let vs_shader = Arc::clone(&world.resource::<FullScreenVertexShader>().module);
         let descriptor = bg_layout_descriptor! {
             ["Post Processing"]
             0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true });
@@ -187,7 +160,7 @@ impl FromWorld for PostProcessingManager {
             pipeline_layout: Arc::new(pipeline_layout),
             temp_texture_0,
             temp_texture_1,
-            vs_shader: Arc::new(vs_shader),
+            vs_shader,
             temp_texture_index: 0,
         }
     }

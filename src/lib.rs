@@ -1,9 +1,9 @@
+use bevy_ecs::change_detection::Mut;
 use bevy_ecs::system::Resource;
 use bevy_ecs::world::World;
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use std::sync::Arc;
-use bevy_ecs::change_detection::Mut;
 use wgpu::{Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
@@ -11,14 +11,14 @@ use winit::{
 };
 
 mod asset;
+mod editor;
 mod egui_tools;
+mod engine;
 mod engine_lifetime;
+mod macro_utils;
 mod math_type;
 mod render;
-mod wgpu_init;
-mod macro_utils;
-mod engine;
-mod editor;
+pub mod wgpu_init;
 
 pub async fn run() {
     env_logger::init();
@@ -40,7 +40,7 @@ struct State {
 }
 
 #[derive(Resource)]
-struct RenderState {
+pub struct RenderState {
     device: wgpu::Device,
     queue: wgpu::Queue,
     surface: wgpu::Surface<'static>,
@@ -166,7 +166,7 @@ impl State {
         }
     }
 
-    pub fn render_state(&self) -> &RenderState{
+    pub fn render_state(&self) -> &RenderState {
         self.world.resource::<RenderState>()
     }
 
@@ -250,7 +250,6 @@ impl RenderState {
             size: PhysicalSize { width, height },
         }
     }
-
 
     #[allow(unused)]
     fn get_window_extend3d(&self) -> wgpu::Extent3d {

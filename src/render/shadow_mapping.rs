@@ -5,19 +5,16 @@ use bevy_ecs::{
     system::Resource,
     world::{self, FromWorld, Mut},
 };
-use wgpu::{
-    BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline,
-    ShaderStages,
-};
+use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages};
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImage, Vertex};
+use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImageWithSampler, Vertex};
 
 #[derive(Resource)]
 pub struct ShadowMap {
     // For shadow map rendering pass
-    pub image: UploadedImage,
+    pub image: UploadedImageWithSampler,
 }
 
 #[derive(Resource)]
@@ -33,10 +30,8 @@ pub struct ShadowMappingPipeline {
     pub layout: Arc<PipelineLayout>,
 }
 
-
 #[derive(Component, Clone, Default)]
 pub struct CastShadow;
-
 
 impl FromWorld for ShadowMapGlobalBindGroup {
     fn from_world(world: &mut world::World) -> Self {
@@ -104,10 +99,10 @@ impl FromWorld for ShadowMappingPipeline {
                     depth_write_enabled: true,
                     depth_compare: wgpu::CompareFunction::Less,
                     stencil: Default::default(),
-                    bias: wgpu::DepthBiasState{
+                    bias: wgpu::DepthBiasState {
                         constant: 2,
                         slope_scale: 2.0,
-                        clamp: 0.0
+                        clamp: 0.0,
                     },
                 }),
                 multisample: wgpu::MultisampleState {
@@ -127,7 +122,12 @@ impl FromWorld for ShadowMappingPipeline {
 impl FromWorld for ShadowMap {
     fn from_world(world: &mut world::World) -> Self {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
-            let image = crate::render::create_depth_texture(&render_state.device, 1024, 1024);
+            let image = crate::render::create_depth_texture(
+                &render_state.device,
+                1024,
+                1024,
+                Some(wgpu::CompareFunction::LessEqual),
+            );
 
             Self { image }
         })

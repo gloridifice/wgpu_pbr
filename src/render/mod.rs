@@ -6,14 +6,14 @@ use bevy_ecs::{
     world::{FromWorld, Mut, World},
 };
 use camera::RenderCamera;
+use defered_rendering::{Material, PBRMaterial};
 use light::RenderLight;
-use pbr_pipeline::{Material, PBRMaterial};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor,
-    BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderStages, Texture,
-    TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView,
+    BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
+    Texture, TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView,
     TextureViewDescriptor,
 };
 
@@ -21,26 +21,32 @@ use crate::{
     asset::{load::Loadable, AssetPath},
     bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
-    RenderState, State,
+    wgpu_init, RenderState, State,
 };
 
 pub mod camera;
+pub mod defered_rendering;
 pub mod light;
-pub mod pbr_pipeline;
-pub mod shadow_mapping;
-pub mod transform;
 pub mod post_processing;
+pub mod prelude;
+pub mod shadow_mapping;
 pub mod systems;
+pub mod transform;
 
 #[derive(Resource)]
-pub struct ColorRenderTarget(pub Option<UploadedImage>);
+pub struct ColorRenderTarget(pub Option<UploadedImageWithSampler>);
 #[derive(Resource)]
-pub struct DepthRenderTarget(pub Option<UploadedImage>);
+pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct RenderTargetSize {
     pub width: u32,
     pub height: u32,
+}
+
+#[derive(Resource, Clone)]
+pub struct FullScreenVertexShader {
+    module: Arc<ShaderModule>,
 }
 
 impl Default for RenderTargetSize {
@@ -51,23 +57,35 @@ impl Default for RenderTargetSize {
         }
     }
 }
+impl From<&RenderTargetSize> for Extent3d {
+    fn from(value: &RenderTargetSize) -> Self {
+        Self {
+            width: value.width,
+            height: value.height,
+            depth_or_array_layers: 1,
+        }
+    }
+}
 
 pub fn create_color_render_target_image(
     width: u32,
     height: u32,
     device: &wgpu::Device,
     config: &wgpu::SurfaceConfiguration,
-) -> UploadedImage {
+) -> UploadedImageWithSampler {
     let size = Extent3d {
-        width: width,
-        height: height,
+        width,
+        height,
         depth_or_array_layers: 1,
     };
     let desc = TextureDescriptor {
         label: Some("Render Target"),
         size,
         format: config.format,
-        usage: config.usage | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC | TextureUsages::COPY_DST,
+        usage: config.usage
+            | TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST,
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
@@ -90,7 +108,7 @@ pub fn create_color_render_target_image(
         ..Default::default()
     });
 
-    UploadedImage {
+    UploadedImageWithSampler {
         size,
         texture,
         view,
@@ -102,7 +120,8 @@ pub fn create_depth_texture(
     device: &wgpu::Device,
     width: u32,
     height: u32,
-) -> UploadedImage {
+    compare: Option<wgpu::CompareFunction>,
+) -> UploadedImageWithSampler {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -120,23 +139,32 @@ pub fn create_depth_texture(
     };
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        label: Some("Shadow Map"),
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Nearest,
-        compare: Some(wgpu::CompareFunction::LessEqual), // 5.
-        ..Default::default()
+    let sampler = device.create_sampler(&{
+        let mut desc = wgpu_init::sampler_desc_no_filter();
+        desc.compare = compare;
+        desc
     });
 
-    UploadedImage {
+    UploadedImageWithSampler {
         size,
         texture,
         view,
         sampler,
+    }
+}
+
+impl FromWorld for FullScreenVertexShader {
+    fn from_world(world: &mut World) -> Self {
+        let shader =
+            world
+                .resource::<RenderState>()
+                .device
+                .create_shader_module(wgpu::include_wgsl!(
+                    "../../assets/shaders/fullscreen_vertex_shader.wgsl"
+                ));
+        Self {
+            module: Arc::new(shader),
+        }
     }
 }
 
@@ -161,11 +189,7 @@ impl FromWorld for DepthRenderTarget {
         let render_state = world.resource::<RenderState>();
         let size = world.resource::<RenderTargetSize>();
 
-        let target = create_depth_texture(
-            &render_state.device,
-            size.width,
-            size.height,
-        );
+        let target = create_depth_texture(&render_state.device, size.width, size.height, None);
 
         Self(Some(target))
     }
@@ -255,14 +279,6 @@ impl DrawAble for MeshRenderer {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
-
-    // fn transform_matrix(&self) -> Matrix4<f32> {
-    //     let matrix = self.transform.calculate_matrix4x4();
-    //     match self.parent.as_ref() {
-    //         Some(p) => matrix * p.transform_matrix(),
-    //         None => matrix,
-    //     }
-    // }
 }
 
 #[repr(C)]
@@ -301,7 +317,7 @@ pub struct UploadedPrimitive {
     pub material_instance: Option<Arc<PBRMaterial>>,
 }
 
-pub struct UploadedImage {
+pub struct UploadedImageWithSampler {
     #[allow(unused)]
     pub size: wgpu::Extent3d,
     #[allow(unused)]
@@ -310,8 +326,14 @@ pub struct UploadedImage {
     pub sampler: Sampler,
 }
 
+pub struct UploadedImage {
+    #[allow(unused)]
+    pub texture: Texture,
+    pub view: TextureView,
+}
+
 pub struct GltfMaterial {
-    pub base_color_texture: Arc<UploadedImage>,
+    pub base_color_texture: Arc<UploadedImageWithSampler>,
 }
 
 pub struct Model {
@@ -367,7 +389,7 @@ impl Mesh {
     }
 }
 
-impl UploadedImage {
+impl UploadedImageWithSampler {
     pub fn image_data_layout(
         width: u32,
         heigh: u32,
@@ -442,14 +464,14 @@ impl UploadedImage {
                 aspect: wgpu::TextureAspect::All,
             },
             &pixels,
-            UploadedImage::image_data_layout(data.width, data.height, 4, 0),
+            UploadedImageWithSampler::image_data_layout(data.width, data.height, 4, 0),
             size,
         );
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
         // todo
-        let sampler = device.create_sampler(&UploadedImage::default_sampler_desc());
+        let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
 
         Self {
             size,
@@ -467,7 +489,7 @@ pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
 pub struct MaterialBindGroupLayout(Arc<BindGroupLayout>);
 
 #[derive(Resource, Clone)]
-pub struct GlobalBindGroup {
+pub struct GBufferGlobalBindGroup {
     #[allow(unused)]
     pub layout: Arc<BindGroupLayout>,
     pub bind_group: Arc<BindGroup>,
@@ -500,7 +522,7 @@ impl FromWorld for MaterialBindGroupLayout {
     }
 }
 
-impl FromWorld for GlobalBindGroup {
+impl FromWorld for GBufferGlobalBindGroup {
     fn from_world(world: &mut World) -> Self {
         world.resource_scope(|world, rs: Mut<RenderState>| {
             let device = &rs.device;
@@ -526,7 +548,7 @@ impl FromWorld for GlobalBindGroup {
                 3: BindingResource::Sampler(&shadow_map_image.sampler);
             )));
 
-            GlobalBindGroup {
+            GBufferGlobalBindGroup {
                 layout: bind_group_layout,
                 bind_group,
             }
@@ -539,8 +561,11 @@ pub struct DefaultMainPipelineMaterial(Arc<PBRMaterial>);
 
 impl FromWorld for DefaultMainPipelineMaterial {
     fn from_world(world: &mut World) -> Self {
-        let image =
-            UploadedImage::load(AssetPath::Assets("textures/default.png".to_string()), world).unwrap();
+        let image = UploadedImageWithSampler::load(
+            AssetPath::Assets("textures/default.png".to_string()),
+            world,
+        )
+        .unwrap();
 
         let mat = PBRMaterial::form_gltf(
             world,

@@ -1,6 +1,12 @@
 use std::sync::Arc;
 
-use bevy_ecs::prelude::*;
+use super::{
+    defered_rendering::{
+        write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
+        MainGlobalBindGroup, MainPipeline,
+    },
+    prelude::*,
+};
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
 use winit::window::Window;
@@ -11,11 +17,10 @@ use crate::{
 };
 
 use super::{
-    pbr_pipeline::MainPipeline,
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, DrawAble,
-    GlobalBindGroup, MeshRenderer,
+    GBufferGlobalBindGroup, MeshRenderer,
 };
 
 pub struct PassRenderContext {
@@ -58,49 +63,34 @@ pub fn sys_render_shadow_mapping_pass(
     }
 }
 
-pub fn sys_render_main_pass(
+pub fn sys_render_write_g_buffer_pass(
     InMut(ctx): InMut<PassRenderContext>,
-    main_target: Res<ColorRenderTarget>,
+    g_buffer_textures: Res<GBufferTexturesBindGroup>,
     depth_target: Res<DepthRenderTarget>,
-    main_pipeline: Res<MainPipeline>,
-    global_bind_group: Res<GlobalBindGroup>,
+    main_pipeline: Res<WriteGBufferPipeline>,
+    global_bind_group: Res<GBufferGlobalBindGroup>,
     default_material: Res<DefaultMainPipelineMaterial>,
     mesh_renderers: Query<&MeshRenderer>,
 ) {
-    let Some(main_image) = main_target.0.as_ref() else {
-        return;
-    };
     let Some(depth_image) = depth_target.0.as_ref() else {
         return;
     };
 
     let encoder = &mut ctx.encoder;
-
+    let color_attachements = g_buffer_textures.color_attachments();
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &main_image.view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color {
-                    r: 0.0,
-                    g: 0.0,
-                    b: 0.0,
-                    a: 1.0,
-                }),
-                store: wgpu::StoreOp::Store,
-            },
-        })],
+        label: Some("Write G Buffer Pass"),
+        color_attachments: &color_attachements,
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_image.view,
             depth_ops: Some(wgpu::Operations {
                 load: wgpu::LoadOp::Clear(1.0),
                 store: wgpu::StoreOp::Store,
             }),
-            view: &depth_image.view,
             stencil_ops: None,
         }),
-        occlusion_query_set: None,
         timestamp_writes: None,
+        occlusion_query_set: None,
     });
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
@@ -109,6 +99,41 @@ pub fn sys_render_main_pass(
     for mesh_renderer in mesh_renderers.iter() {
         mesh_renderer.draw_main(&mut render_pass, default_material.0.clone());
     }
+}
+
+pub fn sys_render_main_pass(
+    InMut(ctx): InMut<PassRenderContext>,
+    main_target: Res<ColorRenderTarget>,
+    main_pipeline: Res<MainPipeline>,
+    g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
+    main_global_bind_group: Res<MainGlobalBindGroup>,
+) {
+    let Some(main_image) = main_target.0.as_ref() else {
+        return;
+    };
+
+    let encoder = &mut ctx.encoder;
+
+    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Main Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &main_image.view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: None,
+        occlusion_query_set: None,
+        timestamp_writes: None,
+    });
+
+    render_pass.set_pipeline(&main_pipeline.pipeline);
+    render_pass.set_bind_group(0, &g_buffer_bind_group.bind_group, &[]);
+    render_pass.set_bind_group(1, &main_global_bind_group.bind_group, &[]);
+
+    render_pass.draw(0..3, 0..1);
 }
 
 pub fn sys_render_egui(
@@ -166,12 +191,7 @@ pub fn sys_render_post_processing(
                     view: &target.view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
-                            g: 0.0,
-                            b: 0.0,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
