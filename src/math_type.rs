@@ -23,13 +23,14 @@ pub trait VectorExt: Sized {
 #[allow(unused)]
 pub trait Vector3Ext {
     fn new_z(z: f32) -> Self;
+    fn with_w(&self, w: f32) -> Vec4;
     fn into_point(&self) -> Point3<f32>;
 }
 
 #[allow(unused)]
 pub trait Vector4Ext {
-    fn new_z(z: f32) -> Self;
     fn new_w(w: f32) -> Self;
+    fn new_z(z: f32) -> Self;
 }
 
 impl VectorExt for Vec2 {
@@ -70,6 +71,10 @@ impl Vector3Ext for Vec3 {
             y: self.y,
             z: self.z,
         }
+    }
+
+    fn with_w(&self, w: f32) -> Vec4 {
+        Vec4::new(self.x, self.y, self.z, w)
     }
 }
 

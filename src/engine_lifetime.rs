@@ -178,7 +178,7 @@ impl State {
         let parent = cmd
             .spawn((
                 TransformBuilder::default()
-                    // .rotation(Quaternion::from_angle_x(Deg(-90.0)))
+                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
                     .build()
                     .unwrap(),
                 RotationObject { speed: 0.5 },

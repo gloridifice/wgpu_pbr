@@ -41,7 +41,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let color = textureSample(color_tex, g_samp, in.uv);
 
     var surface_color = vec3<f32>(0);
-    surface_color += max(dot(-light.direction, normal), 0.0) * light.color.rgb * light.intensity;
+    // surface_color += max(dot(-light.direction, normal), 0.0) * light.color.rgb * light.intensity;
 
     let point_lights_num = light.lights_nums.x;
 
@@ -59,6 +59,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     // return vec4<f32>(color.xyz * lightFactor.xyz, 1.0);
-    // return vec4<f32>(surface_color * color.rgb, color.a);
-    return vec4<f32>(normal, color.a);
+    return vec4<f32>(surface_color * color.rgb, color.a);
+    // return vec4<f32>(normal, color.a);
 }
