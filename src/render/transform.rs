@@ -29,6 +29,16 @@ pub struct WorldTransform {
     pub scale: Vec3,
 }
 
+#[repr(C, align(16))]
+#[derive(Clone, Copy, Debug)]
+pub struct TransformUniform {
+    pub model: [[f32; 4]; 4],
+    pub normal: [[f32; 4]; 3],
+}
+
+unsafe impl bytemuck::Pod for TransformUniform {}
+unsafe impl bytemuck::Zeroable for TransformUniform {}
+
 impl Default for WorldTransform {
     fn default() -> Self {
         Self {
@@ -100,10 +110,14 @@ impl Transform {
 
 impl WorldTransform {
     pub fn get_uniform(&self) -> TransformUniform {
+        let normal = self.normal_matrix();
         TransformUniform {
             model: self.model_matrix().into(),
-            normal: self.normal_matrix().into(),
-            _padding: [0.; 4],
+            normal: [
+                normal.x.with_w(0.).into(),
+                normal.y.with_w(0.).into(),
+                normal.z.with_w(0.).into(),
+            ],
         }
     }
 
@@ -135,20 +149,9 @@ impl WorldTransform {
         translation * rotation * scale
     }
 
-    pub fn view_transform(&self) -> Mat4 {
+    pub fn view_matrix(&self) -> Mat4 {
         let translation = Mat4::from_translation(-self.position);
         let rotation = Matrix4::from(self.rotation).invert().unwrap();
         rotation * translation
     }
 }
-
-#[repr(C, align(16))]
-#[derive(Clone, Copy, Debug)]
-pub struct TransformUniform {
-    pub model: [[f32; 4]; 4],
-    pub normal: [[f32; 3]; 3],
-    pub _padding: [f32; 4],
-}
-
-unsafe impl bytemuck::Pod for TransformUniform {}
-unsafe impl bytemuck::Zeroable for TransformUniform {}

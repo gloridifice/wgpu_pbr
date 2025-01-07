@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    camera::OPENGL_TO_WGPU_MATRIX,
+    camera::OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX,
     transform::{Transform, WorldTransform},
 };
 
@@ -168,8 +168,8 @@ impl ParallelLight {
     pub fn light_space_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
         let size = self.size / 2.;
         let proj = cgmath::ortho::<f32>(-size, size, -size, size, self.near, self.far).transpose();
-        let view = transform.view_transform();
-        OPENGL_TO_WGPU_MATRIX * proj * view
+        let view = transform.view_matrix();
+        OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX * proj * view
     }
 }
 
