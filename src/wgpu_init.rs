@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use wgpu::{
     BindGroupLayoutEntry, BindingType, Buffer, BufferDescriptor, ColorTargetState, Extent3d,
-    PipelineLayout, RenderPassColorAttachment, RenderPipelineDescriptor, SamplerDescriptor,
-    ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureView,
+    PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
+    RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
+    TextureFormat, TextureView, VertexBufferLayout, VertexState,
 };
 
 // pub struct DynamicBuffer<'a> {
@@ -154,5 +155,29 @@ pub fn color_target_replace_write_all(format: TextureFormat) -> ColorTargetState
         format,
         blend: Some(wgpu::BlendState::REPLACE),
         write_mask: wgpu::ColorWrites::ALL,
+    }
+}
+
+pub fn vertex_state<'a>(
+    module: &'a ShaderModule,
+    buffers: &'a [VertexBufferLayout<'a>],
+) -> VertexState<'a> {
+    VertexState {
+        module,
+        entry_point: "vs_main",
+        compilation_options: PipelineCompilationOptions::default(),
+        buffers,
+    }
+}
+
+pub fn primitive_triangle_list_default() -> wgpu::PrimitiveState {
+    wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: Some(wgpu::Face::Back),
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
     }
 }

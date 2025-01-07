@@ -122,3 +122,18 @@ macro_rules! bg_descriptor {
         }
     };
 }
+
+#[macro_export]
+macro_rules! impl_pod_zeroable {
+    ($A: ty) => {
+        unsafe impl bytemuck::Pod for $A {}
+        unsafe impl bytemuck::Zeroable for $A {}
+    };
+}
+
+#[macro_export]
+macro_rules! static_render_target_id {
+    ($a:expr) => {
+        pub static $a: LazyLock<RTId> = LazyLock::new(|| RTId::new());
+    };
+}
