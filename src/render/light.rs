@@ -13,7 +13,7 @@ use cgmath::{Matrix, Matrix4, Vector4};
 use wgpu::{BindGroup, BindGroupLayout, BufferDescriptor, BufferUsages, ShaderStages};
 
 use crate::{
-    bg_descriptor, bg_layout_descriptor,
+    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
     macro_utils::BGLEntry,
     math_type::{Vec4, VectorExt},
     RenderState,
@@ -191,11 +191,8 @@ impl LightUniform {
     }
 }
 
-unsafe impl bytemuck::Pod for LightUniform {}
-unsafe impl bytemuck::Zeroable for LightUniform {}
-
-unsafe impl bytemuck::Pod for RawPointLight {}
-unsafe impl bytemuck::Zeroable for RawPointLight {}
+impl_pod_zeroable!(LightUniform);
+impl_pod_zeroable!(RawPointLight);
 
 #[derive(Resource, Default)]
 pub struct DynamicLights {

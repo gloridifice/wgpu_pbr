@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 
 use bevy_ecs::{
     component::Component,
@@ -7,9 +7,11 @@ use bevy_ecs::{
 };
 use camera::RenderCamera;
 use defered_rendering::{Material, PBRMaterial};
+use egui::ahash::HashMap;
 use light::LightUnifromBuffer;
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
+use uuid::Uuid;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor,
     BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
@@ -26,6 +28,7 @@ use crate::{
 
 pub mod camera;
 pub mod defered_rendering;
+pub mod gizmos;
 pub mod light;
 pub mod post_processing;
 pub mod prelude;
@@ -37,6 +40,20 @@ pub mod transform;
 pub struct ColorRenderTarget(pub Option<UploadedImageWithSampler>);
 #[derive(Resource)]
 pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
+
+#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+pub struct RTId(uuid::Uuid);
+
+/// Images will automatically resized when target-size change
+pub struct RenderTargetsManager {
+    targets: HashMap<RTId, RenderTarget>,
+}
+
+pub struct RenderTarget {
+    texture: Arc<Texture>,
+    view: Arc<TextureView>,
+    sampler: Option<Arc<wgpu::Sampler>>,
+}
 
 #[derive(Resource, Clone)]
 pub struct RenderTargetSize {
@@ -57,6 +74,7 @@ impl Default for RenderTargetSize {
         }
     }
 }
+
 impl From<&RenderTargetSize> for Extent3d {
     fn from(value: &RenderTargetSize) -> Self {
         Self {
@@ -64,6 +82,12 @@ impl From<&RenderTargetSize> for Extent3d {
             height: value.height,
             depth_or_array_layers: 1,
         }
+    }
+}
+
+impl RTId {
+    pub fn new() -> Self {
+        Self(Uuid::new_v4())
     }
 }
 
