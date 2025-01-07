@@ -1,8 +1,48 @@
+use std::sync::Arc;
+
 use wgpu::{
-    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, PipelineLayout,
-    RenderPassColorAttachment, RenderPipelineDescriptor, SamplerDescriptor, ShaderModule,
-    ShaderStages, TextureDescriptor, TextureFormat, TextureView,
+    BindGroupLayoutEntry, BindingType, Buffer, BufferDescriptor, ColorTargetState, Extent3d,
+    PipelineLayout, RenderPassColorAttachment, RenderPipelineDescriptor, SamplerDescriptor,
+    ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureView,
 };
+
+// pub struct DynamicBuffer<'a> {
+//     pub size: u64,
+//     pub buffer: Arc<wgpu::Buffer>,
+//     pub desc: BufferDescriptor<'a>,
+// }
+
+// impl<'a> DynamicBuffer<'a> {
+//     pub fn new(device: &wgpu::Device, desc: BufferDescriptor<'a>) -> Self {
+//         let size = desc.size;
+//         let buffer = Arc::new(device.create_buffer(&desc));
+//         Self { size, buffer, desc }
+//     }
+
+//     pub fn write_buffer(
+//         &self,
+//         queue: wgpu::Queue,
+//         device: wgpu::Device,
+//         offset: u64,
+//         data: &[u8],
+//     ) -> Option<Arc<Buffer>> {
+//         let required_size = size_of_val(data) as u64 + offset;
+//         let is_oversize = required_size > self.size;
+//         if is_oversize {
+//             let buffer = device.create_buffer(&self.desc);
+//             let desc = self.desc.clone();
+//             desc.size = queue.write_buffer(buffer, offset, data)
+//         } else {
+//             queue.write_buffer(&self.buffer, offset, data);
+//         };
+//         None
+//     }
+
+//     pub fn calculate_new_size(&self, target_size: u64) {
+//         let mut size = self.size;
+//         while size < target_size {}
+//     }
+// }
 
 pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
     BindGroupLayoutEntry {

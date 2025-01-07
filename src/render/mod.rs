@@ -7,7 +7,7 @@ use bevy_ecs::{
 };
 use camera::RenderCamera;
 use defered_rendering::{Material, PBRMaterial};
-use light::RenderLight;
+use light::LightUnifromBuffer;
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
@@ -537,7 +537,7 @@ impl FromWorld for GBufferGlobalBindGroup {
                 )));
 
             let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;
-            let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
+            let light_uniform_buffer = &world.resource::<LightUnifromBuffer>().buffer;
             let shadow_map_image = &world.resource::<ShadowMap>().image;
 
             let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(

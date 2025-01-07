@@ -12,8 +12,9 @@ use write_g_buffer_pipeline::GBufferTexturesBindGroup;
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init, RenderState};
 
 use super::{
-    camera::RenderCamera, light::RenderLight, FullScreenVertexShader, GltfMaterial,
-    MaterialBindGroupLayout,
+    camera::RenderCamera,
+    light::{DynamicLightBindGroup, LightUnifromBuffer},
+    FullScreenVertexShader, GltfMaterial, MaterialBindGroupLayout,
 };
 
 pub mod write_g_buffer_pipeline;
@@ -35,7 +36,7 @@ pub struct MainPipeline {
 impl FromWorld for MainGlobalBindGroup {
     fn from_world(world: &mut World) -> Self {
         let camera = world.resource::<RenderCamera>();
-        let light = world.resource::<RenderLight>();
+        let light = world.resource::<LightUnifromBuffer>();
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
 
@@ -71,6 +72,7 @@ impl FromWorld for MainPipeline {
         let bind_group_layouts = vec![
             Arc::clone(&world.resource::<GBufferTexturesBindGroup>().layout),
             Arc::clone(&world.resource::<MainGlobalBindGroup>().layout),
+            Arc::clone(&world.resource::<DynamicLightBindGroup>().layout),
         ];
 
         let render_pipeline_layout =

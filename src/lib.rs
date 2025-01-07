@@ -1,6 +1,6 @@
-use bevy_ecs::change_detection::Mut;
-use bevy_ecs::system::Resource;
+use bevy_ecs::system::{Resource, RunSystemOnce};
 use bevy_ecs::world::World;
+use bevy_ecs::{change_detection::Mut, system::IntoSystem};
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use std::sync::Arc;
@@ -164,6 +164,20 @@ impl State {
             // images: Assets::new(),
             world,
         }
+    }
+
+    fn run_system_cached<T, Out: 'static, Marker>(&mut self, system: T)
+    where
+        T: IntoSystem<(), Out, Marker> + 'static,
+    {
+        self.world.run_system_cached(system).unwrap();
+    }
+
+    fn run_system_once<T, Out: 'static, Marker>(&mut self, system: T)
+    where
+        T: IntoSystem<(), Out, Marker> + 'static,
+    {
+        self.world.run_system_once(system).unwrap();
     }
 
     pub fn render_state(&self) -> &RenderState {

@@ -1,10 +1,12 @@
 use wgpu::{BindGroupLayoutEntry, BindingType, ShaderStages};
 
-
 #[allow(unused)]
 #[derive(Clone)]
 pub enum BGLEntry {
     UniformBuffer(),
+    /// `(is_read_only: bool)`
+    StorageBuffer(bool),
+    /// `(multisampled: bool, texture_sample_type: wgpu::TextureSampleType)`
     Tex2D(bool, wgpu::TextureSampleType),
     Sampler(wgpu::SamplerBindingType),
     Raw(BindGroupLayoutEntry),
@@ -22,38 +24,32 @@ impl BGLEntry {
                 bind_group_layout_entry.visibility = visibility;
                 bind_group_layout_entry
             }
-
-            BGLEntry::UniformBuffer() => {
-                let ty = BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
+            _ => {
+                let ty = match self {
+                    BGLEntry::UniformBuffer() => BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    BGLEntry::StorageBuffer(read_only) => wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only },
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    BGLEntry::Tex2D(multisampled, texture_sample_type) => BindingType::Texture {
+                        sample_type: texture_sample_type,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled,
+                    },
+                    BGLEntry::Sampler(sampler_binding_type) => {
+                        wgpu::BindingType::Sampler(sampler_binding_type)
+                    }
+                    BGLEntry::Raw(_) => BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
                 };
-
-                BindGroupLayoutEntry {
-                    binding,
-                    visibility,
-                    ty,
-                    count: None,
-                }
-            }
-            BGLEntry::Tex2D(multisampled, texture_sample_type) => {
-                let ty = BindingType::Texture {
-                    sample_type: texture_sample_type,
-                    view_dimension: wgpu::TextureViewDimension::D2,
-                    multisampled,
-                };
-
-                BindGroupLayoutEntry {
-                    binding,
-                    visibility,
-                    ty,
-                    count: None,
-                }
-            }
-
-            BGLEntry::Sampler(sampler_binding_type) => {
-                let ty = wgpu::BindingType::Sampler(sampler_binding_type);
 
                 BindGroupLayoutEntry {
                     binding,

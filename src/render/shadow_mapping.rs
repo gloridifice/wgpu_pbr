@@ -9,7 +9,7 @@ use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderSta
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
 
-use super::{light::RenderLight, ObjectBindGroupLayout, UploadedImageWithSampler, Vertex};
+use super::{light::LightUnifromBuffer, ObjectBindGroupLayout, UploadedImageWithSampler, Vertex};
 
 #[derive(Resource)]
 pub struct ShadowMap {
@@ -43,7 +43,7 @@ impl FromWorld for ShadowMapGlobalBindGroup {
                 0: ShaderStages::all() => BGLEntry::UniformBuffer(); // Light
             )));
 
-            let light_uniform_buffer = &world.resource::<RenderLight>().buffer;
+            let light_uniform_buffer = &world.resource::<LightUnifromBuffer>().buffer;
 
             let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
                 ["Shadow Mapping Global Bind Group"] [ &layout ]

@@ -1,7 +1,6 @@
-
 use bevy_ecs::prelude::Query;
 use bevy_ecs::{component::Component, entity::Entity};
-use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
+use cgmath::{ElementWise, Matrix, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
 
 use crate::math_type::{Mat3, Mat4};
@@ -103,24 +102,30 @@ impl WorldTransform {
     pub fn get_uniform(&self) -> TransformUniform {
         TransformUniform {
             model: self.model_matrix().into(),
-            rotation: self.rot_matrix().into(),
-            padding: [0.; 3],
+            normal: self.normal_matrix().into(),
+            _padding: [0.; 4],
         }
     }
 
     pub fn forward(&self) -> Vector3<f32> {
-        let fwd = Vector3::new_z(-1.);
-        self.rotation.rotate_vector(fwd)
+        self.rotation * Vector3::new_z(-1.)
     }
 
     #[allow(unused)]
     pub fn up(&self) -> Vec3 {
-        let up = Vector3::new_y(1.);
-        self.rotation.rotate_vector(up)
+        self.rotation * Vector3::new_y(1.)
     }
 
-    pub fn rot_matrix(&self) -> Mat3 {
-        Matrix3::from(self.rotation)
+    #[allow(unused)]
+    pub fn left(&self) -> Vec3 {
+        self.rotation * Vec3::new_x(-1.)
+    }
+
+    pub fn normal_matrix(&self) -> Mat3 {
+        let model = self.model_matrix();
+        let ret = Matrix3::from_cols(model.x.truncate(), model.y.truncate(), model.z.truncate());
+        let ret = ret.invert().unwrap().transpose();
+        ret
     }
 
     pub fn model_matrix(&self) -> Mat4 {
@@ -137,12 +142,12 @@ impl WorldTransform {
     }
 }
 
-#[repr(C)]
+#[repr(C, align(16))]
 #[derive(Clone, Copy, Debug)]
 pub struct TransformUniform {
     pub model: [[f32; 4]; 4],
-    pub rotation: [[f32; 3]; 3],
-    pub padding: [f32; 3],
+    pub normal: [[f32; 3]; 3],
+    pub _padding: [f32; 4],
 }
 
 unsafe impl bytemuck::Pod for TransformUniform {}
