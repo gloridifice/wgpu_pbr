@@ -2,12 +2,16 @@ use std::sync::Arc;
 
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
-use crate::math_type::{Quat, Vec3};
+use crate::math_type::{Quat, Vec3, Vec4};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
 use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
+use crate::render::light::{
+    event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
+    DynamicLightBindGroup, DynamicLights, PointLight,
+};
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
@@ -24,14 +28,14 @@ use crate::{
     render::{
         self,
         camera::{CameraConfig, RenderCamera},
-        light::{ParallelLight, RenderLight},
+        light::{LightUnifromBuffer, ParallelLight},
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
         MeshRenderer,
     },
     RenderState, State,
 };
-use bevy_ecs::query::{Changed, Or};
+use bevy_ecs::query::{Changed, Or, With};
 use bevy_ecs::system::{Commands, ResMut, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
@@ -65,7 +69,7 @@ impl State {
         // --- Render resource ---
         self.insert_resource::<RenderCamera>();
         self.world
-            .insert_resource(RenderLight::new(&self.render_state().device));
+            .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
         self.insert_resource::<ShadowMap>();
         // self.insert_resource::<ShadowMapEguiTextureId>();
 
@@ -78,6 +82,7 @@ impl State {
         // 1. Globals
         self.insert_resource::<GBufferGlobalBindGroup>();
         self.insert_resource::<ShadowMapGlobalBindGroup>();
+        self.insert_resource::<DynamicLightBindGroup>();
 
         // 1.5
         self.insert_resource::<GBufferTexturesBindGroup>();
@@ -94,10 +99,14 @@ impl State {
         // --- Other resources ---
         self.insert_resource::<Input>();
         self.insert_resource::<ControlState>();
+        self.insert_resource::<DynamicLights>();
         self.world.insert_resource(Time::default());
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(CameraConfig::default());
         self.insert_resource::<DefaultMainPipelineMaterial>();
+
+        // Add Events'Observers
+        self.world.add_observer(event_on_remove_point_light);
 
         self.world
             .run_system_once(sys_insert_post_processing_pipelines)
@@ -110,6 +119,26 @@ impl State {
             visual.widgets.noninteractive.bg_stroke.width = 0.0;
             egui.context().set_visuals(visual);
         }
+
+        self.world.spawn((
+            PointLight {
+                color: Vec4::new(1., 0., 0., 1.),
+                intensity: 10.0,
+                distance: 2.0,
+                decay: 1.0,
+            },
+            Transform::with_position(Vec3::new(0., 4., 0.)),
+        ));
+
+        self.world.spawn((
+            PointLight {
+                color: Vec4::new(0., 1., 0., 1.),
+                intensity: 2.0,
+                distance: 2.0,
+                decay: 2.0,
+            },
+            Transform::with_position(Vec3::new(0., 0., 2.)),
+        ));
 
         let ship_model = render::Model::load(
             AssetPath::Assets("models/ship.glb".to_string()),
@@ -140,7 +169,6 @@ impl State {
             cmd.spawn((
                 TransformBuilder::default()
                     .parent(Some(main_light_id))
-                    .rotation(Quat::from_angle_x(Deg(-90.)))
                     .build()
                     .unwrap(),
                 MeshRenderer::new(uploaded, &self.world),
@@ -148,12 +176,13 @@ impl State {
         }
 
         let parent = cmd
-            .spawn(
+            .spawn((
                 TransformBuilder::default()
                     // .rotation(Quaternion::from_angle_x(Deg(-90.0)))
                     .build()
                     .unwrap(),
-            )
+                RotationObject { speed: 0.5 },
+            ))
             .id();
 
         for mesh in ship_model.meshes {
@@ -212,31 +241,39 @@ impl State {
     pub fn update(&mut self) {
         self.world.run_system_once(sys_update_camera).unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
+        self.world
+            .run_system_cached(Self::sys_print_normal_trans)
+            .unwrap();
+    }
+
+    fn sys_print_normal_trans(
+        q_parent: Query<(&WorldTransform), With<RotationObject>>,
+        input: Res<Input>,
+    ) {
+        if input.is_key_down(KeyCode::KeyO) {
+            for (world_trans) in q_parent.iter() {
+                println!("{:?}", world_trans.normal_matrix());
+            }
+        }
     }
 
     pub fn post_update(&mut self) {
         // Update transform unifrom
-        self.world
-            .run_system_once(render::transform::sys_update_world_transform)
-            .unwrap();
-        self.world
-            .run_system_once(sys_update_transform_buffers)
-            .unwrap();
+        self.run_system_once(render::transform::sys_update_world_transform);
+        self.run_system_once(sys_update_transform_buffers);
 
         // Update camera uniform
-        self.world
-            .run_system_cached(sys_update_camera_uniform)
-            .unwrap();
+        self.run_system_cached(sys_update_camera_uniform);
 
         // Update light uniform
-        self.world
-            .run_system_cached(sys_update_light_uniform)
-            .unwrap();
+        self.run_system_cached(render::light::sys_update_light_uniform);
 
         // Clear Down an Up maps
-        self.world
-            .run_system_cached(Input::sys_post_update)
-            .unwrap();
+        self.run_system_cached(Input::sys_post_update);
+
+        // Dynamic Lights
+        self.run_system_cached(sys_update_dynamic_lights);
+        self.run_system_cached(sys_update_dynamic_lights_bind_group);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -337,7 +374,12 @@ pub fn sys_update_camera(
     time: Res<Time>,
     main_window: Res<MainWindow>,
     mut control_state: ResMut<ControlState>,
-    camera_query: Single<(&Camera, &mut Transform, &mut CameraController)>,
+    camera_query: Single<(
+        &Camera,
+        &mut Transform,
+        &WorldTransform,
+        &mut CameraController,
+    )>,
 ) {
     if input.is_key_down(KeyCode::Escape) {
         control_state.is_focused = !control_state.is_focused;
@@ -347,22 +389,22 @@ pub fn sys_update_camera(
         return;
     }
 
-    let (_, mut cam_transform, mut controller) = camera_query.into_inner();
+    let (_, mut cam_transform, world_trans, mut controller) = camera_query.into_inner();
 
     let speed = config.speed;
 
     let mut move_vec = Vector3::new(0., 0., 0.);
     if input.is_key_hold(KeyCode::KeyW) {
-        move_vec += Vector3::new(0.0, 0.0, -1.0);
+        move_vec += world_trans.forward();
     }
     if input.is_key_hold(KeyCode::KeyA) {
-        move_vec += Vector3::new(-1.0, 0.0, 0.0);
+        move_vec += world_trans.left();
     }
     if input.is_key_hold(KeyCode::KeyS) {
-        move_vec += Vector3::new(0.0, 0.0, 1.0);
+        move_vec -= world_trans.forward();
     }
     if input.is_key_hold(KeyCode::KeyD) {
-        move_vec += Vector3::new(1.0, 0.0, 0.0);
+        move_vec -= world_trans.left();
     }
     if input.is_key_hold(KeyCode::Space) {
         if input.is_key_hold(KeyCode::ShiftLeft) {
@@ -373,8 +415,7 @@ pub fn sys_update_camera(
     }
     let delta_time_sec = time.delta_time.as_secs_f32();
     if move_vec != Vector3::new(0., 0., 0.) {
-        move_vec =
-            cam_transform.rotation.rotate_vector(move_vec.normalize()) * speed * delta_time_sec;
+        move_vec = move_vec.normalize() * speed * delta_time_sec;
         cam_transform.position += move_vec;
     }
 
@@ -404,21 +445,11 @@ fn sys_update_camera_uniform(
     render_camera.update_uniform2gpu(camera, transform, &rs.queue);
 }
 
-fn sys_update_light_uniform(
-    single: Single<(&WorldTransform, &ParallelLight)>,
-    render_light: Res<RenderLight>,
-    rs: Res<RenderState>,
-) {
-    let (transform, main_light) = single.into_inner();
-    let uniform = main_light.get_uniform(transform);
-
-    render_light.write_buffer(&rs.queue, uniform);
-}
-
 fn sys_insert_post_processing_pipelines(
     rs: Res<RenderState>,
     mut manager: ResMut<PostProcessingManager>,
 ) {
+    return;
     let fs_shader = rs
         .device
         .create_shader_module(wgpu::include_wgsl!("../assets/shaders/post_test.wgsl"));

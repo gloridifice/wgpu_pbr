@@ -5,6 +5,7 @@ use super::{
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
         MainGlobalBindGroup, MainPipeline,
     },
+    light::DynamicLightBindGroup,
     prelude::*,
 };
 use egui_wgpu::ScreenDescriptor;
@@ -107,6 +108,7 @@ pub fn sys_render_main_pass(
     main_pipeline: Res<MainPipeline>,
     g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
     main_global_bind_group: Res<MainGlobalBindGroup>,
+    dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
 ) {
     let Some(main_image) = main_target.0.as_ref() else {
         return;
@@ -132,6 +134,7 @@ pub fn sys_render_main_pass(
     render_pass.set_pipeline(&main_pipeline.pipeline);
     render_pass.set_bind_group(0, &g_buffer_bind_group.bind_group, &[]);
     render_pass.set_bind_group(1, &main_global_bind_group.bind_group, &[]);
+    render_pass.set_bind_group(2, &dynamic_lights_bind_group.bind_group, &[]);
 
     render_pass.draw(0..3, 0..1);
 }

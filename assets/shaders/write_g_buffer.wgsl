@@ -26,7 +26,7 @@ struct CameraUniform {
 }
 struct TransformUniform {
     model: mat4x4<f32>,
-    rotation: mat3x3<f32>,
+    normal: mat3x3<f32>,
 }
 struct LightUniform {
     direction: vec3<f32>,
@@ -62,7 +62,7 @@ fn vs_main(
     var out: VertexOutput;
     out.color = model.color;
     out.world_pos = (transform.model * vec4<f32>(model.position, 1.0)).xyz;
-    out.normal = transform.rotation * model.normal;
+    out.normal = transform.normal * model.normal;
     out.tex_coord = model.tex_coord;
     out.light_space_clip_pos = light.view_proj * vec4<f32>(out.world_pos, 1.0);
     out.clip_position = camera.view_proj * vec4<f32>(out.world_pos, 1.0);
