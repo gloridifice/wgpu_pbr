@@ -20,7 +20,7 @@ use crate::{
 };
 
 use super::{
-    camera::OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX,
+    camera::OPENGL_TO_WGPU_MATRIX,
     transform::{Transform, WorldTransform},
 };
 
@@ -114,9 +114,9 @@ impl Default for PointLight {
     fn default() -> Self {
         Self {
             color: Vec4::one(),
-            intensity: 1.0,
+            intensity: 0.5,
             distance: 2.0,
-            decay: 2.0,
+            decay: 1.0,
         }
     }
 }
@@ -169,7 +169,7 @@ impl ParallelLight {
         let size = self.size / 2.;
         let proj = cgmath::ortho::<f32>(-size, size, -size, size, self.near, self.far).transpose();
         let view = transform.view_matrix();
-        OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX * proj * view
+        OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }
 
@@ -243,14 +243,16 @@ pub fn sys_update_dynamic_lights_bind_group(
 }
 
 pub fn sys_update_light_uniform(
-    single: Single<
-        (&WorldTransform, &ParallelLight),
-        Or<(Changed<Transform>, Changed<ParallelLight>)>,
+    single: Option<
+        Single<(&WorldTransform, &ParallelLight), Or<(Changed<Transform>, Changed<ParallelLight>)>>,
     >,
     dynamic_lights: Res<DynamicLights>,
     render_light: Res<LightUnifromBuffer>,
     rs: Res<RenderState>,
 ) {
+    let Some(single) = single else {
+        return;
+    };
     let (transform, main_light) = single.into_inner();
     let uniform = LightUniform::from_lights(main_light, &dynamic_lights, transform);
     render_light.write_buffer(&rs.queue, uniform);

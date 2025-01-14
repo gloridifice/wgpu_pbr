@@ -155,3 +155,18 @@ impl WorldTransform {
         rotation * translation
     }
 }
+
+pub fn sys_update_children(mut q_transform: Query<(Entity, &mut Transform)>) {
+    let child_parent = q_transform
+        .iter()
+        .filter_map(|(id, trans)| trans.parent.map(|parent| (id, parent)))
+        .collect::<Vec<_>>();
+
+    for (child, parent) in child_parent.into_iter() {
+        if let Ok((_, mut trans)) = q_transform.get_mut(parent) {
+            if !trans.children.contains(&child) {
+                trans.children.push(child);
+            }
+        }
+    }
+}

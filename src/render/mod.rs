@@ -1,17 +1,15 @@
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
 use bevy_ecs::{
     component::Component,
     system::Resource,
-    world::{FromWorld, Mut, World},
+    world::{reflect, FromWorld, Mut, World},
 };
 use camera::RenderCamera;
 use defered_rendering::{Material, PBRMaterial};
-use egui::ahash::HashMap;
 use light::LightUnifromBuffer;
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
-use uuid::Uuid;
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor,
     BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
@@ -30,6 +28,7 @@ pub mod camera;
 pub mod defered_rendering;
 pub mod gizmos;
 pub mod light;
+pub mod material;
 pub mod post_processing;
 pub mod prelude;
 pub mod shadow_mapping;
@@ -45,15 +44,15 @@ pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
 pub struct RTId(uuid::Uuid);
 
 /// Images will automatically resized when target-size change
-pub struct RenderTargetsManager {
-    targets: HashMap<RTId, RenderTarget>,
-}
+// pub struct RenderTargetsManager {
+//     targets: HashMap<RTId, RenderTarget>,
+// }
 
-pub struct RenderTarget {
-    texture: Arc<Texture>,
-    view: Arc<TextureView>,
-    sampler: Option<Arc<wgpu::Sampler>>,
-}
+// pub struct RenderTarget {
+//     texture: Arc<Texture>,
+//     view: Arc<TextureView>,
+//     sampler: Option<Arc<wgpu::Sampler>>,
+// }
 
 #[derive(Resource, Clone)]
 pub struct RenderTargetSize {
@@ -82,12 +81,6 @@ impl From<&RenderTargetSize> for Extent3d {
             height: value.height,
             depth_or_array_layers: 1,
         }
-    }
-}
-
-impl RTId {
-    pub fn new() -> Self {
-        Self(Uuid::new_v4())
     }
 }
 
@@ -220,6 +213,7 @@ impl FromWorld for DepthRenderTarget {
 }
 
 pub trait DrawAble {
+    fn draw_primitives(&self, render_pass: &mut RenderPass);
     fn draw_depth(&self, render_pass: &mut RenderPass);
 
     fn draw_main(&self, render_pass: &mut RenderPass, default_material: Arc<PBRMaterial>);
@@ -231,6 +225,9 @@ pub struct MeshRenderer {
     pub object_bind_group: Arc<BindGroup>,
     pub transform_buffer: Arc<Buffer>,
 }
+
+#[derive(Component)]
+pub struct MainPassObject;
 
 impl MeshRenderer {
     pub fn new(mesh: Arc<UploadedMesh>, world: &World) -> Self {
@@ -303,6 +300,21 @@ impl DrawAble for MeshRenderer {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
+
+    fn draw_primitives(&self, render_pass: &mut RenderPass) {
+        let Some(mesh) = self.mesh.as_ref() else {
+            return;
+        };
+
+        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
+        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+
+        for primitive in mesh.primitives.iter() {
+            let start = primitive.indices_start;
+            let num = primitive.indices_num;
+            render_pass.draw_indexed(start..(start + num), 0, 0..1);
+        }
+    }
 }
 
 #[repr(C)]
@@ -364,21 +376,22 @@ pub struct Model {
     pub meshes: Vec<Mesh>,
 }
 
-pub struct Primitive {
-    pub indices_start: u32,
-    pub indices_num: u32,
-    pub material: Option<GltfMaterial>,
-}
-
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub primitives: Vec<Primitive>,
 }
 
+pub struct Primitive {
+    pub indices_start: u32,
+    pub indices_num: u32,
+    pub material: Option<GltfMaterial>,
+}
+
 impl Mesh {
-    pub fn upload(&self, state: &State) -> UploadedMesh {
-        let device = &state.render_state().device;
+    pub fn upload(&self, world: &World) -> UploadedMesh {
+        let rs = world.resource::<RenderState>();
+        let device = &rs.device;
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -400,7 +413,7 @@ impl Mesh {
                 material_instance: {
                     it.material
                         .as_ref()
-                        .map(|gltf_mat| Arc::new(PBRMaterial::form_gltf(&state.world, &gltf_mat)))
+                        .map(|gltf_mat| Arc::new(PBRMaterial::form_gltf(&world, &gltf_mat)))
                 },
             })
             .collect::<Vec<_>>();

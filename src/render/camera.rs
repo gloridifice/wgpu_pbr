@@ -39,7 +39,7 @@ impl Camera {
     pub fn build_view_projection_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
         let view = transform.view_matrix();
         let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        return OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX * proj * view;
+        return OPENGL_TO_WGPU_MATRIX * proj * view;
     }
 
     pub fn new(aspect: f32) -> Camera {
@@ -106,7 +106,7 @@ unsafe impl bytemuck::Pod for CameraUniform {}
 unsafe impl bytemuck::Zeroable for CameraUniform {}
 
 #[rustfmt::skip]
-pub const OPENGL_TO_WGPU_AND_RIGHT_TO_LEFT_HAND_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
     0.0, 0.0, 0.5, 0.5,

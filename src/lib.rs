@@ -48,14 +48,6 @@ pub struct RenderState {
     size: winit::dpi::PhysicalSize<u32>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct PushConstants {
-    pub model: [[f32; 4]; 4],
-}
-
-unsafe impl bytemuck::Pod for PushConstants {}
-unsafe impl bytemuck::Zeroable for PushConstants {}
-
 impl App {
     pub fn new() -> App {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {

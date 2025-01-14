@@ -1,3 +1,4 @@
+use std::iter::repeat_n;
 use std::sync::Arc;
 
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
@@ -8,17 +9,20 @@ use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
 use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
+use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
 use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
     DynamicLightBindGroup, DynamicLights, PointLight,
 };
+use crate::render::material::MaterialManager;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
-    GBufferGlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
+    GBufferGlobalBindGroup, MainPassObject, MaterialBindGroupLayout, ObjectBindGroupLayout,
+    RenderTargetSize,
 };
 use crate::MainWindow;
 use crate::{
@@ -44,7 +48,11 @@ use bevy_ecs::{
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, Vector3};
 use egui::Visuals;
+use rand::Rng;
 use winit::{event::WindowEvent, keyboard::KeyCode};
+
+#[derive(Debug, Component, Clone)]
+pub struct Name(pub String);
 
 #[derive(Debug, Component)]
 pub struct RotationObject {
@@ -61,6 +69,7 @@ impl State {
     }
 
     pub fn init(&mut self) {
+        self.insert_resource::<MaterialManager>();
         self.insert_resource::<RenderTargetSize>();
         self.insert_resource::<ColorRenderTarget>();
         self.insert_resource::<DepthRenderTarget>();
@@ -77,6 +86,7 @@ impl State {
 
         // 0. Layouts
         self.insert_resource::<ObjectBindGroupLayout>();
+        self.insert_resource::<GizmosGlobalBindGroup>();
         self.insert_resource::<MaterialBindGroupLayout>();
 
         // 1. Globals
@@ -92,6 +102,7 @@ impl State {
         self.insert_resource::<WriteGBufferPipeline>();
         self.insert_resource::<MainPipeline>();
         self.insert_resource::<ShadowMappingPipeline>();
+        self.insert_resource::<GizmosPipeline>();
 
         // Post Processing
         self.insert_resource::<PostProcessingManager>();
@@ -120,28 +131,37 @@ impl State {
             egui.context().set_visuals(visual);
         }
 
-        self.world.spawn((
-            PointLight {
-                color: Vec4::new(1., 0., 0., 1.),
-                intensity: 10.0,
-                distance: 2.0,
-                decay: 1.0,
-            },
-            Transform::with_position(Vec3::new(0., 4., 0.)),
-        ));
+        let arrow = render::Model::load(
+            AssetPath::Assets("models/gizmos_arrow.glb".to_string()),
+            &mut self.world,
+        )
+        .unwrap();
 
-        self.world.spawn((
-            PointLight {
-                color: Vec4::new(0., 1., 0., 1.),
-                intensity: 2.0,
-                distance: 2.0,
-                decay: 2.0,
-            },
-            Transform::with_position(Vec3::new(0., 0., 2.)),
-        ));
+        {
+            let mut vec = Vec::with_capacity(20usize);
+            for _ in 0..10 {
+                let x = rand::random::<f32>() * 2.;
+                let y = rand::random::<f32>() * 2.;
+                let z = rand::random::<f32>() * 2.;
+                let r = rand::random::<f32>();
+                let a = rand::random::<f32>();
+                let g = (1. - r) * a;
+                let b = (1. - r) - g;
+                vec.push((
+                    PointLight {
+                        color: Vec4::new(r, g, b, 1.),
+                        ..Default::default()
+                    },
+                    Transform::with_position(Vec3::new(x, y, z)),
+                ))
+            }
+            vec.into_iter().for_each(|it| {
+                self.world.spawn(it);
+            });
+        }
 
         let ship_model = render::Model::load(
-            AssetPath::Assets("models/ship.glb".to_string()),
+            AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
             &mut self.world,
         )
         .unwrap();
@@ -152,11 +172,36 @@ impl State {
         .unwrap();
 
         let mut queue = CommandQueue::from_world(&mut self.world);
+
+        let instance = Arc::new(self.world.resource_scope(|world, rs: Mut<RenderState>| {
+            world
+                .resource_mut::<MaterialManager>()
+                .instantiate_material::<GizmosMaterial>(
+                    GizmosMaterial::new(Vec4::new(0., 1., 0., 1.)),
+                    &rs.device,
+                )
+                .unwrap()
+        }));
+
         let mut cmd = Commands::new(&mut queue, &self.world);
         let rs = &self.world.resource::<RenderState>().config;
         let aspect = rs.width as f32 / rs.height as f32;
 
         cmd.spawn((Camera::new(aspect), CameraController::default()));
+
+        for mesh in arrow.meshes {
+            let uploaded = Arc::new(mesh.upload(&self.world));
+
+            cmd.spawn((
+                MeshRenderer::new(uploaded, &self.world),
+                {
+                    Gizmos {
+                        instance: Arc::clone(&instance),
+                    }
+                },
+                Transform::with_position(Vec3::new(0., 0., -1.)),
+            ));
+        }
 
         let main_light_id = cmd
             .spawn((
@@ -165,13 +210,14 @@ impl State {
             ))
             .id();
         for mesh in light_arrow.meshes {
-            let uploaded = Arc::new(mesh.upload(&self));
+            let uploaded = Arc::new(mesh.upload(&self.world));
             cmd.spawn((
                 TransformBuilder::default()
                     .parent(Some(main_light_id))
                     .build()
                     .unwrap(),
                 MeshRenderer::new(uploaded, &self.world),
+                MainPassObject,
             ));
         }
 
@@ -186,7 +232,7 @@ impl State {
             .id();
 
         for mesh in ship_model.meshes {
-            let uploaded = Arc::new(mesh.upload(self));
+            let uploaded = Arc::new(mesh.upload(&self.world));
 
             cmd.spawn((
                 MeshRenderer::new(uploaded, &self.world),
@@ -195,6 +241,7 @@ impl State {
                     .build()
                     .unwrap(),
                 CastShadow,
+                MainPassObject,
             ));
         }
 
@@ -260,6 +307,8 @@ impl State {
     pub fn post_update(&mut self) {
         // Update transform unifrom
         self.run_system_once(render::transform::sys_update_world_transform);
+        self.run_system_once(render::transform::sys_update_children);
+
         self.run_system_once(sys_update_transform_buffers);
 
         // Update camera uniform
@@ -333,6 +382,11 @@ impl State {
         ctx.stage = RenderStage::AfterTransparent;
         world
             .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        // Gizmos ---------------------
+        world
+            .run_system_cached_with(render::systems::sys_render_gizmos, &mut ctx)
             .unwrap();
 
         // PASS: Render Egui ----------

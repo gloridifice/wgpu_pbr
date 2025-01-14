@@ -5,8 +5,11 @@ use super::{
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
         MainGlobalBindGroup, MainPipeline,
     },
+    gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosPipeline},
     light::DynamicLightBindGroup,
     prelude::*,
+    transform::Transform,
+    MainPassObject,
 };
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
@@ -71,7 +74,7 @@ pub fn sys_render_write_g_buffer_pass(
     main_pipeline: Res<WriteGBufferPipeline>,
     global_bind_group: Res<GBufferGlobalBindGroup>,
     default_material: Res<DefaultMainPipelineMaterial>,
-    mesh_renderers: Query<&MeshRenderer>,
+    mesh_renderers: Query<&MeshRenderer, (With<Transform>, With<MainPassObject>)>,
 ) {
     let Some(depth_image) = depth_target.0.as_ref() else {
         return;
@@ -238,4 +241,46 @@ pub fn copy_texture(
         },
         size,
     );
+}
+
+pub fn sys_render_gizmos(
+    InMut(ctx): InMut<PassRenderContext>,
+    color_target: Res<ColorRenderTarget>,
+    gizmos_pipeline: Res<GizmosPipeline>,
+    gizmos_global_bind_group: Res<GizmosGlobalBindGroup>,
+    q_gizomos_meshes: Query<(&MeshRenderer, &Gizmos)>,
+) {
+    color_target.0.as_ref().inspect(|target| {
+        let encoder = &mut ctx.encoder;
+
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                view: &target.view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Load,
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &gizmos_pipeline.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        render_pass.set_pipeline(&gizmos_pipeline.pipeline);
+        render_pass.set_bind_group(0, &gizmos_global_bind_group.bind_group, &[]);
+        for (mesh_renderer, gizmos_mesh) in q_gizomos_meshes.iter() {
+            render_pass.set_bind_group(2, &mesh_renderer.object_bind_group, &[]);
+            render_pass.set_bind_group(1, &gizmos_mesh.instance.bind_group, &[]);
+            mesh_renderer.draw_primitives(&mut render_pass);
+        }
+    });
 }
