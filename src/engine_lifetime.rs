@@ -1,9 +1,8 @@
-use std::iter::repeat_n;
 use std::sync::Arc;
 
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
-use crate::math_type::{Quat, Vec3, Vec4};
+use crate::math_type::{Vec3, Vec4};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
@@ -46,9 +45,8 @@ use bevy_ecs::{
     component::Component,
     system::{Query, Res, RunSystemOnce},
 };
-use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation, Rotation3, Vector3};
+use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
 use egui::Visuals;
-use rand::Rng;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component, Clone)]
@@ -294,11 +292,11 @@ impl State {
     }
 
     fn sys_print_normal_trans(
-        q_parent: Query<(&WorldTransform), With<RotationObject>>,
+        q_parent: Query<&WorldTransform, With<RotationObject>>,
         input: Res<Input>,
     ) {
         if input.is_key_down(KeyCode::KeyO) {
-            for (world_trans) in q_parent.iter() {
+            for world_trans in q_parent.iter() {
                 println!("{:?}", world_trans.normal_matrix());
             }
         }
@@ -501,7 +499,7 @@ fn sys_update_camera_uniform(
 
 fn sys_insert_post_processing_pipelines(
     rs: Res<RenderState>,
-    mut manager: ResMut<PostProcessingManager>,
+    manager: ResMut<PostProcessingManager>,
 ) {
     return;
     let fs_shader = rs

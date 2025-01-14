@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cgmath::{num_traits::zero, ortho, Matrix4, Point3};
+use cgmath::{ortho, Matrix4, Point3};
 use wgpu::{include_wgsl, util::DeviceExt, BufferUsages, ShaderStages};
 
 use crate::{

@@ -89,7 +89,7 @@ fn sys_control_panel_ui_up(
     )>,
     light_single: Single<(&ParallelLight, &mut Transform), Without<render::camera::Camera>>,
     gizmos_single: Single<
-        (&mut Transform),
+        &mut Transform,
         (
             With<MeshRenderer>,
             With<Gizmos>,

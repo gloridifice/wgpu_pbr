@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bevy_ecs::{
     component::Component,
     system::Resource,
-    world::{reflect, FromWorld, Mut, World},
+    world::{FromWorld, Mut, World},
 };
 use camera::RenderCamera;
 use defered_rendering::{Material, PBRMaterial};
@@ -21,7 +21,7 @@ use crate::{
     asset::{load::Loadable, AssetPath},
     bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
-    wgpu_init, RenderState, State,
+    wgpu_init, RenderState,
 };
 
 pub mod camera;

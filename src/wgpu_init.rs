@@ -1,8 +1,7 @@
-use std::sync::Arc;
 
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
-    BindGroupLayoutEntry, BindingType, Buffer, BufferDescriptor, ColorTargetState, Extent3d,
+    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d,
     PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
     RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
     TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
@@ -10,7 +9,7 @@ use wgpu::{
 
 use crate::{
     math_type::Vec4,
-    render::{UploadedImage, UploadedImageWithSampler},
+    render::UploadedImageWithSampler,
 };
 
 // pub struct DynamicBuffer<'a> {
