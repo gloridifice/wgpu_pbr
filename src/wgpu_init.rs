@@ -1,10 +1,16 @@
 use std::sync::Arc;
 
 use wgpu::{
+    util::{DeviceExt, TextureDataOrder},
     BindGroupLayoutEntry, BindingType, Buffer, BufferDescriptor, ColorTargetState, Extent3d,
     PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
     RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
-    TextureFormat, TextureView, VertexBufferLayout, VertexState,
+    TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
+};
+
+use crate::{
+    math_type::Vec4,
+    render::{UploadedImage, UploadedImageWithSampler},
 };
 
 // pub struct DynamicBuffer<'a> {
@@ -90,6 +96,22 @@ pub fn render_pass_color_attachment(
                 false => wgpu::StoreOp::Discard,
             },
         },
+    }
+}
+
+pub fn sampler_desc(
+    label: Option<&'static str>,
+    address_mode: wgpu::AddressMode,
+    mag_min_filter: wgpu::FilterMode,
+) -> SamplerDescriptor<'static> {
+    SamplerDescriptor {
+        label,
+        address_mode_u: address_mode,
+        address_mode_v: address_mode,
+        address_mode_w: address_mode,
+        mag_filter: mag_min_filter,
+        min_filter: mag_min_filter,
+        ..Default::default()
     }
 }
 
@@ -179,5 +201,50 @@ pub fn primitive_triangle_list_default() -> wgpu::PrimitiveState {
         polygon_mode: wgpu::PolygonMode::Fill,
         unclipped_depth: false,
         conservative: false,
+    }
+}
+
+pub fn create_pure_color_texture(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    color: Vec4,
+) -> UploadedImageWithSampler {
+    let size = Extent3d {
+        width: 1,
+        height: 1,
+        depth_or_array_layers: 1,
+    };
+    let texture = device.create_texture_with_data(
+        queue,
+        &TextureDescriptor {
+            label: None,
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: TextureFormat::Rgba8UnormSrgb,
+            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        },
+        TextureDataOrder::LayerMajor,
+        &[
+            (color.x * 255.) as u8,
+            (color.y * 255.) as u8,
+            (color.z * 255.) as u8,
+            (color.w * 255.) as u8,
+        ],
+    );
+    let sampler = device.create_sampler(&sampler_desc(
+        None,
+        wgpu::AddressMode::Repeat,
+        wgpu::FilterMode::Linear,
+    ));
+    let view = texture.create_view(&Default::default());
+
+    UploadedImageWithSampler {
+        texture,
+        view,
+        size,
+        sampler,
     }
 }

@@ -25,6 +25,8 @@ bevy_ecs = "0.15"
 tiny_bail = "0.4.3"
 rand = "0.8.5"
 egui_tiles = "0.10.1"
+bevy_asset = "0.15.1"
+bevy_reflect = "0.15.1"
 
 [dependencies.gltf]
 version = "1.4"

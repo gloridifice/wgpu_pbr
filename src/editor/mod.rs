@@ -2,17 +2,18 @@ use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use egui::load::SizedTexture;
 
 use crate::{
-    egui_tools::{self, EguiRenderer},
+    egui_tools::{self, world_tree, EguiRenderer},
     engine::input::{CursorButton, Input},
     math_type::{Vec2, VectorExt},
     render::{
         self,
         camera::{Camera, CameraConfig},
         defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
+        gizmos::{Gizmos, GizmosPipeline},
         light::ParallelLight,
         post_processing::PostProcessingManager,
         transform::Transform,
-        ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
+        ColorRenderTarget, DepthRenderTarget, MeshRenderer, RenderTargetSize,
     },
     RenderState,
 };
@@ -38,9 +39,33 @@ impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
                 ui.label("Main View");
             }
             Pane::ControlPanel => {
-                self.world
-                    .run_system_once_with(ui, sys_control_panel_ui)
-                    .unwrap();
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    let id_root = self
+                        .world
+                        .query::<(Entity, &Transform)>()
+                        .iter(self.world)
+                        .filter_map(|(id, trans)| {
+                            if trans.parent.is_none() {
+                                Some(id)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let mut id_no_transform = self
+                        .world
+                        .query_filtered::<Entity, Without<Transform>>()
+                        .iter(self.world)
+                        .collect::<Vec<_>>();
+                    id_no_transform.sort();
+
+                    for id in id_root.into_iter().chain(id_no_transform.into_iter()) {
+                        world_tree(ui, id, self.world);
+                    }
+                    self.world
+                        .run_system_once_with(ui, sys_control_panel_ui_up)
+                        .unwrap();
+                });
             }
         };
         egui_tiles::UiResponse::None
@@ -54,7 +79,7 @@ impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
     }
 }
 
-fn sys_control_panel_ui(
+fn sys_control_panel_ui_up(
     InMut(mut ui): InMut<egui::Ui>,
     mut camera_config: ResMut<CameraConfig>,
     cam_single: Single<(
@@ -63,15 +88,44 @@ fn sys_control_panel_ui(
         &mut Transform,
     )>,
     light_single: Single<(&ParallelLight, &mut Transform), Without<render::camera::Camera>>,
+    gizmos_single: Single<
+        (&mut Transform),
+        (
+            With<MeshRenderer>,
+            With<Gizmos>,
+            Without<Camera>,
+            Without<ParallelLight>,
+        ),
+    >,
 ) {
     let (_, _, mut cam_trans) = cam_single.into_inner();
     let (_, mut light_trans) = light_single.into_inner();
+    let mut gizmos_trans = gizmos_single.into_inner();
     ui.label("Camera");
     ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
     egui_tools::transform_ui(&mut ui, &mut cam_trans);
+
     ui.separator();
     ui.label("Light");
     egui_tools::transform_ui(ui, &mut light_trans);
+
+    ui.separator();
+    ui.label("Gizmos");
+    egui_tools::transform_ui(ui, &mut gizmos_trans);
+}
+
+fn sys_control_panel_ui_down(
+    InMut(ui): InMut<egui::Ui>,
+    mut q_trans: Query<(Entity, &mut Transform)>,
+) {
+    let transes = q_trans
+        .iter()
+        .filter(|(_, trans)| trans.parent.is_none())
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    for id in transes.into_iter() {
+        transform_tree(ui, id, &mut q_trans);
+    }
 }
 
 pub fn sys_egui_tiles(world: &mut World) {
@@ -125,6 +179,7 @@ pub fn sys_on_resize_render_target(
     mut egui: ResMut<EguiRenderer>,
     mut camera: Single<&mut Camera>,
     mut post_processing_manager: ResMut<PostProcessingManager>,
+    mut gizmos_pipeline: ResMut<GizmosPipeline>,
 ) {
     if target_size.is_changed() {
         let device = &render_state.device;
@@ -146,6 +201,7 @@ pub fn sys_on_resize_render_target(
 
         post_processing_manager.resize(width, height, device, config);
         g_buffer_textures.resize(width, height, device);
+        gizmos_pipeline.resize(width, height, device);
     };
 }
 fn create_tree() -> egui_tiles::Tree<Pane> {

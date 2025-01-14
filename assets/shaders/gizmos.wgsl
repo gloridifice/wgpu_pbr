@@ -9,10 +9,6 @@ struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
 };
 
-struct FragmentOutput{
-    @location(0) color: vec4<f32>,
-}
-
 struct CameraUniform {
     view_proj: mat4x4<f32>,
 }
@@ -20,21 +16,13 @@ struct TransformUniform {
     model: mat4x4<f32>,
     normal: mat3x3<f32>,
 }
-struct LightUniform {
-    direction: vec3<f32>,
-    color: vec4<f32>,
-    view_proj: mat4x4<f32>,
-    intensity: f32,
-}
 
 struct MaterialUnifrom {
     color: vec4<f32>
 }
+
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
-
-@group(0) @binding(1)
-var<uniform> light: LightUniform;
 
 @group(1) @binding(0)
 var<uniform> material: MaterialUnifrom;
@@ -52,8 +40,6 @@ fn vs_main(
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> FragmentOutput {
-    var o: FragmentOutput;
-    o.color = material.color;
-    return o;
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(1.0);
 }

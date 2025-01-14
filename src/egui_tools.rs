@@ -1,4 +1,6 @@
+use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
+use bevy_ecs::world::World;
 use cgmath::{Deg, Euler};
 use egui::{Context, DragValue, Ui};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
@@ -7,6 +9,7 @@ use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
+use crate::engine_lifetime::Name;
 use crate::render::transform::Transform;
 
 #[derive(Resource)]
@@ -157,5 +160,28 @@ pub fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
         ui.add(DragValue::new(&mut transform.scale.x));
         ui.add(DragValue::new(&mut transform.scale.y));
         ui.add(DragValue::new(&mut transform.scale.z));
+    });
+}
+
+pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
+    let display_name = {
+        let mut ret = format!(" #{}", id.index());
+        if let Some(name) = world.get::<Name>(id) {
+            ret.insert_str(0, &name.0);
+        }
+        ret
+    };
+
+    ui.collapsing(display_name, |ui: &mut Ui| {
+        ui.separator();
+        let children = if let Some(mut trans) = world.get_mut::<Transform>(id) {
+            transform_ui(ui, &mut trans);
+            trans.children.clone()
+        } else {
+            vec![]
+        };
+        for id in children.into_iter() {
+            world_tree(ui, id, world);
+        }
     });
 }
