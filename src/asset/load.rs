@@ -4,7 +4,6 @@ use crate::render::{self, GltfMaterial, Model, Primitive, UploadedImageWithSampl
 use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
-use cgmath::{Matrix3, Vector3};
 
 use super::AssetPath;
 
