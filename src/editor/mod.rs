@@ -114,20 +114,6 @@ fn sys_control_panel_ui_up(
     egui_tools::transform_ui(ui, &mut gizmos_trans);
 }
 
-fn sys_control_panel_ui_down(
-    InMut(ui): InMut<egui::Ui>,
-    mut q_trans: Query<(Entity, &mut Transform)>,
-) {
-    let transes = q_trans
-        .iter()
-        .filter(|(_, trans)| trans.parent.is_none())
-        .map(|(id, _)| id)
-        .collect::<Vec<_>>();
-    for id in transes.into_iter() {
-        transform_tree(ui, id, &mut q_trans);
-    }
-}
-
 pub fn sys_egui_tiles(world: &mut World) {
     let mut tree = create_tree();
     world.resource_scope(|world, egui: Mut<EguiRenderer>| {
