@@ -17,23 +17,39 @@ struct VertexOutput {
 struct FragmentOutput{
     @location(0) world_pos: vec4<f32>,
     @location(1) normal: vec4<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) tex_coord: vec2<f32>,
+    // @location(2) tex_coord: vec2<f32>,
+    // For PBR
+    @location(2) base_color: vec4<f32>,
+    @location(3) pbr_parameters: vec4<f32>, // 0: Metallic, 1: Roughness, 2: Reflectance, 3: Ambient occlusion
+    @location(4) emissive: vec4<f32>,
 }
 
 struct CameraUniform {
     view_proj: mat4x4<f32>,
+    position: vec3<f32>,
+    direction: vec3<f32>,
 }
+
 struct TransformUniform {
     model: mat4x4<f32>,
     normal: mat3x3<f32>,
 }
+
 struct LightUniform {
     direction: vec3<f32>,
     color: vec4<f32>,
     view_proj: mat4x4<f32>,
     intensity: f32,
+    lights_nums: vec4<u32>,
 }
+
+struct PBRMaterial {
+    metallic: f32,
+    roughness: f32,
+    reflectance: f32,
+}
+
+// Global -----
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;
 
@@ -46,12 +62,17 @@ var tex_shadow_map: texture_depth_2d;
 @group(0) @binding(3)
 var samp_shadow_map: sampler_comparison;
 
+// Material -----
 @group(1) @binding(0)
-var tex_0: texture_2d<f32>;
+var<uniform> pbr_mat: PBRMaterial;
 
 @group(1) @binding(1)
+var tex_0: texture_2d<f32>;
+
+@group(1) @binding(2)
 var samp_0: sampler;
 
+// Object -----
 @group(2) @binding(0)
 var<uniform> transform: TransformUniform;
 
@@ -86,9 +107,15 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var o: FragmentOutput;
     o.world_pos = vec4<f32>(in.world_pos, 1.0);
-    o.color = baseColor;
+    o.base_color = baseColor;
     o.normal = vec4<f32>(in.normal, 1.0);
-    o.tex_coord = in.tex_coord;
+    // o.tex_coord = in.tex_coord;
+
+    let metallic = pbr_mat.metallic;
+    let roughness = pbr_mat.roughness;
+    let reflectance = pbr_mat.reflectance;
+    o.pbr_parameters = vec4<f32>(metallic, roughness, reflectance, 0.0);
+    o.emissive = vec4<f32>(0.0);
 
     return o;
 }

@@ -20,7 +20,7 @@ use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
-    GBufferGlobalBindGroup, MainPassObject, MaterialBindGroupLayout, ObjectBindGroupLayout,
+    GBufferGlobalBindGroup, MainPassObject, ObjectBindGroupLayout, PBRMaterialBindGroupLayout,
     RenderTargetSize,
 };
 use crate::MainWindow;
@@ -30,7 +30,7 @@ use crate::{
     engine::time::Time,
     render::{
         self,
-        camera::{CameraConfig, RenderCamera},
+        camera::{CameraBuffer, CameraConfig},
         light::{LightUnifromBuffer, ParallelLight},
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
@@ -74,7 +74,7 @@ impl State {
         self.insert_resource::<RenderTargetEguiTexId>();
 
         // --- Render resource ---
-        self.insert_resource::<RenderCamera>();
+        self.insert_resource::<CameraBuffer>();
         self.world
             .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
         self.insert_resource::<ShadowMap>();
@@ -85,7 +85,7 @@ impl State {
         // 0. Layouts
         self.insert_resource::<ObjectBindGroupLayout>();
         self.insert_resource::<GizmosGlobalBindGroup>();
-        self.insert_resource::<MaterialBindGroupLayout>();
+        self.insert_resource::<PBRMaterialBindGroupLayout>();
 
         // 1. Globals
         self.insert_resource::<GBufferGlobalBindGroup>();
@@ -489,7 +489,7 @@ fn sys_update_transform_buffers(world: &mut World) {
 }
 
 fn sys_update_camera_uniform(
-    render_camera: Res<RenderCamera>,
+    render_camera: Res<CameraBuffer>,
     single: Single<(&Camera, &WorldTransform), Or<(Changed<Camera>, Changed<WorldTransform>)>>,
     rs: Res<RenderState>,
 ) {

@@ -1,7 +1,7 @@
 #[allow(unused)]
 pub use crate::{
     render::{
-        GBufferGlobalBindGroup, MaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
+        GBufferGlobalBindGroup, PBRMaterialBindGroupLayout, ObjectBindGroupLayout, RenderTargetSize,
         UploadedImageWithSampler, Vertex,
     },
     wgpu_init, RenderState,

@@ -5,10 +5,12 @@ use bevy_ecs::{system::Resource, world::FromWorld};
 use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;
 
+use crate::impl_pod_zeroable;
+
 use super::transform::{Transform, WorldTransform};
 
 #[derive(Resource)]
-pub struct RenderCamera {
+pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
 }
 
@@ -28,10 +30,10 @@ pub struct CameraController {
     pub yaw: f32,
 }
 
-impl FromWorld for RenderCamera {
+impl FromWorld for CameraBuffer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
         let rs = world.resource::<crate::RenderState>();
-        RenderCamera::new(&rs.device)
+        CameraBuffer::new(&rs.device)
     }
 }
 
@@ -52,8 +54,12 @@ impl Camera {
     }
 
     pub fn get_uniform(&self, transform: &WorldTransform) -> CameraUniform {
+        let pos = transform.position;
+        let dir = transform.forward();
         CameraUniform {
             view_proj: self.build_view_projection_matrix(transform).into(),
+            position: [pos.x, pos.y, pos.z, 1.],
+            direction: [dir.x, dir.y, dir.z, 1.],
         }
     }
 }
@@ -69,8 +75,8 @@ impl Default for CameraConfig {
     }
 }
 
-impl RenderCamera {
-    pub fn new(device: &wgpu::Device) -> RenderCamera {
+impl CameraBuffer {
+    pub fn new(device: &wgpu::Device) -> CameraBuffer {
         let camera_buffer = device.create_buffer(&BufferDescriptor {
             label: Some("Camera Buffer"),
             size: size_of::<CameraUniform>() as u64,
@@ -78,7 +84,7 @@ impl RenderCamera {
             mapped_at_creation: false,
         });
 
-        RenderCamera {
+        CameraBuffer {
             buffer: Arc::new(camera_buffer),
         }
     }
@@ -101,9 +107,11 @@ impl RenderCamera {
 #[derive(Debug, Clone, Copy)]
 pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
+    pub position: [f32; 4],
+    pub direction: [f32; 4],
 }
-unsafe impl bytemuck::Pod for CameraUniform {}
-unsafe impl bytemuck::Zeroable for CameraUniform {}
+
+impl_pod_zeroable!(CameraUniform);
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(

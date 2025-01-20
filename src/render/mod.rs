@@ -5,7 +5,7 @@ use bevy_ecs::{
     system::Resource,
     world::{FromWorld, Mut, World},
 };
-use camera::RenderCamera;
+use camera::CameraBuffer;
 use defered_rendering::{Material, PBRMaterial};
 use light::LightUnifromBuffer;
 use shadow_mapping::ShadowMap;
@@ -42,17 +42,6 @@ pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RTId(uuid::Uuid);
-
-/// Images will automatically resized when target-size change
-// pub struct RenderTargetsManager {
-//     targets: HashMap<RTId, RenderTarget>,
-// }
-
-// pub struct RenderTarget {
-//     texture: Arc<Texture>,
-//     view: Arc<TextureView>,
-//     sampler: Option<Arc<wgpu::Sampler>>,
-// }
 
 #[derive(Resource, Clone)]
 pub struct RenderTargetSize {
@@ -523,7 +512,7 @@ impl UploadedImageWithSampler {
 pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
 
 #[derive(Resource, Clone)]
-pub struct MaterialBindGroupLayout(Arc<BindGroupLayout>);
+pub struct PBRMaterialBindGroupLayout(Arc<BindGroupLayout>);
 
 #[derive(Resource, Clone)]
 pub struct GBufferGlobalBindGroup {
@@ -545,15 +534,16 @@ impl FromWorld for ObjectBindGroupLayout {
     }
 }
 
-impl FromWorld for MaterialBindGroupLayout {
+impl FromWorld for PBRMaterialBindGroupLayout {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
         let material_bind_group_layout =
             Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
                 ["Material Bind Group Layout"]
-                0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: true });
-                1: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
+                0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
+                1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: true });
+                2: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
             )));
         Self(material_bind_group_layout)
     }
@@ -573,7 +563,7 @@ impl FromWorld for GBufferGlobalBindGroup {
                     3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
                 )));
 
-            let camera_uniform_buffer = &world.resource::<RenderCamera>().buffer;
+            let camera_uniform_buffer = &world.resource::<CameraBuffer>().buffer;
             let light_uniform_buffer = &world.resource::<LightUnifromBuffer>().buffer;
             let shadow_map_image = &world.resource::<ShadowMap>().image;
 
