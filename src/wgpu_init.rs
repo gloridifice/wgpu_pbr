@@ -1,16 +1,12 @@
-
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
-    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d,
-    PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
-    RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
-    TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
+    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, PipelineCompilationOptions,
+    PipelineLayout, RenderPassColorAttachment, RenderPipelineDescriptor, SamplerDescriptor,
+    ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
+    VertexBufferLayout, VertexState,
 };
 
-use crate::{
-    math_type::Vec4,
-    render::UploadedImageWithSampler,
-};
+use crate::{math_type::Vec4, render::UploadedImageWithSampler};
 
 // pub struct DynamicBuffer<'a> {
 //     pub size: u64,

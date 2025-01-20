@@ -5,16 +5,17 @@ use bevy_ecs::{
     world::{FromWorld, World},
 };
 use wgpu::{
-    BindGroup, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline, ShaderStages,
+    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, BufferUsages, PipelineLayout,
+    RenderPipeline, ShaderStages,
 };
-use write_g_buffer_pipeline::GBufferTexturesBindGroup;
+use write_g_buffer_pipeline::{GBufferTexturesBindGroup, RawPBRMaterial};
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init, RenderState};
 
 use super::{
-    camera::RenderCamera,
+    camera::CameraBuffer,
     light::{DynamicLightBindGroup, LightUnifromBuffer},
-    FullScreenVertexShader, GltfMaterial, MaterialBindGroupLayout,
+    FullScreenVertexShader, GltfMaterial, PBRMaterialBindGroupLayout,
 };
 
 pub mod write_g_buffer_pipeline;
@@ -35,7 +36,7 @@ pub struct MainPipeline {
 
 impl FromWorld for MainGlobalBindGroup {
     fn from_world(world: &mut World) -> Self {
-        let camera = world.resource::<RenderCamera>();
+        let camera = world.resource::<CameraBuffer>();
         let light = world.resource::<LightUnifromBuffer>();
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
@@ -65,8 +66,8 @@ impl FromWorld for MainPipeline {
         let rs = world.resource::<RenderState>();
 
         let device = &rs.device;
-        let shader =
-            device.create_shader_module(wgpu::include_wgsl!("../../../assets/shaders/shader.wgsl"));
+        let shader = device
+            .create_shader_module(wgpu::include_wgsl!("../../../assets/shaders/pbr_main.wgsl"));
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
 
         let bind_group_layouts = vec![
@@ -77,7 +78,7 @@ impl FromWorld for MainPipeline {
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
+                label: Some("PBR Main Pipeline"),
                 bind_group_layouts: &bind_group_layouts
                     .iter()
                     .map(|it| it.as_ref())
@@ -86,7 +87,7 @@ impl FromWorld for MainPipeline {
             });
 
         let render_pipeline = device.create_render_pipeline(&wgpu_init::full_screen_pipeline_desc(
-            Some("Main Pipeline"),
+            Some("PBR Main Pipeline"),
             &render_pipeline_layout,
             &full_screen_shader.module,
             &shader,
@@ -116,11 +117,21 @@ impl PBRMaterial {
     pub fn form_gltf(world: &World, gltf_material: &GltfMaterial) -> Self {
         let base_color = &gltf_material.base_color_texture;
         let device = &world.resource::<RenderState>().device;
-        let material_bind_group_layout = &world.resource::<MaterialBindGroupLayout>().0;
+        let material_bind_group_layout = &world.resource::<PBRMaterialBindGroupLayout>().0;
+
+        let raw = RawPBRMaterial::from(gltf_material);
+
+        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("PBR"),
+            contents: bytemuck::cast_slice(&[raw]),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+
         let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
             ["PBR Material Bind Group"] [material_bind_group_layout]
-            0: BindingResource::TextureView(&base_color.view);
-            1: BindingResource::Sampler(&base_color.sampler);
+            0: buffer.as_entire_binding();
+            1: BindingResource::TextureView(&base_color.view);
+            2: BindingResource::Sampler(&base_color.sampler);
         )));
         Self { bind_group }
     }
