@@ -2,9 +2,9 @@ use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use egui::load::SizedTexture;
 
 use crate::{
+    cgmath_ext::{Vec2, VectorExt},
     egui_tools::{self, world_tree, EguiRenderer},
     engine::input::{CursorButton, Input},
-    math_type::{Vec2, VectorExt},
     render::{
         self,
         camera::{Camera, CameraConfig},

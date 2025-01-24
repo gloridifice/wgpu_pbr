@@ -11,12 +11,12 @@ use winit::{
 };
 
 mod asset;
+mod cgmath_ext;
 mod editor;
 mod egui_tools;
 mod engine;
 mod engine_lifetime;
 mod macro_utils;
-mod math_type;
 mod render;
 pub mod wgpu_init;
 

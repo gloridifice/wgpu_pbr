@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
+use crate::cgmath_ext::{Vec3, Vec4};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
-use crate::math_type::{Vec3, Vec4};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
@@ -38,7 +38,7 @@ use crate::{
     },
     RenderState, State,
 };
-use bevy_ecs::query::{Changed, Or, With};
+use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{Commands, ResMut, Resource, Single};
 use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
@@ -151,6 +151,7 @@ impl State {
                         ..Default::default()
                     },
                     Transform::with_position(Vec3::new(x, y, z)),
+                    Name("Point Light".to_string()),
                 ))
             }
             vec.into_iter().for_each(|it| {
@@ -185,7 +186,11 @@ impl State {
         let rs = &self.world.resource::<RenderState>().config;
         let aspect = rs.width as f32 / rs.height as f32;
 
-        cmd.spawn((Camera::new(aspect), CameraController::default()));
+        cmd.spawn((
+            Camera::new(aspect),
+            CameraController::default(),
+            Name("Camera".to_string()),
+        ));
 
         for mesh in arrow.meshes {
             let uploaded = Arc::new(mesh.upload(&self.world));
@@ -201,17 +206,18 @@ impl State {
             ));
         }
 
-        let main_light_id = cmd
+        let parallel_light_id = cmd
             .spawn((
                 Transform::with_position(Vec3::new(0., 0., 3.)),
                 ParallelLight::default(),
+                Name("Parallel Light".to_string()),
             ))
             .id();
         for mesh in light_arrow.meshes {
             let uploaded = Arc::new(mesh.upload(&self.world));
             cmd.spawn((
                 TransformBuilder::default()
-                    .parent(Some(main_light_id))
+                    .parent(Some(parallel_light_id))
                     .build()
                     .unwrap(),
                 MeshRenderer::new(uploaded, &self.world),
@@ -219,13 +225,14 @@ impl State {
             ));
         }
 
-        let parent = cmd
+        let ship_parent = cmd
             .spawn((
                 TransformBuilder::default()
                     .rotation(Quaternion::from_angle_x(Deg(90.0)))
                     .build()
                     .unwrap(),
                 RotationObject { speed: 0.5 },
+                Name("Main Model".to_string()),
             ))
             .id();
 
@@ -235,7 +242,7 @@ impl State {
             cmd.spawn((
                 MeshRenderer::new(uploaded, &self.world),
                 TransformBuilder::default()
-                    .parent(Some(parent))
+                    .parent(Some(ship_parent))
                     .build()
                     .unwrap(),
                 CastShadow,
@@ -286,20 +293,6 @@ impl State {
     pub fn update(&mut self) {
         self.world.run_system_once(sys_update_camera).unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
-        self.world
-            .run_system_cached(Self::sys_print_normal_trans)
-            .unwrap();
-    }
-
-    fn sys_print_normal_trans(
-        q_parent: Query<&WorldTransform, With<RotationObject>>,
-        input: Res<Input>,
-    ) {
-        if input.is_key_down(KeyCode::KeyO) {
-            for world_trans in q_parent.iter() {
-                println!("{:?}", world_trans.normal_matrix());
-            }
-        }
     }
 
     pub fn post_update(&mut self) {

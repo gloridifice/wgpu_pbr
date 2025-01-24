@@ -6,7 +6,7 @@ use wgpu::{
     VertexBufferLayout, VertexState,
 };
 
-use crate::{math_type::Vec4, render::UploadedImageWithSampler};
+use crate::{cgmath_ext::Vec4, render::UploadedImageWithSampler};
 
 // pub struct DynamicBuffer<'a> {
 //     pub size: u64,

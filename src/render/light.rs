@@ -13,9 +13,10 @@ use cgmath::{Matrix, Matrix4, Vector4};
 use wgpu::{BindGroup, BindGroupLayout, BufferDescriptor, BufferUsages, ShaderStages};
 
 use crate::{
-    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
+    bg_descriptor, bg_layout_descriptor,
+    cgmath_ext::{Vec4, VectorExt},
+    impl_pod_zeroable,
     macro_utils::BGLEntry,
-    math_type::{Vec4, VectorExt},
     RenderState,
 };
 
