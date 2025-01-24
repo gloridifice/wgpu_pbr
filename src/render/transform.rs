@@ -1,10 +1,10 @@
 use bevy_ecs::prelude::Query;
 use bevy_ecs::{component::Component, entity::Entity};
-use cgmath::{ElementWise, Matrix, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
+use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
 
-use crate::math_type::{Mat3, Mat4};
-use crate::math_type::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt};
+use crate::cgmath_ext::{Mat3, Mat4};
+use crate::cgmath_ext::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt};
 
 #[allow(unused)]
 #[derive(Component, Builder, Clone, Debug)]
@@ -110,9 +110,9 @@ impl Transform {
 
 impl WorldTransform {
     pub fn get_uniform(&self) -> TransformUniform {
-        let normal = self.normal_matrix();
+        let (model, normal) = self.model_normal_matrix();
         TransformUniform {
-            model: self.model_matrix().into(),
+            model: model.into(),
             normal: [
                 normal.x.with_w(0.).into(),
                 normal.y.with_w(0.).into(),
@@ -135,18 +135,25 @@ impl WorldTransform {
         self.rotation * Vec3::new_x(-1.)
     }
 
-    pub fn normal_matrix(&self) -> Mat3 {
-        let model = self.model_matrix();
-        let ret = Matrix3::from_cols(model.x.truncate(), model.y.truncate(), model.z.truncate());
-        let ret = ret.invert().unwrap().transpose();
-        ret
-    }
+    const MIN_SACLE: f32 = 0.0001;
 
-    pub fn model_matrix(&self) -> Mat4 {
+    pub fn model_normal_matrix(&self) -> (Mat4, Mat3) {
         let translation = Matrix4::from_translation(self.position);
         let scale = Matrix4::from_nonuniform_scale(self.scale.x, self.scale.y, self.scale.z);
         let rotation = Matrix4::from(self.rotation);
-        translation * rotation * scale
+        #[rustfmt::skip]
+        let scale_t = Matrix3::new(
+            1. / self.scale.x.max(Self::MIN_SACLE), 0.0, 0.0,
+            0.0, 1. / self.scale.y.max(Self::MIN_SACLE), 0.0,
+            0.0, 0.0, 1. / self.scale.z.max(Self::MIN_SACLE)
+        );
+        let model_matrix = translation * rotation * scale;
+        let normal_matrix = Matrix3::from_cols(
+            rotation.x.truncate(),
+            rotation.y.truncate(),
+            rotation.z.truncate(),
+        ) * scale_t;
+        (model_matrix, normal_matrix)
     }
 
     pub fn view_matrix(&self) -> Mat4 {
