@@ -9,7 +9,7 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
 };
 
-use crate::math_type::{Vec2, VectorExt};
+use crate::cgmath_ext::{Vec2, VectorExt};
 
 #[derive(Resource)]
 pub struct Input {
@@ -19,12 +19,14 @@ pub struct Input {
     pub last_cursor_position: Vec2,
     pub cursor_position: Vec2,
     pub cursor_offset: Vec2,
-    pub down_cursor_buttons: HashSet<CursorButton>
+    pub down_cursor_buttons: HashSet<CursorButton>,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub enum CursorButton {
-    Left, Middle, Right
+    Left,
+    Middle,
+    Right,
 }
 
 impl FromWorld for Input {
@@ -67,7 +69,7 @@ impl Input {
 
     pub fn input(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::CursorMoved {  .. } => {
+            WindowEvent::CursorMoved { .. } => {
                 // self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
             }
             WindowEvent::KeyboardInput {
