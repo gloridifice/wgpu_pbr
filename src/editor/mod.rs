@@ -1,4 +1,4 @@
-use bevy_ecs::{prelude::*, system::RunSystemOnce};
+use bevy_ecs::prelude::*;
 use egui::load::SizedTexture;
 
 use crate::{
