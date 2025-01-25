@@ -52,19 +52,10 @@ impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
                             }
                         })
                         .collect::<Vec<_>>();
-                    let mut id_no_transform = self
-                        .world
-                        .query_filtered::<Entity, Without<Transform>>()
-                        .iter(self.world)
-                        .collect::<Vec<_>>();
-                    id_no_transform.sort();
 
-                    for id in id_root.into_iter().chain(id_no_transform.into_iter()) {
+                    for id in id_root.into_iter() {
                         world_tree(ui, id, self.world);
                     }
-                    self.world
-                        .run_system_once_with(ui, sys_control_panel_ui_up)
-                        .unwrap();
                 });
             }
         };
@@ -118,10 +109,12 @@ pub fn sys_egui_tiles(world: &mut World) {
     let mut tree = create_tree();
     world.resource_scope(|world, egui: Mut<EguiRenderer>| {
         let ctx = egui.context();
-        egui::SidePanel::left("left_side_panel").show(ctx, |ui| {
-            let mut behavior = TreeBehavior { world };
-            tree.ui(&mut behavior, ui);
-        });
+        egui::SidePanel::left("left_side_panel")
+            .default_width(256.)
+            .show(ctx, |ui| {
+                let mut behavior = TreeBehavior { world };
+                tree.ui(&mut behavior, ui);
+            });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             let id = world.resource::<RenderTargetEguiTexId>();

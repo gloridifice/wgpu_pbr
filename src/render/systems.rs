@@ -9,7 +9,7 @@ use super::{
     light::DynamicLightBindGroup,
     prelude::*,
     transform::Transform,
-    MainPassObject,
+    MainPassObject, PBRMaterialOverride,
 };
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
@@ -23,8 +23,15 @@ use crate::{
 use super::{
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, DrawAble,
-    GBufferGlobalBindGroup, MeshRenderer,
+    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, GBufferGlobalBindGroup,
+    MeshRenderer,
+};
+
+const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
+    r: 0.157,
+    g: 0.157,
+    b: 0.157,
+    a: 1.0,
 };
 
 pub struct PassRenderContext {
@@ -74,7 +81,10 @@ pub fn sys_render_write_g_buffer_pass(
     main_pipeline: Res<WriteGBufferPipeline>,
     global_bind_group: Res<GBufferGlobalBindGroup>,
     default_material: Res<DefaultMainPipelineMaterial>,
-    mesh_renderers: Query<&MeshRenderer, (With<Transform>, With<MainPassObject>)>,
+    mesh_renderers: Query<
+        (&MeshRenderer, Option<&PBRMaterialOverride>),
+        (With<Transform>, With<MainPassObject>),
+    >,
 ) {
     let Some(depth_image) = depth_target.0.as_ref() else {
         return;
@@ -100,8 +110,14 @@ pub fn sys_render_write_g_buffer_pass(
     render_pass.set_pipeline(&main_pipeline.pipeline);
     render_pass.set_bind_group(0, &global_bind_group.bind_group, &[]);
 
-    for mesh_renderer in mesh_renderers.iter() {
-        mesh_renderer.draw_main(&mut render_pass, default_material.0.clone());
+    for (mesh_renderer, override_mat) in mesh_renderers.iter() {
+        mesh_renderer.draw_main(
+            &mut render_pass,
+            default_material.0.clone(),
+            override_mat
+                .map(|it| it.material.as_ref().map(|it| it.as_ref()))
+                .flatten(),
+        );
     }
 }
 
@@ -125,7 +141,7 @@ pub fn sys_render_main_pass(
             view: &main_image.view,
             resolve_target: None,
             ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                load: wgpu::LoadOp::Clear(BACKGROUND_COLOR),
                 store: wgpu::StoreOp::Store,
             },
         })],

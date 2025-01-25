@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bevy_ecs::component::Component;
 use bevy_ecs::{system::Resource, world::FromWorld};
+use bevy_reflect::Reflect;
 use cgmath::{perspective, Matrix4};
 use wgpu::BufferDescriptor;
 
@@ -14,7 +15,7 @@ pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Reflect)]
 #[require(Transform)]
 pub struct Camera {
     // Height / Width

@@ -45,7 +45,7 @@ pub struct ParallelLight {
 pub struct PointLight {
     pub color: Vec4,
     pub intensity: f32,
-    pub distance: f32,
+    pub distance: Option<f32>,
     pub decay: f32,
 }
 
@@ -116,7 +116,7 @@ impl Default for PointLight {
         Self {
             color: Vec4::one(),
             intensity: 0.5,
-            distance: 2.0,
+            distance: None,
             decay: 1.0,
         }
     }
@@ -140,7 +140,9 @@ impl PointLight {
         RawPointLight {
             color: self.color.into(),
             intensity: self.intensity,
-            distance: self.distance,
+            distance: self
+                .distance
+                .unwrap_or((self.intensity * 256.0 / self.decay).sqrt()),
             decay: self.decay,
             position: [pos.x, pos.y, pos.z, 1.0],
         }
@@ -202,7 +204,10 @@ pub struct DynamicLights {
 
 pub fn sys_update_dynamic_lights(
     mut dynamic_lights: ResMut<DynamicLights>,
-    q_lights: Query<(Entity, &PointLight, &WorldTransform), Changed<PointLight>>,
+    q_lights: Query<
+        (Entity, &PointLight, &WorldTransform),
+        Or<(Changed<PointLight>, Changed<WorldTransform>)>,
+    >,
 ) {
     for (id, light, transfrom) in q_lights.iter() {
         dynamic_lights.point_lights.insert(id, light.raw(transfrom));
