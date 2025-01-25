@@ -120,6 +120,8 @@ impl Loadable for Model {
                     }
 
                     let material_instance: Option<GltfMaterial> = {
+                        let mat = primitive.material();
+                        let pbr_mr = mat.pbr_metallic_roughness();
                         let base_color = primitive
                             .material()
                             .pbr_metallic_roughness()
@@ -132,7 +134,10 @@ impl Loadable for Model {
                                 &render_state.queue,
                             ));
                             GltfMaterial {
-                                base_color_texture: uploaded_image,
+                                base_color_texture: Some(uploaded_image),
+                                roughness: pbr_mr.roughness_factor(),
+                                metallic: pbr_mr.metallic_factor(),
+                                ..Default::default()
                             }
                         })
                     };

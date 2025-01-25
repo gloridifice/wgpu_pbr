@@ -1,26 +1,25 @@
-use anyhow::anyhow;
-use anyhow::Result;
-use egui::ahash::HashMap;
+use anyhow::*;
 use std::{
     any::{type_name, TypeId},
     sync::Arc,
 };
-use wgpu::BindGroupLayoutDescriptor;
-use wgpu::{util::DeviceExt, BindGroupEntry, Buffer, BufferUsages};
+use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayoutDescriptor, BufferUsages};
 
-use super::prelude::*;
+use egui::ahash::HashMap;
 
-pub struct MaterialLayout {
+use crate::render::prelude::*;
+
+pub struct UploadedBufferMaterialLayout {
     pub layout: Arc<BindGroupLayout>,
 }
 
-pub struct MaterialInstance<M: MaterialData> {
+pub struct UploadedBufferMaterialInstance<M: BufferMaterialData> {
     pub data: M,
     pub buffer: Buffer,
     pub bind_group: BindGroup,
 }
 
-pub trait MaterialData {
+pub trait BufferMaterialData {
     type Raw: bytemuck::Pod;
 
     fn raw(&self) -> Self::Raw;
@@ -28,14 +27,14 @@ pub trait MaterialData {
 }
 
 #[derive(Resource, Default)]
-pub struct MaterialManager {
-    pub map: HashMap<TypeId, MaterialLayout>,
+pub struct BufferMaterialManager {
+    pub map: HashMap<TypeId, UploadedBufferMaterialLayout>,
 }
 
 static NOT_FOUND_LAYOUT_STR: &'static str = "NOT found the MaterialLayout of this MaterialData";
 
-impl MaterialManager {
-    pub fn register<M: MaterialData + 'static>(
+impl BufferMaterialManager {
+    pub fn register<M: BufferMaterialData + 'static>(
         &mut self,
         device: &wgpu::Device,
         desc: &wgpu::BindGroupLayoutDescriptor,
@@ -49,7 +48,7 @@ impl MaterialManager {
         } else {
             self.map.insert(
                 key,
-                MaterialLayout {
+                UploadedBufferMaterialLayout {
                     layout: Arc::new(device.create_bind_group_layout(desc)),
                 },
             );
@@ -57,11 +56,11 @@ impl MaterialManager {
         Ok(Arc::clone(&self.map.get(&key).unwrap().layout))
     }
 
-    pub fn instantiate_material<M: MaterialData + 'static>(
+    pub fn instantiate_material<M: BufferMaterialData + 'static>(
         &mut self,
         data: M,
         device: &wgpu::Device,
-    ) -> Result<MaterialInstance<M>> {
+    ) -> Result<UploadedBufferMaterialInstance<M>> {
         let layout = self
             .map
             .get(&TypeId::of::<M>())
@@ -72,14 +71,14 @@ impl MaterialManager {
             usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         });
         let bind_group = Self::create_bind_group(device, &layout.layout, &data, &buffer);
-        Ok(MaterialInstance {
+        Ok(UploadedBufferMaterialInstance {
             data,
             buffer,
             bind_group,
         })
     }
 
-    fn create_bind_group<M: MaterialData>(
+    fn create_bind_group<M: BufferMaterialData>(
         device: &wgpu::Device,
         layout: &wgpu::BindGroupLayout,
         data: &M,
@@ -102,9 +101,9 @@ impl MaterialManager {
         device.create_bind_group(&desc)
     }
 
-    pub fn update_bind_group<M: MaterialData + 'static>(
+    pub fn update_bind_group<M: BufferMaterialData + 'static>(
         &mut self,
-        material_instance: &mut MaterialInstance<M>,
+        material_instance: &mut UploadedBufferMaterialInstance<M>,
         device: &wgpu::Device,
     ) -> Result<()> {
         let layout = self
@@ -122,20 +121,20 @@ impl MaterialManager {
     }
 }
 
-impl<M: MaterialData> MaterialInstance<M> {
+impl<M: BufferMaterialData> UploadedBufferMaterialInstance<M> {
     pub fn update_buffer(&self, queue: &wgpu::Queue) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data.raw()]));
     }
 }
 
-pub fn register_material_by_world<M: MaterialData + 'static>(
+pub fn register_buffer_material_by_world<M: BufferMaterialData + 'static>(
     world: &mut World,
     desc: &BindGroupLayoutDescriptor,
 ) -> Arc<BindGroupLayout> {
     world.resource_scope(move |world, rs: Mut<RenderState>| {
         Arc::clone(
             &world
-                .resource_mut::<MaterialManager>()
+                .resource_mut::<BufferMaterialManager>()
                 .register::<M>(&rs.device, desc)
                 .unwrap(),
         )

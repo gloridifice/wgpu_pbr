@@ -10,14 +10,16 @@ use crate::{
 use super::{
     camera::OPENGL_TO_WGPU_MATRIX,
     create_depth_texture,
-    material::{register_material_by_world, MaterialData, MaterialInstance},
+    material::buffer_material::{
+        register_buffer_material_by_world, BufferMaterialData, UploadedBufferMaterialInstance,
+    },
     prelude::*,
     ColorRenderTarget,
 };
 
 #[derive(Component)]
 pub struct Gizmos {
-    pub instance: Arc<MaterialInstance<GizmosMaterial>>,
+    pub instance: Arc<UploadedBufferMaterialInstance<GizmosMaterial>>,
 }
 
 #[derive(Debug, Clone)]
@@ -25,7 +27,7 @@ pub struct GizmosMaterial {
     color: Vec4,
 }
 
-impl MaterialData for GizmosMaterial {
+impl BufferMaterialData for GizmosMaterial {
     type Raw = RawGizmosMaterial;
 
     fn raw(&self) -> Self::Raw {
@@ -123,7 +125,7 @@ impl FromWorld for GizmosPipeline {
             ["Gizmos"]
             0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
         };
-        let bg_layout = register_material_by_world::<GizmosMaterial>(world, &bg_layout_desc);
+        let bg_layout = register_buffer_material_by_world::<GizmosMaterial>(world, &bg_layout_desc);
 
         let rs = world.resource::<RenderState>();
         let device = &rs.device;

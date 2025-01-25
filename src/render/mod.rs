@@ -2,12 +2,14 @@ use std::sync::Arc;
 
 use bevy_ecs::{
     component::Component,
-    system::Resource,
+    query::Changed,
+    system::{Query, Res, Resource},
     world::{FromWorld, Mut, World},
 };
 use camera::CameraBuffer;
-use defered_rendering::{Material, PBRMaterial};
+use defered_rendering::{MainPipeline, UploadedPBRMaterial};
 use light::LightUnifromBuffer;
+use material::UploadedMaterial;
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
@@ -201,21 +203,25 @@ impl FromWorld for DepthRenderTarget {
     }
 }
 
-pub trait DrawAble {
-    fn draw_primitives(&self, render_pass: &mut RenderPass);
-    fn draw_depth(&self, render_pass: &mut RenderPass);
-
-    fn draw_main(&self, render_pass: &mut RenderPass, default_material: Arc<PBRMaterial>);
-}
-
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct MeshRenderer {
     pub mesh: Option<Arc<UploadedMesh>>,
     pub object_bind_group: Arc<BindGroup>,
     pub transform_buffer: Arc<Buffer>,
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Default)]
+pub struct PBRMaterialOverride {
+    pub material: Option<Arc<UploadedPBRMaterial>>,
+}
+
+#[derive(Component, Clone)]
+#[require(PBRMaterialOverride)]
+pub struct PBRMaterial {
+    pub mat: GltfMaterial,
+}
+
+#[derive(Component, Clone)]
 pub struct MainPassObject;
 
 impl MeshRenderer {
@@ -245,7 +251,7 @@ impl MeshRenderer {
     }
 }
 
-impl DrawAble for MeshRenderer {
+impl MeshRenderer {
     fn draw_depth(&self, render_pass: &mut RenderPass) {
         let Some(mesh) = self.mesh.as_ref() else {
             return;
@@ -260,7 +266,12 @@ impl DrawAble for MeshRenderer {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
-    fn draw_main(&self, render_pass: &mut RenderPass, default_material: Arc<PBRMaterial>) {
+    fn draw_main(
+        &self,
+        render_pass: &mut RenderPass,
+        default_material: Arc<UploadedPBRMaterial>,
+        override_material: Option<&UploadedPBRMaterial>,
+    ) {
         let Some(mesh) = self.mesh.as_ref() else {
             return;
         };
@@ -269,19 +280,23 @@ impl DrawAble for MeshRenderer {
         render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.set_bind_group(2, &self.object_bind_group, &[]);
 
-        let mut last_material: Option<Arc<PBRMaterial>> = None;
+        let mut last_material: Option<Arc<UploadedPBRMaterial>> = None;
 
+        if let Some(ove) = override_material {
+            render_pass.set_bind_group(1, &ove.bind_group, &[]);
+        }
         for primitive in mesh.primitives.iter() {
-            let material_instance = match primitive.material_instance.as_ref() {
-                Some(a) => a,
-                None => &default_material,
-            };
-
-            if last_material.is_none()
-                || Arc::ptr_eq(last_material.as_ref().unwrap(), material_instance)
-            {
-                last_material = Some(Arc::clone(&material_instance));
-                render_pass.set_bind_group(1, material_instance.get_bind_group(), &[]);
+            if override_material.is_none() {
+                let material_instance = match primitive.material_instance.as_ref() {
+                    Some(a) => a,
+                    None => &default_material,
+                };
+                if last_material.is_none()
+                    || Arc::ptr_eq(last_material.as_ref().unwrap(), material_instance)
+                {
+                    last_material = Some(Arc::clone(&material_instance));
+                    render_pass.set_bind_group(1, material_instance.get_bind_group(), &[]);
+                }
             }
 
             let start = primitive.indices_start;
@@ -339,7 +354,7 @@ pub struct UploadedMesh {
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub material_instance: Option<Arc<PBRMaterial>>,
+    pub material_instance: Option<Arc<UploadedPBRMaterial>>,
 }
 
 pub struct UploadedImageWithSampler {
@@ -357,8 +372,12 @@ pub struct UploadedImage {
     pub view: TextureView,
 }
 
+#[derive(Clone)]
 pub struct GltfMaterial {
-    pub base_color_texture: Arc<UploadedImageWithSampler>,
+    pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
+    pub roughness: f32,
+    pub metallic: f32,
+    pub reflectance: f32,
 }
 
 pub struct Model {
@@ -377,10 +396,24 @@ pub struct Primitive {
     pub material: Option<GltfMaterial>,
 }
 
+impl Default for GltfMaterial {
+    fn default() -> Self {
+        Self {
+            base_color_texture: None,
+            roughness: 1.0,
+            metallic: 0.0,
+            reflectance: 0.5,
+        }
+    }
+}
+
 impl Mesh {
     pub fn upload(&self, world: &World) -> UploadedMesh {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
+        let main_pipeline = world.resource::<MainPipeline>();
+        let layout = world.resource::<PBRMaterialBindGroupLayout>();
+        let white_tex = world.resource::<WhiteTexture>();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -400,9 +433,15 @@ impl Mesh {
                 indices_start: it.indices_start,
                 indices_num: it.indices_num,
                 material_instance: {
-                    it.material
-                        .as_ref()
-                        .map(|gltf_mat| Arc::new(PBRMaterial::form_gltf(&world, &gltf_mat)))
+                    it.material.as_ref().map(|gltf_mat| {
+                        Arc::new(UploadedPBRMaterial::from_gltf(
+                            device,
+                            &layout,
+                            &white_tex.0,
+                            Arc::clone(&main_pipeline.pipeline),
+                            &gltf_mat,
+                        ))
+                    })
                 },
             })
             .collect::<Vec<_>>();
@@ -584,22 +623,74 @@ impl FromWorld for GBufferGlobalBindGroup {
 }
 
 #[derive(Resource, Clone)]
-pub struct DefaultMainPipelineMaterial(Arc<PBRMaterial>);
+pub struct WhiteTexture(pub Arc<UploadedImageWithSampler>);
+
+#[derive(Resource, Clone)]
+pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
+
+#[derive(Resource, Clone)]
+pub struct DefaultMainPipelineMaterial(pub Arc<UploadedPBRMaterial>);
+
+impl FromWorld for WhiteTexture {
+    fn from_world(world: &mut World) -> Self {
+        Self(Arc::new(
+            UploadedImageWithSampler::load(
+                AssetPath::Assets("textures/white.png".to_string()),
+                world,
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+impl FromWorld for MissingTexture {
+    fn from_world(world: &mut World) -> Self {
+        Self(Arc::new(
+            UploadedImageWithSampler::load(
+                AssetPath::Assets("textures/missing.png".to_string()),
+                world,
+            )
+            .unwrap(),
+        ))
+    }
+}
 
 impl FromWorld for DefaultMainPipelineMaterial {
     fn from_world(world: &mut World) -> Self {
-        let image = UploadedImageWithSampler::load(
-            AssetPath::Assets("textures/default.png".to_string()),
-            world,
-        )
-        .unwrap();
+        let missing_tex = &world.resource::<MissingTexture>().0;
+        let white_tex = &world.resource::<WhiteTexture>().0;
+        let device = &world.resource::<RenderState>().device;
+        let main_pipeline = world.resource::<MainPipeline>();
+        let layout = world.resource::<PBRMaterialBindGroupLayout>();
 
-        let mat = PBRMaterial::form_gltf(
-            world,
+        let mat = UploadedPBRMaterial::from_gltf(
+            device,
+            &layout,
+            white_tex,
+            Arc::clone(&main_pipeline.pipeline),
             &GltfMaterial {
-                base_color_texture: Arc::new(image),
+                base_color_texture: Some(Arc::clone(missing_tex)),
+                ..Default::default()
             },
         );
         Self(Arc::new(mat))
+    }
+}
+
+pub fn sys_update_override_pbr_material_bind_group(
+    rs: Res<RenderState>,
+    main_pipeline: Res<MainPipeline>,
+    white: Res<WhiteTexture>,
+    layout: Res<PBRMaterialBindGroupLayout>,
+    mut pbr_mats: Query<(&PBRMaterial, &mut PBRMaterialOverride), Changed<PBRMaterial>>,
+) {
+    for (mat, mut ove) in pbr_mats.iter_mut() {
+        ove.material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
+            &rs.device,
+            &layout,
+            &white.0,
+            Arc::clone(&main_pipeline.pipeline),
+            &mat.mat,
+        )))
     }
 }

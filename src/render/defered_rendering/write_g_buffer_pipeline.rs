@@ -19,9 +19,9 @@ impl_pod_zeroable!(RawPBRMaterial);
 impl From<&GltfMaterial> for RawPBRMaterial {
     fn from(value: &GltfMaterial) -> Self {
         Self {
-            metallic: 0.5,
-            roughness: 0.5,
-            reflectance: 1.0,
+            metallic: value.metallic,
+            roughness: value.roughness,
+            reflectance: value.reflectance,
         }
     }
 }

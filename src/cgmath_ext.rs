@@ -1,4 +1,5 @@
 use cgmath::Point3;
+use egui::Color32;
 
 pub type Vec2 = cgmath::Vector2<f32>;
 pub type Vec3 = cgmath::Vector3<f32>;
@@ -31,6 +32,8 @@ pub trait Vector3Ext {
 pub trait Vector4Ext {
     fn new_w(w: f32) -> Self;
     fn new_z(z: f32) -> Self;
+    fn to_color32(&self) -> Color32;
+    fn from_color32(color: &Color32) -> Self;
 }
 
 impl VectorExt for Vec2 {
@@ -99,6 +102,24 @@ impl Vector4Ext for Vec4 {
 
     fn new_w(w: f32) -> Self {
         Self::new(0., 0., 0., w)
+    }
+
+    fn to_color32(&self) -> Color32 {
+        Color32::from_rgba_unmultiplied(
+            (self.x * 256.) as u8,
+            (self.y * 256.) as u8,
+            (self.z * 256.) as u8,
+            (self.w * 256.) as u8,
+        )
+    }
+
+    fn from_color32(color: &Color32) -> Self {
+        Self {
+            x: (color.r() as f32) / 256.,
+            y: (color.g() as f32) / 256.,
+            z: (color.b() as f32) / 256.,
+            w: (color.a() as f32) / 256.,
+        }
     }
 }
 

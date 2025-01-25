@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::cgmath_ext::{Vec3, Vec4};
+use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
@@ -13,15 +13,16 @@ use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
     DynamicLightBindGroup, DynamicLights, PointLight,
 };
-use crate::render::material::MaterialManager;
+use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
-    GBufferGlobalBindGroup, MainPassObject, ObjectBindGroupLayout, PBRMaterialBindGroupLayout,
-    RenderTargetSize,
+    sys_update_override_pbr_material_bind_group, ColorRenderTarget, DefaultMainPipelineMaterial,
+    DepthRenderTarget, FullScreenVertexShader, GBufferGlobalBindGroup, MainPassObject,
+    MissingTexture, ObjectBindGroupLayout, PBRMaterial, PBRMaterialBindGroupLayout,
+    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -67,7 +68,9 @@ impl State {
     }
 
     pub fn init(&mut self) {
-        self.insert_resource::<MaterialManager>();
+        self.insert_resource::<WhiteTexture>();
+        self.insert_resource::<MissingTexture>();
+        self.insert_resource::<BufferMaterialManager>();
         self.insert_resource::<RenderTargetSize>();
         self.insert_resource::<ColorRenderTarget>();
         self.insert_resource::<DepthRenderTarget>();
@@ -137,7 +140,7 @@ impl State {
 
         {
             let mut vec = Vec::with_capacity(20usize);
-            for _ in 0..10 {
+            for _ in 0..3 {
                 let x = rand::random::<f32>() * 2.;
                 let y = rand::random::<f32>() * 2.;
                 let z = rand::random::<f32>() * 2.;
@@ -170,11 +173,19 @@ impl State {
         )
         .unwrap();
 
+        let white_image = Arc::new(
+            UploadedImageWithSampler::load(
+                AssetPath::Assets("textures/white.png".to_string()),
+                &mut self.world,
+            )
+            .unwrap(),
+        );
+
         let mut queue = CommandQueue::from_world(&mut self.world);
 
         let instance = Arc::new(self.world.resource_scope(|world, rs: Mut<RenderState>| {
             world
-                .resource_mut::<MaterialManager>()
+                .resource_mut::<BufferMaterialManager>()
                 .instantiate_material::<GizmosMaterial>(
                     GizmosMaterial::new(Vec4::new(0., 1., 0., 1.)),
                     &rs.device,
@@ -213,6 +224,7 @@ impl State {
                 Name("Parallel Light".to_string()),
             ))
             .id();
+
         for mesh in light_arrow.meshes {
             let uploaded = Arc::new(mesh.upload(&self.world));
             cmd.spawn((
@@ -224,11 +236,11 @@ impl State {
                 MainPassObject,
             ));
         }
-
         let ship_parent = cmd
             .spawn((
                 TransformBuilder::default()
                     .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                    .scale(Vec3::new_unit(0.5))
                     .build()
                     .unwrap(),
                 RotationObject { speed: 0.5 },
@@ -247,6 +259,12 @@ impl State {
                     .unwrap(),
                 CastShadow,
                 MainPassObject,
+                PBRMaterial {
+                    mat: render::GltfMaterial {
+                        base_color_texture: Some(Arc::clone(&white_image)),
+                        ..Default::default()
+                    },
+                },
             ));
         }
 
@@ -314,6 +332,9 @@ impl State {
         // Dynamic Lights
         self.run_system_cached(sys_update_dynamic_lights);
         self.run_system_cached(sys_update_dynamic_lights_bind_group);
+
+        // Override Material
+        self.run_system_cached(sys_update_override_pbr_material_bind_group);
     }
 
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {

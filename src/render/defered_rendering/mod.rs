@@ -15,7 +15,8 @@ use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_ini
 use super::{
     camera::CameraBuffer,
     light::{DynamicLightBindGroup, LightUnifromBuffer},
-    FullScreenVertexShader, GltfMaterial, PBRMaterialBindGroupLayout,
+    material::UploadedMaterial,
+    FullScreenVertexShader, GltfMaterial, PBRMaterialBindGroupLayout, UploadedImageWithSampler,
 };
 
 pub mod write_g_buffer_pipeline;
@@ -29,8 +30,8 @@ pub struct MainGlobalBindGroup {
 #[allow(unused)]
 #[derive(Resource)]
 pub struct MainPipeline {
-    pub pipeline: RenderPipeline,
-    pub pipeline_layout: PipelineLayout,
+    pub pipeline: Arc<RenderPipeline>,
+    pub pipeline_layout: Arc<PipelineLayout>,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
@@ -97,27 +98,32 @@ impl FromWorld for MainPipeline {
         ));
 
         MainPipeline {
-            pipeline: render_pipeline,
-            pipeline_layout: render_pipeline_layout,
+            pipeline: Arc::new(render_pipeline),
+            pipeline_layout: Arc::new(render_pipeline_layout),
             bind_group_layouts,
         }
     }
 }
 
-pub trait Material {
-    /// Return the material bind group
-    fn get_bind_group(&self) -> &BindGroup;
-}
-
-pub struct PBRMaterial {
+pub struct UploadedPBRMaterial {
     pub bind_group: Arc<BindGroup>,
+    pub pipeline: Arc<RenderPipeline>,
 }
 
-impl PBRMaterial {
-    pub fn form_gltf(world: &World, gltf_material: &GltfMaterial) -> Self {
-        let base_color = &gltf_material.base_color_texture;
-        let device = &world.resource::<RenderState>().device;
-        let material_bind_group_layout = &world.resource::<PBRMaterialBindGroupLayout>().0;
+impl UploadedPBRMaterial {
+    pub fn from_gltf(
+        device: &wgpu::Device,
+        layout: &PBRMaterialBindGroupLayout,
+        white_texture: &UploadedImageWithSampler,
+        main_pipeline: Arc<RenderPipeline>,
+        gltf_material: &GltfMaterial,
+    ) -> Self {
+        let base_color = gltf_material
+            .base_color_texture
+            .as_ref()
+            .map(|it| it.as_ref())
+            .unwrap_or(white_texture);
+        let material_bind_group_layout = &layout.0;
 
         let raw = RawPBRMaterial::from(gltf_material);
 
@@ -133,12 +139,19 @@ impl PBRMaterial {
             1: BindingResource::TextureView(&base_color.view);
             2: BindingResource::Sampler(&base_color.sampler);
         )));
-        Self { bind_group }
+
+        Self {
+            bind_group,
+            pipeline: main_pipeline,
+        }
     }
 }
 
-impl Material for PBRMaterial {
+impl UploadedMaterial for UploadedPBRMaterial {
     fn get_bind_group(&self) -> &BindGroup {
         &self.bind_group
+    }
+    fn get_render_pipeline(&self) -> &RenderPipeline {
+        &self.pipeline
     }
 }
