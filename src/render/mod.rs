@@ -2,18 +2,14 @@ use std::sync::Arc;
 
 use bevy_ecs::{
     component::Component,
-    query::Changed,
-    system::{Query, Res, Resource},
+    system::Resource,
     world::{FromWorld, Mut, World},
 };
 use camera::CameraBuffer;
 use defered_rendering::MainPipeline;
 use light::LightUnifromBuffer;
 use material::{
-    pbr::{
-        GltfMaterial, PBRMaterial, PBRMaterialBindGroupLayout, PBRMaterialOverride,
-        UploadedPBRMaterial,
-    },
+    pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial},
     UploadedMaterial,
 };
 use shadow_mapping::ShadowMap;
@@ -282,7 +278,7 @@ impl MeshRenderer {
         }
         for primitive in mesh.primitives.iter() {
             if override_material.is_none() {
-                let material_instance = match primitive.material_instance.as_ref() {
+                let material_instance = match primitive.uploaded_material.as_ref() {
                     Some(a) => a,
                     None => &default_material,
                 };
@@ -355,7 +351,8 @@ pub struct UploadedMesh {
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub material_instance: Option<Arc<UploadedPBRMaterial>>,
+    pub uploaded_material: Option<Arc<UploadedPBRMaterial>>,
+    pub material: Option<Arc<GltfMaterial>>,
 }
 
 pub struct UploadedImageWithSampler {
@@ -396,6 +393,7 @@ impl Mesh {
         let main_pipeline = world.resource::<MainPipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
         let white_tex = world.resource::<WhiteTexture>();
+        let normal_default = world.resource::<NormalDefaultTexture>();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -414,17 +412,19 @@ impl Mesh {
             .map(|it| UploadedPrimitive {
                 indices_start: it.indices_start,
                 indices_num: it.indices_num,
-                material_instance: {
+                uploaded_material: {
                     it.material.as_ref().map(|gltf_mat| {
                         Arc::new(UploadedPBRMaterial::from_gltf(
                             device,
                             &layout,
                             &white_tex.0,
+                            &normal_default.0,
                             Arc::clone(&main_pipeline.pipeline),
                             &gltf_mat,
                         ))
                     })
                 },
+                material: it.material.as_ref().map(|it| Arc::new(it.clone())),
             })
             .collect::<Vec<_>>();
 
@@ -590,6 +590,9 @@ impl FromWorld for GBufferGlobalBindGroup {
 pub struct WhiteTexture(pub Arc<UploadedImageWithSampler>);
 
 #[derive(Resource, Clone)]
+pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler>);
+
+#[derive(Resource, Clone)]
 pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
 
 #[derive(Resource, Clone)]
@@ -600,6 +603,18 @@ impl FromWorld for WhiteTexture {
         Self(Arc::new(
             UploadedImageWithSampler::load(
                 AssetPath::Assets("textures/white.png".to_string()),
+                world,
+            )
+            .unwrap(),
+        ))
+    }
+}
+
+impl FromWorld for NormalDefaultTexture {
+    fn from_world(world: &mut World) -> Self {
+        Self(Arc::new(
+            UploadedImageWithSampler::load(
+                AssetPath::Assets("textures/normal_default.png".to_string()),
                 world,
             )
             .unwrap(),
@@ -623,6 +638,7 @@ impl FromWorld for DefaultMainPipelineMaterial {
     fn from_world(world: &mut World) -> Self {
         let missing_tex = &world.resource::<MissingTexture>().0;
         let white_tex = &world.resource::<WhiteTexture>().0;
+        let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
         let device = &world.resource::<RenderState>().device;
         let main_pipeline = world.resource::<MainPipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
@@ -631,6 +647,7 @@ impl FromWorld for DefaultMainPipelineMaterial {
             device,
             &layout,
             white_tex,
+            normal_default_tex,
             Arc::clone(&main_pipeline.pipeline),
             &GltfMaterial {
                 base_color_texture: Some(Arc::clone(missing_tex)),
@@ -638,23 +655,5 @@ impl FromWorld for DefaultMainPipelineMaterial {
             },
         );
         Self(Arc::new(mat))
-    }
-}
-
-pub fn sys_update_override_pbr_material_bind_group(
-    rs: Res<RenderState>,
-    main_pipeline: Res<MainPipeline>,
-    white: Res<WhiteTexture>,
-    layout: Res<PBRMaterialBindGroupLayout>,
-    mut pbr_mats: Query<(&PBRMaterial, &mut PBRMaterialOverride), Changed<PBRMaterial>>,
-) {
-    for (mat, mut ove) in pbr_mats.iter_mut() {
-        ove.material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
-            &rs.device,
-            &layout,
-            &white.0,
-            Arc::clone(&main_pipeline.pipeline),
-            &mat.mat,
-        )))
     }
 }

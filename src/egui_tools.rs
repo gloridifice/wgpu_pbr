@@ -4,7 +4,7 @@ use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::world::World;
 use cgmath::{Deg, Euler};
-use egui::{Color32, Context, DragValue, Ui};
+use egui::{Color32, Context, DragValue, Ui, Widget};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
@@ -144,7 +144,7 @@ impl EguiRenderer {
 }
 
 fn value(ui: &mut Ui, v: &mut f32) {
-    ui.add_sized([40.0, 20.0], DragValue::new(v).max_decimals(1).speed(0.1));
+    ui.add_sized([40.0, 20.0], DragValue::new(v).max_decimals(1).speed(0.05));
 }
 
 fn label_value(ui: &mut Ui, text: &str, v: &mut f32) {
@@ -208,6 +208,26 @@ macro_rules! impl_component_ui {
     };
 }
 
+pub fn option_value<T>(
+    ui: &mut Ui,
+    opt: &mut Option<T>,
+    default_value: T,
+    behaviour: fn(&mut Ui, &mut T),
+) {
+    let mut checked = opt.is_some();
+    egui::Checkbox::without_text(&mut checked).ui(ui);
+
+    if checked && opt.is_none() {
+        *opt = Some(default_value);
+    }
+    if !checked && opt.is_some() {
+        *opt = None;
+    }
+    if let Some(value) = opt.as_mut() {
+        behaviour(ui, value);
+    }
+}
+
 pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
     let display_name = {
         let mut ret = format!(" #{}", id.index());
@@ -244,15 +264,21 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                 .striped(true)
                 .show(ui, |ui| {
                     ui.label("Roughness");
-                    ui.add(egui::Slider::new(&mut mat.mat.roughness, 0.0f32..=1.0f32));
+                    option_value(ui, &mut mat.roughness, 0.0, |ui, roughness| {
+                        ui.add(egui::Slider::new(roughness, 0.0f32..=1.0f32));
+                    });
                     ui.end_row();
 
                     ui.label("Metallic");
-                    ui.add(egui::Slider::new(&mut mat.mat.metallic, 0.0f32..=1.0f32));
+                    option_value(ui, &mut mat.metallic, 0.0, |ui, it| {
+                        ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
+                    });
                     ui.end_row();
 
                     ui.label("Reflectance");
-                    ui.add(egui::Slider::new(&mut mat.mat.reflectance, 0.0f32..=1.0f32));
+                    option_value(ui, &mut mat.reflectance, 0.0, |ui, it| {
+                        ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
+                    });
                     ui.end_row();
                 });
         });

@@ -115,7 +115,7 @@ impl Default for PointLight {
     fn default() -> Self {
         Self {
             color: Vec4::one(),
-            intensity: 0.5,
+            intensity: 1.0,
             distance: None,
             decay: 1.0,
         }
