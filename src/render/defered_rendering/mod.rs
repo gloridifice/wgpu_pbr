@@ -5,7 +5,7 @@ use bevy_ecs::{
     world::{FromWorld, World},
 };
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, BufferUsages, PipelineLayout,
+    BindGroup, BindGroupLayout, PipelineLayout,
     RenderPipeline, ShaderStages,
 };
 use write_g_buffer_pipeline::GBufferTexturesBindGroup;
@@ -15,11 +15,7 @@ use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_ini
 use super::{
     camera::CameraBuffer,
     light::{DynamicLightBindGroup, LightUnifromBuffer},
-    material::{
-        pbr::{GltfMaterial, PBRMaterialBindGroupLayout},
-        UploadedMaterial,
-    },
-    FullScreenVertexShader, UploadedImageWithSampler,
+    FullScreenVertexShader,
 };
 
 pub mod write_g_buffer_pipeline;
