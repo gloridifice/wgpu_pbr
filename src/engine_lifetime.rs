@@ -14,16 +14,18 @@ use crate::render::light::{
     DynamicLightBindGroup, DynamicLights, PointLight,
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
-use crate::render::material::pbr::{GltfMaterial, PBRMaterial, PBRMaterialBindGroupLayout};
+use crate::render::material::pbr::{
+    sys_update_override_pbr_material_bind_group, GltfMaterial, PBRMaterial,
+    PBRMaterialBindGroupLayout,
+};
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
-    sys_update_override_pbr_material_bind_group, ColorRenderTarget, DefaultMainPipelineMaterial,
-    DepthRenderTarget, FullScreenVertexShader, GBufferGlobalBindGroup, MainPassObject,
-    MissingTexture, ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler,
-    WhiteTexture,
+    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
+    GBufferGlobalBindGroup, MainPassObject, MissingTexture, NormalDefaultTexture,
+    ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -70,6 +72,7 @@ impl State {
 
     pub fn init(&mut self) {
         self.insert_resource::<WhiteTexture>();
+        self.insert_resource::<NormalDefaultTexture>();
         self.insert_resource::<MissingTexture>();
         self.insert_resource::<BufferMaterialManager>();
         self.insert_resource::<RenderTargetSize>();
@@ -261,10 +264,7 @@ impl State {
                 CastShadow,
                 MainPassObject,
                 PBRMaterial {
-                    mat: GltfMaterial {
-                        base_color_texture: Some(Arc::clone(&white_image)),
-                        ..Default::default()
-                    },
+                    ..Default::default()
                 },
             ));
         }

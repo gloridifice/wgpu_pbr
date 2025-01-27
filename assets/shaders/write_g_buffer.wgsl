@@ -65,14 +65,11 @@ var tex_shadow_map: texture_depth_2d;
 var samp_shadow_map: sampler_comparison;
 
 // Material -----
-@group(1) @binding(0)
-var<uniform> pbr_mat: PBRMaterial;
-
-@group(1) @binding(1)
-var tex_0: texture_2d<f32>;
-
-@group(1) @binding(2)
-var samp_0: sampler;
+@group(1) @binding(0) var<uniform> pbr_mat: PBRMaterial;
+@group(1) @binding(1) var tex_0: texture_2d<f32>;
+@group(1) @binding(2) var samp_0: sampler;
+@group(1) @binding(3) var normal_tex: texture_2d<f32>;
+@group(1) @binding(4) var normal_samp: sampler;
 
 // Object -----
 @group(2) @binding(0)
@@ -98,7 +95,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let bitangent = cross(in.normal, in.tangent);
     let tbn_matrix = transpose(mat3x3<f32>(in.tangent, bitangent, in.normal));
 
-    let baseColor = textureSample(tex_0, samp_0, in.tex_coord);
+    let base_color = textureSample(tex_0, samp_0, in.tex_coord);
+    let normal = normalize(tbn_matrix * textureSample(normal_tex, normal_samp, in.tex_coord).xyz);
 
     // var light_space_pos = in.light_space_clip_pos;
     // var proj_coords = light_space_pos.xyz / light_space_pos.w;
@@ -112,8 +110,8 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
 
     var o: FragmentOutput;
     o.world_pos = vec4<f32>(in.world_pos, 1.0);
-    o.base_color = baseColor;
-    o.normal = vec4<f32>(in.normal, 1.0);
+    o.base_color = base_color;
+    o.normal = vec4<f32>(normal, 1.0);
     // o.tex_coord = in.tex_coord;
 
     let metallic = pbr_mat.metallic;

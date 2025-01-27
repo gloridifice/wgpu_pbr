@@ -70,7 +70,7 @@ fn calculate_light(
     world2camera: vec3<f32>,
 ) -> vec3<f32> {
     let reflectance = surface.reflectance;
-    let roughness = surface.roughness;
+    let roughness = clamp(surface.roughness, 0.089, 1.0);
     let metallic = surface.metallic;
     let normal = surface.normal;
     let base_color = surface.base_color;
@@ -81,17 +81,19 @@ fn calculate_light(
     let nDotV = max(dot(normal, world2camera), 0.0);
     let hDotV = max(dot(half, world2camera), 0.0);
 
+    let diffuse_color = (1.0 - metallic) * base_color;
+
     // Schlick Fresnel Function
     let f0: vec3<f32> = vec3<f32>(0.16 * pow2(reflectance) * (1.0 - metallic)) + base_color * metallic;
     let fresnel: vec3<f32> = f0 + (vec3<f32>(1.0) + f0) * pow5(1.0 - hDotV);
 
     // ! Diffuse BRDF -------------
-    let diffuse_brdf = base_color / PI;
+    let diffuse_brdf = diffuse_color / PI;
 
     // ! Specular BRDF ------------
     // - GGX Normal Distribution Function
     let roughness2 = pow2(roughness);
-    let D_GGX = roughness2 / ((PI * pow2(pow2(nDotH) * (roughness2 - 1.0) + 1.0)) + 0.0001);
+    let D_GGX = roughness2 / (PI * pow2(pow2(nDotH) * (roughness2 - 1.0) + 1.0));
 
     // - Geometry Function
     // V = G / (4.0 * nDotL * nDotV);
