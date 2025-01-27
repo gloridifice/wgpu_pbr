@@ -15,8 +15,8 @@ use crate::cgmath_ext::{Vec4, Vector4Ext};
 use crate::engine_lifetime::Name;
 use crate::render::camera::CameraController;
 use crate::render::light::PointLight;
+use crate::render::material::pbr::PBRMaterial;
 use crate::render::transform::Transform;
-use crate::render::PBRMaterial;
 
 #[derive(Resource)]
 pub struct EguiConfig {

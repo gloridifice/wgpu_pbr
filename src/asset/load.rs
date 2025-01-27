@@ -1,6 +1,7 @@
 use std::{fs::File, io::Read, sync::Arc};
 
-use crate::render::{self, GltfMaterial, Model, Primitive, UploadedImageWithSampler, Vertex};
+use crate::render::material::pbr::GltfMaterial;
+use crate::render::{self, Model, Primitive, UploadedImageWithSampler, Vertex};
 use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
@@ -96,6 +97,10 @@ impl Loadable for Model {
                         .read_normals()
                         .map(|v| v.collect::<Vec<_>>())
                         .unwrap_or_default();
+                    let tangents = reader
+                        .read_normals()
+                        .map(|v| v.collect::<Vec<_>>())
+                        .unwrap_or_default();
                     let tex_coords = reader
                         .read_tex_coords(0)
                         .map(|v| v.into_f32().collect::<Vec<_>>())
@@ -113,6 +118,7 @@ impl Loadable for Model {
                         let v = Vertex {
                             position: *positions.get(i).unwrap_or(&[0.0; 3]),
                             normal: *normals.get(i).unwrap_or(&[0.0; 3]),
+                            tangent: *tangents.get(i).unwrap_or(&[0.0; 3]),
                             color: *colors.get(i).unwrap_or(&[0.0; 4]),
                             tex_coord: *tex_coords.get(i).unwrap_or(&[0.0; 2]),
                         };

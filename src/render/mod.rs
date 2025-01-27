@@ -7,9 +7,15 @@ use bevy_ecs::{
     world::{FromWorld, Mut, World},
 };
 use camera::CameraBuffer;
-use defered_rendering::{MainPipeline, UploadedPBRMaterial};
+use defered_rendering::MainPipeline;
 use light::LightUnifromBuffer;
-use material::UploadedMaterial;
+use material::{
+    pbr::{
+        GltfMaterial, PBRMaterial, PBRMaterialBindGroupLayout, PBRMaterialOverride,
+        UploadedPBRMaterial,
+    },
+    UploadedMaterial,
+};
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
@@ -21,7 +27,7 @@ use wgpu::{
 
 use crate::{
     asset::{load::Loadable, AssetPath},
-    bg_descriptor, bg_layout_descriptor,
+    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
     macro_utils::BGLEntry,
     wgpu_init, RenderState,
 };
@@ -210,17 +216,6 @@ pub struct MeshRenderer {
     pub transform_buffer: Arc<Buffer>,
 }
 
-#[derive(Component, Clone, Default)]
-pub struct PBRMaterialOverride {
-    pub material: Option<Arc<UploadedPBRMaterial>>,
-}
-
-#[derive(Component, Clone)]
-#[require(PBRMaterialOverride)]
-pub struct PBRMaterial {
-    pub mat: GltfMaterial,
-}
-
 #[derive(Component, Clone)]
 pub struct MainPassObject;
 
@@ -326,16 +321,22 @@ impl MeshRenderer {
 pub struct Vertex {
     pub position: [f32; 3],
     pub normal: [f32; 3],
+    pub tangent: [f32; 3],
     pub color: [f32; 4],
     pub tex_coord: [f32; 2],
 }
 
-unsafe impl bytemuck::Zeroable for Vertex {}
-unsafe impl bytemuck::Pod for Vertex {}
+impl_pod_zeroable!(Vertex);
 
 impl Vertex {
-    const ATTRIBS: [wgpu::VertexAttribute; 4] =
-        wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x4, 3 => Float32x2];
+    #[rustfmt::skip]
+    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
+        0 => Float32x3, // Position
+        1 => Float32x3, // Normal
+        2 => Float32x3, // Tangent
+        3 => Float32x4, // Color
+        4 => Float32x2, // UV0
+    ];
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
             array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -372,14 +373,6 @@ pub struct UploadedImage {
     pub view: TextureView,
 }
 
-#[derive(Clone)]
-pub struct GltfMaterial {
-    pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
-    pub roughness: f32,
-    pub metallic: f32,
-    pub reflectance: f32,
-}
-
 pub struct Model {
     pub meshes: Vec<Mesh>,
 }
@@ -394,17 +387,6 @@ pub struct Primitive {
     pub indices_start: u32,
     pub indices_num: u32,
     pub material: Option<GltfMaterial>,
-}
-
-impl Default for GltfMaterial {
-    fn default() -> Self {
-        Self {
-            base_color_texture: None,
-            roughness: 1.0,
-            metallic: 0.0,
-            reflectance: 0.5,
-        }
-    }
 }
 
 impl Mesh {
@@ -551,9 +533,6 @@ impl UploadedImageWithSampler {
 pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
 
 #[derive(Resource, Clone)]
-pub struct PBRMaterialBindGroupLayout(Arc<BindGroupLayout>);
-
-#[derive(Resource, Clone)]
 pub struct GBufferGlobalBindGroup {
     #[allow(unused)]
     pub layout: Arc<BindGroupLayout>,
@@ -570,21 +549,6 @@ impl FromWorld for ObjectBindGroupLayout {
                 0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Transform
             )));
         Self(object_bind_group_layout)
-    }
-}
-
-impl FromWorld for PBRMaterialBindGroupLayout {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let material_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
-                ["Material Bind Group Layout"]
-                0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
-                1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: true });
-                2: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
-            )));
-        Self(material_bind_group_layout)
     }
 }
 

@@ -1,6 +1,7 @@
 use super::prelude::*;
 
 pub mod buffer_material;
+pub mod pbr;
 
 pub trait UploadedMaterial {
     /// Return the material bind group

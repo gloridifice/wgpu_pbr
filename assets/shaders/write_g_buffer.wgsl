@@ -1,17 +1,19 @@
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) color: vec4<f32>,
-    @location(3) tex_coord: vec2<f32>,
+    @location(2) tangent: vec3<f32>,
+    @location(3) color: vec4<f32>,
+    @location(4) tex_coord: vec2<f32>,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) color: vec4<f32>,
     @location(1) normal: vec3<f32>,
-    @location(2) tex_coord: vec2<f32>,
-    @location(3) world_pos: vec3<f32>,
-    @location(4) light_space_clip_pos: vec4<f32>,
+    @location(2) tangent: vec3<f32>,
+    @location(3) tex_coord: vec2<f32>,
+    @location(4) world_pos: vec3<f32>,
+    @location(5) light_space_clip_pos: vec4<f32>,
 };
 
 struct FragmentOutput{
@@ -87,12 +89,15 @@ fn vs_main(
     out.tex_coord = model.tex_coord;
     out.light_space_clip_pos = light.view_proj * vec4<f32>(out.world_pos, 1.0);
     out.clip_position = camera.view_proj * vec4<f32>(out.world_pos, 1.0);
+    out.tangent = model.tangent;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
-    // let lightFactor = (dot(light.direction, in.normal) + 1.0) / 2.0 * light.color * light.intensity;
+    let bitangent = cross(in.normal, in.tangent);
+    let tbn_matrix = transpose(mat3x3<f32>(in.tangent, bitangent, in.normal));
+
     let baseColor = textureSample(tex_0, samp_0, in.tex_coord);
 
     // var light_space_pos = in.light_space_clip_pos;

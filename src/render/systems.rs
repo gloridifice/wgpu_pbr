@@ -7,9 +7,10 @@ use super::{
     },
     gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosPipeline},
     light::DynamicLightBindGroup,
+    material::pbr::PBRMaterialOverride,
     prelude::*,
     transform::Transform,
-    MainPassObject, PBRMaterialOverride,
+    MainPassObject,
 };
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};

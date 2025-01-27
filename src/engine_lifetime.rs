@@ -14,6 +14,7 @@ use crate::render::light::{
     DynamicLightBindGroup, DynamicLights, PointLight,
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
+use crate::render::material::pbr::{GltfMaterial, PBRMaterial, PBRMaterialBindGroupLayout};
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
@@ -21,8 +22,8 @@ use crate::render::transform::WorldTransform;
 use crate::render::{
     sys_update_override_pbr_material_bind_group, ColorRenderTarget, DefaultMainPipelineMaterial,
     DepthRenderTarget, FullScreenVertexShader, GBufferGlobalBindGroup, MainPassObject,
-    MissingTexture, ObjectBindGroupLayout, PBRMaterial, PBRMaterialBindGroupLayout,
-    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
+    MissingTexture, ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler,
+    WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -260,7 +261,7 @@ impl State {
                 CastShadow,
                 MainPassObject,
                 PBRMaterial {
-                    mat: render::GltfMaterial {
+                    mat: GltfMaterial {
                         base_color_texture: Some(Arc::clone(&white_image)),
                         ..Default::default()
                     },
