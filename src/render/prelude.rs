@@ -1,8 +1,9 @@
 #[allow(unused)]
 pub use crate::{
+    bg_layout_descriptor,
     render::{
-        GBufferGlobalBindGroup, ObjectBindGroupLayout, PBRMaterialBindGroupLayout,
-        RenderTargetSize, UploadedImageWithSampler, Vertex,
+        GBufferGlobalBindGroup, ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler,
+        Vertex,
     },
     wgpu_init, RenderState,
 };
@@ -14,5 +15,5 @@ pub use bevy_ecs::world::FromWorld;
 #[allow(unused)]
 pub use wgpu::{
     BindGroup, BindGroupLayout, Buffer, ColorWrites, Extent3d, PipelineLayout, RenderPipeline,
-    TextureFormat, TextureUsages,
+    SamplerBindingType, ShaderStages, TextureFormat, TextureSampleType, TextureUsages,
 };

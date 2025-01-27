@@ -5,26 +5,12 @@ use wgpu::{BindingResource, RenderPassColorAttachment, Sampler, ShaderStages};
 use crate::{
     bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
     macro_utils::BGLEntry,
-    render::{prelude::*, GltfMaterial, UploadedImage},
+    render::{
+        material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout},
+        prelude::*,
+        UploadedImage,
+    },
 };
-
-#[derive(Clone, Copy, Debug)]
-pub struct RawPBRMaterial {
-    pub metallic: f32,
-    pub roughness: f32,
-    pub reflectance: f32,
-}
-impl_pod_zeroable!(RawPBRMaterial);
-
-impl From<&GltfMaterial> for RawPBRMaterial {
-    fn from(value: &GltfMaterial) -> Self {
-        Self {
-            metallic: value.metallic,
-            roughness: value.roughness,
-            reflectance: value.reflectance,
-        }
-    }
-}
 
 #[derive(Resource, Clone)]
 pub struct GBufferTexturesBindGroup {
