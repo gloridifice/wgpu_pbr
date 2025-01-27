@@ -3,10 +3,10 @@ use std::sync::Arc;
 use wgpu::{BindingResource, RenderPassColorAttachment, Sampler, ShaderStages};
 
 use crate::{
-    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
+    bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
     render::{
-        material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout},
+        material::pbr::PBRMaterialBindGroupLayout,
         prelude::*,
         UploadedImage,
     },

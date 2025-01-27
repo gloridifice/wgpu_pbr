@@ -15,7 +15,7 @@ use crate::render::light::{
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::material::pbr::{
-    sys_update_override_pbr_material_bind_group, GltfMaterial, PBRMaterial,
+    sys_update_override_pbr_material_bind_group, PBRMaterial,
     PBRMaterialBindGroupLayout,
 };
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
