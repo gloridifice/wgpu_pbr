@@ -16,7 +16,7 @@ struct VertexOutput {
     @location(5) light_space_clip_pos: vec4<f32>,
 };
 
-struct FragmentOutput{
+struct FragmentOutput {
     @location(0) world_pos: vec4<f32>,
     @location(1) normal: vec4<f32>,
     // @location(2) tex_coord: vec2<f32>,
@@ -79,24 +79,29 @@ var<uniform> transform: TransformUniform;
 fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
+    let model_mat = transform.model;
+
     var out: VertexOutput;
     out.color = model.color;
-    out.world_pos = (transform.model * vec4<f32>(model.position, 1.0)).xyz;
+    out.world_pos = (model_mat * vec4<f32>(model.position, 1.0)).xyz;
     out.normal = transform.normal * model.normal;
+    out.tangent = transform.normal * model.tangent;
     out.tex_coord = model.tex_coord;
     out.light_space_clip_pos = light.view_proj * vec4<f32>(out.world_pos, 1.0);
     out.clip_position = camera.view_proj * vec4<f32>(out.world_pos, 1.0);
-    out.tangent = model.tangent;
     return out;
 }
 
 @fragment
 fn fs_main(in: VertexOutput) -> FragmentOutput {
-    let bitangent = cross(in.normal, in.tangent);
-    let tbn_matrix = transpose(mat3x3<f32>(in.tangent, bitangent, in.normal));
-
     let base_color = textureSample(tex_0, samp_0, in.tex_coord);
-    let normal = normalize(tbn_matrix * textureSample(normal_tex, normal_samp, in.tex_coord).xyz);
+
+    let n_normal = normalize(in.normal);
+    let n_tangent = normalize(in.tangent);
+    let bitangent = cross(n_normal, n_tangent);
+    let tbn = mat3x3<f32>(n_tangent, bitangent, n_normal);
+    let tangent_space_normal = textureSample(normal_tex, normal_samp, in.tex_coord).xyz * 2.0 - 1.0;
+    let normal = normalize(tbn * tangent_space_normal);
 
     // var light_space_pos = in.light_space_clip_pos;
     // var proj_coords = light_space_pos.xyz / light_space_pos.w;
@@ -111,8 +116,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var o: FragmentOutput;
     o.world_pos = vec4<f32>(in.world_pos, 1.0);
     o.base_color = base_color;
-    o.normal = vec4<f32>(normal, 1.0);
-    // o.tex_coord = in.tex_coord;
+    o.normal = vec4<f32>(normal * 0.5 + vec3<f32>(0.5), 1.0);
 
     let metallic = pbr_mat.metallic;
     let roughness = pbr_mat.roughness;

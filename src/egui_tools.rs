@@ -4,6 +4,7 @@ use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::world::World;
 use cgmath::{Deg, Euler};
+use egui::emath::easing::linear;
 use egui::{Color32, Context, DragValue, Ui, Widget};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
@@ -14,7 +15,7 @@ use winit::window::Window;
 use crate::cgmath_ext::{Vec4, Vector4Ext};
 use crate::engine_lifetime::Name;
 use crate::render::camera::CameraController;
-use crate::render::light::PointLight;
+use crate::render::light::{ParallelLight, PointLight};
 use crate::render::material::pbr::PBRMaterial;
 use crate::render::transform::Transform;
 
@@ -279,6 +280,25 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                     option_value(ui, &mut mat.reflectance, 0.0, |ui, it| {
                         ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
                     });
+                    ui.end_row();
+                });
+        });
+
+        impl_component_ui!(ParallelLight, world, id, ui, ui, light, {
+            egui::Grid::new(format!("ParallelLight {}", id.index()))
+                .num_columns(2)
+                .striped(true)
+                .show(ui, |ui| {
+                    ui.label("Intensity");
+                    value(ui, &mut light.intensity);
+                    ui.end_row();
+
+                    ui.label("Size");
+                    value(ui, &mut light.size);
+                    ui.end_row();
+
+                    ui.label("Color");
+                    color_vec4_srgba(ui, &mut light.color);
                     ui.end_row();
                 });
         });
