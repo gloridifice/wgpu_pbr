@@ -5,11 +5,7 @@ use wgpu::{BindingResource, RenderPassColorAttachment, Sampler, ShaderStages};
 use crate::{
     bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
-    render::{
-        material::pbr::PBRMaterialBindGroupLayout,
-        prelude::*,
-        UploadedImage,
-    },
+    render::{material::pbr::PBRMaterialBindGroupLayout, prelude::*, UploadedImage},
 };
 
 #[derive(Resource, Clone)]
@@ -54,7 +50,7 @@ impl GBufferTexturesBindGroup {
         layout: &BindGroupLayout,
     ) -> (Vec<GBufferTexture>, Arc<BindGroup>) {
         let textures: Vec<GBufferTexture> = vec![
-            ("World Pos", TextureFormat::Rgba8Unorm),
+            ("World Pos", TextureFormat::Rgba16Float),
             ("Normal", TextureFormat::Rgba8Unorm),
             // ("TexCoord", TextureFormat::Rg8Unorm),
             ("Base Color", TextureFormat::Rgba8Unorm),
@@ -181,7 +177,7 @@ impl FromWorld for WriteGBufferPipeline {
         let targets = [
             // World Position
             Some(wgpu_init::color_target_replace_write_all(
-                wgpu::TextureFormat::Rgba8Unorm,
+                wgpu::TextureFormat::Rgba16Float,
             )),
             // Normal
             Some(wgpu_init::color_target_replace_write_all(

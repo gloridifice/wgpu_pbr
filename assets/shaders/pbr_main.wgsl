@@ -112,7 +112,7 @@ fn calculate_light(
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
-    let normal: vec3<f32> = textureSample(normal_tex, g_samp, in.uv).xyz;
+    let normal: vec3<f32> = (textureSample(normal_tex, g_samp, in.uv).xyz) * 2.0 - vec3<f32>(1.0);
     // let tex_coord: vec2<f32> = textureSample(tex_coord_tex, g_samp, in.uv).xy;
     let base_color: vec4<f32> = textureSample(base_color_tex, g_samp, in.uv);
     let pbr_parameters = textureSample(pbr_parameters_tex, g_samp, in.uv);
@@ -161,5 +161,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     surface_color += vec3<f32>(0.1);
 
     return vec4<f32>(surface_color, base_color.a);
+    // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), base_color.a);
 }
 
