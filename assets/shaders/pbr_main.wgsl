@@ -109,6 +109,11 @@ fn calculate_light(
     return ret;
 }
 
+fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
+    let clamped = clamp(perceptual_roughness, 0.089, 1.0);
+    return clamped * clamped;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
@@ -117,9 +122,11 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let base_color: vec4<f32> = textureSample(base_color_tex, g_samp, in.uv);
     let pbr_parameters = textureSample(pbr_parameters_tex, g_samp, in.uv);
     let metallic: f32 = pbr_parameters.x;
-    let roughness: f32 = pbr_parameters.y;
+    let perceptual_roughness: f32 = pbr_parameters.y;
     let reflectance: f32 = pbr_parameters.z;
     let ambient_occlusion: f32 = pbr_parameters.w;
+
+    let roughness = perceptual_roughness_to_roughness(perceptual_roughness);
 
     if base_color.a == 0.0 {
         discard;
