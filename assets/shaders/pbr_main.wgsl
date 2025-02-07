@@ -168,6 +168,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     surface_color += vec3<f32>(0.1);
 
     return vec4<f32>(surface_color, base_color.a);
+    // return vec4<f32>(world_pos, base_color.a);
     // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), base_color.a);
 }
-
