@@ -4,7 +4,8 @@ use cgmath::{ortho, Matrix4, Point3};
 use wgpu::{include_wgsl, util::DeviceExt, BufferUsages, ShaderStages};
 
 use crate::{
-    bg_descriptor, bg_layout_descriptor, cgmath_ext::Vec4, impl_pod_zeroable, macro_utils::BGLEntry,
+    asset::AssetPath, bg_descriptor, bg_layout_descriptor, cgmath_ext::Vec4, impl_pod_zeroable,
+    macro_utils::BGLEntry,
 };
 
 use super::{
@@ -14,6 +15,7 @@ use super::{
         register_buffer_material_by_world, BufferMaterialData, UploadedBufferMaterialInstance,
     },
     prelude::*,
+    shader_loader::ShaderLoader,
     ColorRenderTarget,
 };
 
@@ -121,6 +123,11 @@ impl FromWorld for GizmosGlobalBindGroup {
 
 impl FromWorld for GizmosPipeline {
     fn from_world(world: &mut World) -> Self {
+        let shader_source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("gizmos"))
+            .unwrap();
+
         let bg_layout_desc = bg_layout_descriptor! {
             ["Gizmos"]
             0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
@@ -143,7 +150,10 @@ impl FromWorld for GizmosPipeline {
             }),
         );
 
-        let shader = device.create_shader_module(include_wgsl!("../../assets/shaders/gizmos.wgsl"));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Gizmos"),
+            source: shader_source,
+        });
 
         let pipeline = Arc::new(
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -165,7 +175,7 @@ impl FromWorld for GizmosPipeline {
                 },
                 fragment: Some(wgpu::FragmentState {
                     module: &shader,
-                    entry_point: "fs_main",
+                    entry_point: Some("fs_main"),
                     targets: &[Some(wgpu::ColorTargetState {
                         format: rs.config.format,
                         blend: Some(wgpu::BlendState::ALPHA_BLENDING),

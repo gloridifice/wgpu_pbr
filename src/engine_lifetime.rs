@@ -21,6 +21,7 @@ use crate::render::material::pbr::{
 };
 use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
+use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
@@ -74,6 +75,7 @@ impl State {
     }
 
     pub fn init(&mut self) {
+        self.insert_resource::<ShaderLoader>();
         self.insert_resource::<WhiteTexture>();
         self.insert_resource::<NormalDefaultTexture>();
         self.insert_resource::<DFGTexture>();
@@ -307,6 +309,9 @@ impl State {
             // This happaens when a frame takes too long to present
             Err(wgpu::SurfaceError::Timeout) => {
                 log::warn!("Surface timeout")
+            }
+            Err(wgpu::SurfaceError::Other) => {
+                log::warn!("Other Error of wgpu surface occeur!")
             }
         }
     }

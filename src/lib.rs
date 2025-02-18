@@ -50,7 +50,7 @@ pub struct RenderState {
 
 impl App {
     pub fn new() -> App {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
@@ -150,10 +150,6 @@ impl State {
 
         Self {
             window: Arc::clone(&window),
-            // materials: Assets::new(),
-            // material_instances: Assets::new(),
-            // meshes: Assets::new(),
-            // images: Assets::new(),
             world,
         }
     }
@@ -187,8 +183,6 @@ impl State {
             rs.config.width = new_size.width;
             rs.config.height = new_size.height;
             rs.surface.configure(&rs.device, &rs.config);
-            // self.depth_texture =
-            //     RenderState::create_depth_texture(&rs.device, new_size.width, new_size.height, Some(wgpu::CompareFunction::LessEqual));
         }
     }
 }
@@ -247,6 +241,8 @@ impl RenderState {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
+        surface.configure(&device, &config);
 
         Self {
             device,

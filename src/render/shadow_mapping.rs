@@ -7,9 +7,14 @@ use bevy_ecs::{
 };
 use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages};
 
-use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState};
+use crate::{
+    asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
+};
 
-use super::{light::LightUnifromBuffer, ObjectBindGroupLayout, UploadedImageWithSampler, Vertex};
+use super::{
+    light::LightUnifromBuffer, shader_loader::ShaderLoader, ObjectBindGroupLayout,
+    UploadedImageWithSampler, Vertex,
+};
 
 #[derive(Resource)]
 pub struct ShadowMap {
@@ -57,6 +62,10 @@ impl FromWorld for ShadowMapGlobalBindGroup {
 
 impl FromWorld for ShadowMappingPipeline {
     fn from_world(world: &mut world::World) -> Self {
+        let shader_source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("light_depth_map"))
+            .unwrap();
         let render_state = world.resource::<RenderState>();
         let device = &render_state.device;
         let global_bg_layout = world.resource::<ShadowMapGlobalBindGroup>();
@@ -70,9 +79,10 @@ impl FromWorld for ShadowMappingPipeline {
             }),
         );
 
-        let shader = device.create_shader_module(wgpu::include_wgsl!(
-            "../../assets/shaders/light_depth_map.wgsl"
-        ));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Shadow Mapping Light Shader"),
+            source: shader_source,
+        });
 
         let pipeline = Arc::new(
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -80,7 +90,7 @@ impl FromWorld for ShadowMappingPipeline {
                 layout: Some(&layout),
                 vertex: wgpu::VertexState {
                     module: &shader,
-                    entry_point: "vs_main",
+                    entry_point: Some("vs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     buffers: &[Vertex::desc()],
                 },
@@ -133,18 +143,3 @@ impl FromWorld for ShadowMap {
         })
     }
 }
-
-// #[derive(Resource, Clone)]
-// pub struct ShadowMapEguiTextureId(pub egui::TextureId);
-
-// impl FromWorld for ShadowMapEguiTextureId {
-//     fn from_world(world: &mut world::World) -> Self {
-//         world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
-//             let image = world.resource::<ShadowMap>();
-//             let rs = world.resource::<crate::RenderState>();
-//             let id = egui.renderer
-//                 .register_native_texture_with_sampler_options(&rs.device, &image.image.view);
-//             Self(id)
-//         })
-//     }
-// }

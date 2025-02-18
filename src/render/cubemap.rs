@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use cgmath::{Deg, Point3, Rad, Vector3};
 use wgpu::{
-    include_wgsl, util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, ImageCopyTexture,
-    RenderPipeline, Sampler, ShaderModule, ShaderStages, TextureDescriptor, TextureFormat,
-    TextureUsages, VertexBufferLayout,
+    include_wgsl, util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline,
+    Sampler, ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,
+    VertexBufferLayout,
 };
 
 use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry};
@@ -46,7 +46,7 @@ impl CubeMapConverter {
             layout: Some(&layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[VertexBufferLayout {
                     array_stride: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
@@ -71,7 +71,7 @@ impl CubeMapConverter {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some((format).into())],
             }),
@@ -212,7 +212,7 @@ impl CubeMapConverter {
             });
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_vertex_buffer(0, self.vertices_buffer.slice(..));
-            render_pass.set_bind_group(0, matrix_bind_group, &[]);
+            render_pass.set_bind_group(0, matrix_bind_group.as_ref(), &[]);
             render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.draw(0..36, 0..1)
             //todo draw cube
@@ -220,13 +220,13 @@ impl CubeMapConverter {
 
         for (index, (_, image)) in direction_contexts.iter().enumerate() {
             encoder.copy_texture_to_texture(
-                ImageCopyTexture {
+                wgpu::TexelCopyTextureInfoBase {
                     texture: &image.texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d::ZERO,
                     aspect: wgpu::TextureAspect::All,
                 },
-                ImageCopyTexture {
+                wgpu::TexelCopyTextureInfoBase {
                     texture: &ret_texture,
                     mip_level: 0,
                     origin: wgpu::Origin3d {

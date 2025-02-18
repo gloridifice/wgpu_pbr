@@ -4,17 +4,18 @@ use bevy_ecs::{
     system::Resource,
     world::{FromWorld, World},
 };
-use wgpu::{
-    BindGroup, BindGroupLayout, PipelineLayout,
-    RenderPipeline, ShaderStages,
-};
+use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages};
 use write_g_buffer_pipeline::GBufferTexturesBindGroup;
 
-use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init, RenderState};
+use crate::{
+    asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init,
+    RenderState,
+};
 
 use super::{
     camera::CameraBuffer,
     light::{DynamicLightBindGroup, LightUnifromBuffer},
+    shader_loader::ShaderLoader,
     FullScreenVertexShader,
 };
 
@@ -63,11 +64,16 @@ impl FromWorld for MainGlobalBindGroup {
 
 impl FromWorld for MainPipeline {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
-        let rs = world.resource::<RenderState>();
-
+        let shader_source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("pbr_main"))
+            .unwrap();
+        let rs = &world.resource::<RenderState>();
         let device = &rs.device;
-        let shader = device
-            .create_shader_module(wgpu::include_wgsl!("../../../assets/shaders/pbr_main.wgsl"));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("PBR Main"),
+            source: shader_source,
+        });
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
 
         let bind_group_layouts = vec![

@@ -13,7 +13,7 @@ use super::{
     MainPassObject,
 };
 use egui_wgpu::ScreenDescriptor;
-use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
+use wgpu::{CommandEncoder, TextureView};
 use wgpu_init::copy_texture;
 use winit::window::Window;
 
@@ -70,7 +70,11 @@ pub fn sys_render_shadow_mapping_pass(
     });
 
     shadow_map_render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
-    shadow_map_render_pass.set_bind_group(0, &shadow_map_global_bind_group.bind_group, &[]);
+    shadow_map_render_pass.set_bind_group(
+        0,
+        Some(shadow_map_global_bind_group.bind_group.as_ref()),
+        &[],
+    );
     for mesh_renderer in mesh_renderers.iter() {
         mesh_renderer.draw_depth(&mut shadow_map_render_pass);
     }
@@ -110,7 +114,7 @@ pub fn sys_render_write_g_buffer_pass(
     });
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
-    render_pass.set_bind_group(0, &global_bind_group.bind_group, &[]);
+    render_pass.set_bind_group(0, Some(global_bind_group.bind_group.as_ref()), &[]);
 
     for (mesh_renderer, override_mat) in mesh_renderers.iter() {
         mesh_renderer.draw_main(
@@ -153,10 +157,9 @@ pub fn sys_render_main_pass(
     });
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
-    render_pass.set_bind_group(0, &g_buffer_bind_group.bind_group, &[]);
-    render_pass.set_bind_group(1, &main_global_bind_group.bind_group, &[]);
-    render_pass.set_bind_group(2, &dynamic_lights_bind_group.bind_group, &[]);
-
+    render_pass.set_bind_group(0, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(1, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
     render_pass.draw(0..3, 0..1);
 }
 
@@ -225,7 +228,7 @@ pub fn sys_render_post_processing(
             });
 
             render_pass.set_pipeline(&pipeline.pipeline);
-            render_pass.set_bind_group(0, &source, &[]);
+            render_pass.set_bind_group(0, Some(source.as_ref()), &[]);
             render_pass.draw(0..3, 0..1);
         }
     });
@@ -271,9 +274,9 @@ pub fn sys_render_gizmos(
         });
 
         render_pass.set_pipeline(&gizmos_pipeline.pipeline);
-        render_pass.set_bind_group(0, &gizmos_global_bind_group.bind_group, &[]);
+        render_pass.set_bind_group(0, gizmos_global_bind_group.bind_group.as_ref(), &[]);
         for (mesh_renderer, gizmos_mesh) in q_gizomos_meshes.iter() {
-            render_pass.set_bind_group(2, &mesh_renderer.object_bind_group, &[]);
+            render_pass.set_bind_group(2, mesh_renderer.object_bind_group.as_ref(), &[]);
             render_pass.set_bind_group(1, &gizmos_mesh.instance.bind_group, &[]);
             mesh_renderer.draw_primitives(&mut render_pass);
         }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::{system::Resource, world::FromWorld};
-use wgpu::{ShaderModule, TextureFormat};
+use wgpu::{hal::TextureUses, ShaderModule, TextureFormat};
 
 use crate::asset::load::Loadable;
 
@@ -47,13 +47,13 @@ pub fn generate_mip_map(
         layout: None,
         vertex: wgpu::VertexState {
             module: &shader,
-            entry_point: "vs_main",
+            entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
             module: &shader,
-            entry_point: "fs_main",
+            entry_point: Some("fs_main"),
             targets: &[Some(format.into())],
             compilation_options: Default::default(),
         }),
@@ -90,6 +90,7 @@ pub fn generate_mip_map(
                 mip_level_count: None,
                 base_array_layer: 0,
                 array_layer_count: None,
+                usage: None,
             })
         })
         .collect::<Vec<_>>();

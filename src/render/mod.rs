@@ -12,6 +12,7 @@ use material::{
     pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial},
     UploadedMaterial,
 };
+use shader_loader::ShaderLoader;
 use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
@@ -38,6 +39,7 @@ pub mod material;
 pub mod mipmap;
 pub mod post_processing;
 pub mod prelude;
+pub mod shader_loader;
 pub mod shadow_mapping;
 pub mod systems;
 pub mod transform;
@@ -168,13 +170,16 @@ pub fn create_depth_texture(
 
 impl FromWorld for FullScreenVertexShader {
     fn from_world(world: &mut World) -> Self {
-        let shader =
-            world
-                .resource::<RenderState>()
-                .device
-                .create_shader_module(wgpu::include_wgsl!(
-                    "../../assets/shaders/fullscreen_vertex_shader.wgsl"
-                ));
+        let source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("fullscreen_vertex"))
+            .unwrap();
+        let shader = world.resource::<RenderState>().device.create_shader_module(
+            wgpu::ShaderModuleDescriptor {
+                label: Some("Fullscreen Vertex Shader"),
+                source,
+            },
+        );
         Self {
             module: Arc::new(shader),
         }
@@ -251,7 +256,7 @@ impl MeshRenderer {
             return;
         };
 
-        render_pass.set_bind_group(1, &self.object_bind_group, &[]);
+        render_pass.set_bind_group(1, self.object_bind_group.as_ref(), &[]);
         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         for primitive in mesh.primitives.iter() {
@@ -272,12 +277,12 @@ impl MeshRenderer {
 
         render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
         render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.set_bind_group(2, &self.object_bind_group, &[]);
+        render_pass.set_bind_group(2, self.object_bind_group.as_ref(), &[]);
 
         let mut last_material: Option<Arc<UploadedPBRMaterial>> = None;
 
         if let Some(ove) = override_material {
-            render_pass.set_bind_group(1, &ove.bind_group, &[]);
+            render_pass.set_bind_group(1, ove.bind_group.as_ref(), &[]);
         }
         for primitive in mesh.primitives.iter() {
             if override_material.is_none() {
@@ -507,7 +512,7 @@ impl UploadedImageWithSampler {
         };
 
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfoBase {
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,

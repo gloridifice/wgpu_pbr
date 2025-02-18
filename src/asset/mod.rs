@@ -18,6 +18,14 @@ impl AssetPath {
             AssetPath::Assets(p) => format!("assets/{}", p),
         }
     }
+    /// Start with `assets/shaders/`
+    pub fn new_shader_wgsl(path: &str) -> Self {
+        let mut path = path.to_string();
+        if !path.ends_with(".wgsl") {
+            path.push_str(".wgsl");
+        };
+        AssetPath::Assets(format!("shaders/{}", path))
+    }
 }
 
 pub struct Assets<T> {

@@ -1,6 +1,6 @@
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
-    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, ImageCopyTexture, Origin3d,
+    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, Origin3d,
     PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
     RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
     TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
@@ -137,7 +137,7 @@ pub fn full_screen_pipeline_desc<'a>(
         layout: Some(layout),
         vertex: wgpu::VertexState {
             module: vert,
-            entry_point: "vs_main",
+            entry_point: Some("vs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             buffers: &[],
         },
@@ -158,7 +158,7 @@ pub fn full_screen_pipeline_desc<'a>(
         },
         fragment: Some(wgpu::FragmentState {
             module: &frag,
-            entry_point: "fs_main",
+            entry_point: Some("fs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
         }),
@@ -181,7 +181,7 @@ pub fn vertex_state<'a>(
 ) -> VertexState<'a> {
     VertexState {
         module,
-        entry_point: "vs_main",
+        entry_point: Some("vs_main"),
         compilation_options: PipelineCompilationOptions::default(),
         buffers,
     }
@@ -251,13 +251,13 @@ pub fn copy_texture(
     size: Extent3d,
 ) {
     encoder.copy_texture_to_texture(
-        ImageCopyTexture {
+        wgpu::TexelCopyTextureInfoBase {
             texture: source,
             mip_level: 0,
             origin: Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
         },
-        ImageCopyTexture {
+        wgpu::TexelCopyTextureInfoBase {
             texture: target,
             mip_level: 0,
             origin: Origin3d::ZERO,

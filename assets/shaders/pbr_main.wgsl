@@ -1,7 +1,4 @@
-struct VertexOutput {
-    @builtin(position) clip_position: vec4<f32>,
-    @location(0) uv: vec2<f32>
-}
+#import vertex::{FullscreenV2F}
 
 struct CameraUniform {
     view_proj: mat4x4<f32>,
@@ -115,7 +112,7 @@ fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
     let normal: vec3<f32> = (textureSample(normal_tex, g_samp, in.uv).xyz) * 2.0 - vec3<f32>(1.0);
     // let tex_coord: vec2<f32> = textureSample(tex_coord_tex, g_samp, in.uv).xy;
