@@ -32,6 +32,3 @@ bevy_reflect = "0.15.1"
 [dependencies.gltf]
 version = "1.4"
 features = ["extras", "names"]
-
-[workspace]
-members = ["crates/wgpu_utils"]
