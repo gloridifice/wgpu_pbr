@@ -55,10 +55,7 @@ impl GBufferTexturesBindGroup {
     ) -> (Vec<GBufferTexture>, Arc<BindGroup>) {
         let textures: Vec<GBufferTexture> = vec![
             ("World Pos", TextureFormat::Rgba16Float),
-            ("Normal", TextureFormat::Rgba8Unorm),
-            // ("TexCoord", TextureFormat::Rg8Unorm),
-            ("Base Color", TextureFormat::Rgba8Unorm),
-            ("PBR Parameters", TextureFormat::Rgba8Unorm),
+            ("G-Buffer", TextureFormat::Rgba32Uint),
         ]
         .into_iter()
         .map(|(label, format)| create_g_buffer_image(label, device, size, format))
@@ -69,9 +66,6 @@ impl GBufferTexturesBindGroup {
             0: BindingResource::Sampler(&sampler);
             1: BindingResource::TextureView(&textures[0].image.view);
             2: BindingResource::TextureView(&textures[1].image.view);
-            // 3: BindingResource::TextureView(&textures[2].image.view);
-            3: BindingResource::TextureView(&textures[2].image.view);
-            4: BindingResource::TextureView(&textures[3].image.view);
         }));
 
         (textures, bind_group)
@@ -99,10 +93,7 @@ impl GBufferTexturesBindGroup {
             ["GBuffert Textures"]
             0: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::NonFiltering); // Universal Sampler
             1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // World Pos
-            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // Normal
-            // 3: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // TextureCoord
-            3: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // Base Color
-            4: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // PBR Parameters
+            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Uint); // G-Buffer
         }));
         let (textures, bind_group) =
             Self::create_textures_and_bind_groups(device, size, &sampler, &layout);
@@ -188,18 +179,12 @@ impl FromWorld for WriteGBufferPipeline {
             Some(wgpu_init::color_target_replace_write_all(
                 wgpu::TextureFormat::Rgba16Float,
             )),
-            // Normal
-            Some(wgpu_init::color_target_replace_write_all(
-                wgpu::TextureFormat::Rgba8Unorm,
-            )),
-            // Base Color
-            Some(wgpu_init::color_target_replace_write_all(
-                wgpu::TextureFormat::Rgba8Unorm,
-            )),
-            // PBR Parameters
-            Some(wgpu_init::color_target_replace_write_all(
-                wgpu::TextureFormat::Rgba8Unorm,
-            )),
+            // G-Buffer
+            Some(wgpu::ColorTargetState {
+                format: wgpu::TextureFormat::Rgba32Uint,
+                blend: None,
+                write_mask: ColorWrites::ALL,
+            }),
         ];
 
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {

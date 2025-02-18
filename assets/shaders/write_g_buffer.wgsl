@@ -1,4 +1,6 @@
 #import vertex::{VertexInput}
+#import pbr_type::{ StandardMaterial, PBRSurface }
+#import pbr_type
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -12,12 +14,7 @@ struct VertexOutput {
 
 struct FragmentOutput {
     @location(0) world_pos: vec4<f32>,
-    @location(1) normal: vec4<f32>,
-    // @location(2) tex_coord: vec2<f32>,
-    // For PBR
-    @location(2) base_color: vec4<f32>,
-    @location(3) pbr_parameters: vec4<f32>, // 0: Metallic, 1: Roughness, 2: Reflectance, 3: Ambient occlusion
-    @location(4) emissive: vec4<f32>,
+    @location(1) g_buffer: vec4<u32>,
 }
 
 struct CameraUniform {
@@ -97,16 +94,18 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let tangent_space_normal = textureSample(normal_tex, normal_samp, in.tex_coord).xyz * 2.0 - 1.0;
     let normal = normalize(tbn * tangent_space_normal);
 
+    var surface: PBRSurface;
+    var material: StandardMaterial = pbr_type::standard_material_new();
+    surface.normal = normal;
+    material.base_color = base_color.xyz;
+    material.metallic = pbr_mat.metallic;
+    material.perceptual_roughness = pbr_mat.roughness;
+    material.reflectance = pbr_mat.reflectance;
+    surface.material = material;
+
     var o: FragmentOutput;
     o.world_pos = vec4<f32>(in.world_pos, 1.0);
-    o.base_color = base_color;
-    o.normal = vec4<f32>(normal * 0.5 + vec3<f32>(0.5), 1.0);
-
-    let metallic = pbr_mat.metallic;
-    let roughness = pbr_mat.roughness;
-    let reflectance = pbr_mat.reflectance;
-    o.pbr_parameters = vec4<f32>(metallic, roughness, reflectance, 0.0);
-    o.emissive = vec4<f32>(0.0);
+    o.g_buffer = pbr_type::pack_g_buffer(surface);
 
     return o;
 }

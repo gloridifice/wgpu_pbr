@@ -1,4 +1,6 @@
-#import vertex::{FullscreenV2F}
+#import vertex::{ FullscreenV2F }
+#import pbr_type
+#import pbr_type::{ PBRSurface }
 
 struct CameraUniform {
     view_proj: mat4x4<f32>,
@@ -22,20 +24,9 @@ struct PointLight {
     decay: f32,
 }
 
-struct PBRSurfaceContext {
-    base_color: vec3<f32>,
-    normal: vec3<f32>,
-    metallic: f32,
-    roughness: f32,
-    reflectance: f32,
-}
-
 @group(0) @binding(0) var g_samp: sampler;
 @group(0) @binding(1) var world_pos_tex: texture_2d<f32>;
-@group(0) @binding(2) var normal_tex: texture_2d<f32>;
-// @group(0) @binding(3) var tex_coord_tex: texture_2d<f32>;
-@group(0) @binding(3) var base_color_tex: texture_2d<f32>;
-@group(0) @binding(4) var pbr_parameters_tex: texture_2d<f32>;
+@group(0) @binding(2) var g_buffer_tex: texture_2d<u32>;
 
 @group(1) @binding(0) var<uniform> camera: CameraUniform;
 @group(1) @binding(1) var<uniform> light: LightUniform;
@@ -62,15 +53,15 @@ fn V_smith_ggx_correlated_fast(nDotV: f32, nDotL: f32, roughness: f32) -> f32 {
 fn calculate_light(
     light_color: vec3<f32>,
     light_diffuse_intensity: f32,
-    surface: PBRSurfaceContext,
+    surface: PBRSurface,
     world2light: vec3<f32>,
     world2camera: vec3<f32>,
 ) -> vec3<f32> {
-    let reflectance = surface.reflectance;
-    let roughness = clamp(surface.roughness, 0.089, 1.0);
-    let metallic = surface.metallic;
-    let normal = surface.normal;
-    let base_color = surface.base_color;
+    let reflectance: f32 = surface.material.reflectance;
+    let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
+    let metallic: f32 = surface.material.metallic;
+    let normal: vec3<f32> = surface.normal;
+    let base_color: vec3<f32> = surface.material.base_color;
 
     let nDotL = max(dot(normal, world2light), 0.0);
     let half = normalize(world2light + world2camera);
@@ -106,30 +97,19 @@ fn calculate_light(
     return ret;
 }
 
-fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
-    let clamped = clamp(perceptual_roughness, 0.089, 1.0);
-    return clamped * clamped;
-}
-
 @fragment
 fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
-    let normal: vec3<f32> = (textureSample(normal_tex, g_samp, in.uv).xyz) * 2.0 - vec3<f32>(1.0);
-    // let tex_coord: vec2<f32> = textureSample(tex_coord_tex, g_samp, in.uv).xy;
-    let base_color: vec4<f32> = textureSample(base_color_tex, g_samp, in.uv);
-    let pbr_parameters = textureSample(pbr_parameters_tex, g_samp, in.uv);
-    let metallic: f32 = pbr_parameters.x;
-    let perceptual_roughness: f32 = pbr_parameters.y;
-    let reflectance: f32 = pbr_parameters.z;
-    let ambient_occlusion: f32 = pbr_parameters.w;
+    let g_buffer: vec4<u32> = textureLoad(g_buffer_tex, vec2<i32>(in.clip_position.xy), 0);
 
-    let roughness = perceptual_roughness_to_roughness(perceptual_roughness);
-
-    if base_color.a == 0.0 {
+    if g_buffer.z == 0u {
         discard;
     }
+    // if g_buffer == vec4<u32>(0u) {
+    //     discard;
+    // }
 
-    let surface = PBRSurfaceContext(base_color.xyz, normal, metallic, roughness, reflectance);
+    let surface: PBRSurface = pbr_type::unpack_g_buffer(g_buffer);
 
     var surface_color = vec3<f32>(0.0);
 
@@ -164,7 +144,8 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     }
     surface_color += vec3<f32>(0.1);
 
-    return vec4<f32>(surface_color, base_color.a);
-    // return vec4<f32>(world_pos, base_color.a);
-    // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), base_color.a);
+    return vec4<f32>(surface_color, 1.0);
+    // return vec4<f32>(surface.material.base_color, 1.0);
+    // return vec4<f32>(world_pos, 1.0);
+    // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), 1.0);
 }
