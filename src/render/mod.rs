@@ -29,10 +29,13 @@ use crate::{
 };
 
 pub mod camera;
+pub mod cubemap;
 pub mod defered_rendering;
+pub mod dfg;
 pub mod gizmos;
 pub mod light;
 pub mod material;
+pub mod mipmap;
 pub mod post_processing;
 pub mod prelude;
 pub mod shadow_mapping;

@@ -95,6 +95,16 @@ impl FromWorld for DynamicLightBindGroup {
         let layout_desc = bg_layout_descriptor! {
             ["Dynamic Light"]
             0: ShaderStages::FRAGMENT => BGLEntry::StorageBuffer(true);
+            // // DFG Sampler
+            // 1: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Filtering);
+            // // IBL DFG LUT
+            // 2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true });
+            // // Env Cubemap Sampler
+            // 3: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Filtering);
+            // // Environment Cubemap
+            // 4: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true });
+            // // Sepharical Harmonics Buffer
+            // 5: ShaderStages::FRAGMENT => BGLEntry::StorageBuffer(true);
         };
         let layout = Arc::new(device.create_bind_group_layout(&layout_desc));
 

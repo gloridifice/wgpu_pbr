@@ -4,10 +4,12 @@ use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
+use crate::render::cubemap::CubeMapConverter;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
 use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
+use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
 use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
@@ -15,9 +17,9 @@ use crate::render::light::{
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::material::pbr::{
-    sys_update_override_pbr_material_bind_group, PBRMaterial,
-    PBRMaterialBindGroupLayout,
+    sys_update_override_pbr_material_bind_group, PBRMaterial, PBRMaterialBindGroupLayout,
 };
+use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::systems::PassRenderContext;
@@ -51,6 +53,7 @@ use bevy_ecs::{
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
 use egui::Visuals;
+use wgpu::TextureFormat;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component, Clone)]
@@ -73,6 +76,8 @@ impl State {
     pub fn init(&mut self) {
         self.insert_resource::<WhiteTexture>();
         self.insert_resource::<NormalDefaultTexture>();
+        self.insert_resource::<DFGTexture>();
+        self.insert_resource::<DefaultMipmapGenShader>();
         self.insert_resource::<MissingTexture>();
         self.insert_resource::<BufferMaterialManager>();
         self.insert_resource::<RenderTargetSize>();
@@ -184,6 +189,12 @@ impl State {
             )
             .unwrap(),
         );
+
+        {
+            let device = &self.world.resource::<RenderState>().device;
+            let converter = CubeMapConverter::new(device, TextureFormat::Rgba8Unorm);
+            let texture = converter.render_hdir_to_cube_map(device, &white_image.view, 256);
+        }
 
         let mut queue = CommandQueue::from_world(&mut self.world);
 
