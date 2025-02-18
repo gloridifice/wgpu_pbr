@@ -1,9 +1,9 @@
 use wgpu::{
     util::{DeviceExt, TextureDataOrder},
-    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, PipelineCompilationOptions,
-    PipelineLayout, RenderPassColorAttachment, RenderPipelineDescriptor, SamplerDescriptor,
-    ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages, TextureView,
-    VertexBufferLayout, VertexState,
+    BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, ImageCopyTexture, Origin3d,
+    PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
+    RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
+    TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
 };
 
 use crate::{cgmath_ext::Vec4, render::UploadedImageWithSampler};
@@ -242,4 +242,27 @@ pub fn create_pure_color_texture(
         size,
         sampler,
     }
+}
+
+pub fn copy_texture(
+    encoder: &mut wgpu::CommandEncoder,
+    source: &wgpu::Texture,
+    target: &wgpu::Texture,
+    size: Extent3d,
+) {
+    encoder.copy_texture_to_texture(
+        ImageCopyTexture {
+            texture: source,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        ImageCopyTexture {
+            texture: target,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        size,
+    );
 }

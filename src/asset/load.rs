@@ -1,3 +1,4 @@
+use std::fs;
 use std::{fs::File, io::Read, sync::Arc};
 
 use crate::render::material::pbr::GltfMaterial;
@@ -5,6 +6,7 @@ use crate::render::{self, Model, Primitive, UploadedImageWithSampler, Vertex};
 use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
+use wgpu::{ShaderModel, ShaderModule};
 
 use super::AssetPath;
 
@@ -167,5 +169,18 @@ impl Loadable for Model {
             .collect::<Vec<render::Mesh>>();
 
         Ok(Model { meshes })
+    }
+}
+
+impl Loadable for ShaderModule {
+    fn load(path: AssetPath, world: &mut World) -> Result<Self> {
+        let path = path.final_path();
+        let rs = &world.resource::<RenderState>();
+        let device = &rs.device;
+        let wgsl_string = fs::read_to_string(path)?;
+        Ok(device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(wgsl_string.into()),
+        }))
     }
 }

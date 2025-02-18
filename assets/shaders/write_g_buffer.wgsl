@@ -103,16 +103,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let tangent_space_normal = textureSample(normal_tex, normal_samp, in.tex_coord).xyz * 2.0 - 1.0;
     let normal = normalize(tbn * tangent_space_normal);
 
-    // var light_space_pos = in.light_space_clip_pos;
-    // var proj_coords = light_space_pos.xyz / light_space_pos.w;
-
-    // let flip_correction = vec2<f32>(0.5, -0.5);
-
-    // var uv = proj_coords.xy * flip_correction + vec2<f32>(0.5); // reverse y and map [-1, 1] to [0, 1]
-    // var shadow = textureSampleCompare(tex_shadow_map, samp_shadow_map, uv, proj_coords.z);
-    // let shadow_color = vec3<f32>(0.5);
-    // var shadow_factor = mix(shadow_color, vec3<f32>(1.0), shadow);
-
     var o: FragmentOutput;
     o.world_pos = vec4<f32>(in.world_pos, 1.0);
     o.base_color = base_color;
@@ -125,15 +115,4 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     o.emissive = vec4<f32>(0.0);
 
     return o;
-}
-
-// Range [0.0, 1.0]: 0.0 in shadow, 1.0 not in shadow
-fn calculate_shadow(light_space_pos: vec4<f32>) -> f32 {
-    // var proj_coords = light_space_pos.xyz / light_space_pos.w;
-    // proj_coords = proj_coords * 0.5 + 0.5;
-    // var closest_depth = textureSample(tex_shadow_map, samp_shadow_map, proj_coords.xy).x;
-    // var current_depth = proj_coords.z;
-
-    // var shadow = select(1., 0., current_depth > closest_depth);
-    return 1.0;
 }

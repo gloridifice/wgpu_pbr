@@ -14,6 +14,7 @@ use super::{
 };
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, Extent3d, ImageCopyTexture, Origin3d, TextureView};
+use wgpu_init::copy_texture;
 use winit::window::Window;
 
 use crate::{
@@ -234,29 +235,6 @@ pub fn sys_render_post_processing(
         &manager.get_current_source_texture().texture,
         &color_target.texture,
         color_target.size,
-    );
-}
-
-pub fn copy_texture(
-    encoder: &mut wgpu::CommandEncoder,
-    source: &wgpu::Texture,
-    target: &wgpu::Texture,
-    size: Extent3d,
-) {
-    encoder.copy_texture_to_texture(
-        ImageCopyTexture {
-            texture: source,
-            mip_level: 0,
-            origin: Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        ImageCopyTexture {
-            texture: target,
-            mip_level: 0,
-            origin: Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        size,
     );
 }
 
