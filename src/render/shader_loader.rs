@@ -1,7 +1,6 @@
 use std::{borrow::Cow, fs};
 
 use bevy_ecs::prelude::*;
-use log::error;
 use naga_oil::compose::Composer;
 use wgpu::ShaderSource;
 
