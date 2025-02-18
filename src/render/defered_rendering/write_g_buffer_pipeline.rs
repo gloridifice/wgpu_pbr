@@ -3,9 +3,13 @@ use std::sync::Arc;
 use wgpu::{BindingResource, RenderPassColorAttachment, Sampler, ShaderStages};
 
 use crate::{
+    asset::AssetPath,
     bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
-    render::{material::pbr::PBRMaterialBindGroupLayout, prelude::*, UploadedImage},
+    render::{
+        material::pbr::PBRMaterialBindGroupLayout, prelude::*, shader_loader::ShaderLoader,
+        UploadedImage,
+    },
 };
 
 #[derive(Resource, Clone)]
@@ -145,12 +149,17 @@ pub fn create_g_buffer_image(
 
 impl FromWorld for WriteGBufferPipeline {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+        let shader_source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("write_g_buffer"))
+            .unwrap();
         let rs = world.resource::<RenderState>();
 
         let device = &rs.device;
-        let shader = device.create_shader_module(wgpu::include_wgsl!(
-            "../../../assets/shaders/write_g_buffer.wgsl"
-        ));
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Write G-Buffer"),
+            source: shader_source,
+        });
 
         let global_bind_group_layout =
             Arc::clone(&world.resource::<GBufferGlobalBindGroup>().layout);
@@ -198,13 +207,13 @@ impl FromWorld for WriteGBufferPipeline {
             layout: Some(&render_pipeline_layout),
             vertex: wgpu::VertexState {
                 module: &shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[Vertex::desc()],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &targets,
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             }),

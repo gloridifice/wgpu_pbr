@@ -3,17 +3,12 @@ use egui::load::SizedTexture;
 
 use crate::{
     cgmath_ext::{Vec2, VectorExt},
-    egui_tools::{self, world_tree, EguiRenderer},
+    egui_tools::{world_tree, EguiRenderer},
     engine::input::{CursorButton, Input},
     render::{
-        self,
-        camera::{Camera, CameraConfig},
-        defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
-        gizmos::{Gizmos, GizmosPipeline},
-        light::ParallelLight,
-        post_processing::PostProcessingManager,
-        transform::Transform,
-        ColorRenderTarget, DepthRenderTarget, MeshRenderer, RenderTargetSize,
+        self, camera::Camera, defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
+        gizmos::GizmosPipeline, post_processing::PostProcessingManager, transform::Transform,
+        ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
     },
     RenderState,
 };
@@ -68,41 +63,6 @@ impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
             Pane::ControlPanel => "Control Panel".into(),
         }
     }
-}
-
-fn sys_control_panel_ui_up(
-    InMut(mut ui): InMut<egui::Ui>,
-    mut camera_config: ResMut<CameraConfig>,
-    cam_single: Single<(
-        &mut render::camera::Camera,
-        &mut render::camera::CameraController,
-        &mut Transform,
-    )>,
-    light_single: Single<(&ParallelLight, &mut Transform), Without<render::camera::Camera>>,
-    gizmos_single: Single<
-        &mut Transform,
-        (
-            With<MeshRenderer>,
-            With<Gizmos>,
-            Without<Camera>,
-            Without<ParallelLight>,
-        ),
-    >,
-) {
-    let (_, _, mut cam_trans) = cam_single.into_inner();
-    let (_, mut light_trans) = light_single.into_inner();
-    let mut gizmos_trans = gizmos_single.into_inner();
-    ui.label("Camera");
-    ui.add(egui::widgets::Slider::new(&mut camera_config.speed, 0.5..=10.0).text("Speed"));
-    egui_tools::transform_ui(&mut ui, &mut cam_trans);
-
-    ui.separator();
-    ui.label("Light");
-    egui_tools::transform_ui(ui, &mut light_trans);
-
-    ui.separator();
-    ui.label("Gizmos");
-    egui_tools::transform_ui(ui, &mut gizmos_trans);
 }
 
 pub fn sys_egui_tiles(world: &mut World) {
