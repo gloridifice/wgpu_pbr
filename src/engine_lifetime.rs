@@ -131,10 +131,6 @@ impl State {
         // Add Events'Observers
         self.world.add_observer(event_on_remove_point_light);
 
-        self.world
-            .run_system_once(sys_insert_post_processing_pipelines)
-            .unwrap();
-
         {
             // Set egui visual / style / theme
             let egui = self.world.resource_mut::<EguiRenderer>();
@@ -526,21 +522,4 @@ fn sys_update_camera_uniform(
 ) {
     let (camera, transform) = single.into_inner();
     render_camera.update_uniform2gpu(camera, transform, &rs.queue);
-}
-
-fn sys_insert_post_processing_pipelines(
-    rs: Res<RenderState>,
-    manager: ResMut<PostProcessingManager>,
-) {
-    return;
-    let fs_shader = rs
-        .device
-        .create_shader_module(wgpu::include_wgsl!("../assets/shaders/post_test.wgsl"));
-    manager.add_pipeline_from_shader(
-        None,
-        render::post_processing::RenderStage::AfterTransparent,
-        fs_shader,
-        &rs.device,
-        &rs.config,
-    );
 }
