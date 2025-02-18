@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cgmath::{Deg, Point3, Rad, Vector3};
+use cgmath::{Deg, Point3, Vector3};
 use wgpu::{
     include_wgsl, util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline,
     Sampler, ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,

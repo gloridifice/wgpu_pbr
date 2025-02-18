@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use cgmath::{ortho, Matrix4, Point3};
-use wgpu::{include_wgsl, util::DeviceExt, BufferUsages, ShaderStages};
+use wgpu::{util::DeviceExt, BufferUsages, ShaderStages};
 
 use crate::{
     asset::AssetPath, bg_descriptor, bg_layout_descriptor, cgmath_ext::Vec4, impl_pod_zeroable,

@@ -6,7 +6,7 @@ use crate::render::{self, Model, Primitive, UploadedImageWithSampler, Vertex};
 use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
-use wgpu::{ShaderModel, ShaderModule};
+use wgpu::ShaderModule;
 
 use super::AssetPath;
 
