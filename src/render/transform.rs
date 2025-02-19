@@ -121,7 +121,7 @@ impl WorldTransform {
         }
     }
 
-    pub fn forward(&self) -> Vector3<f32> {
+    pub fn forward(&self) -> Vec3 {
         self.rotation * Vector3::new_z(-1.)
     }
 

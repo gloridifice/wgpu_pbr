@@ -4,7 +4,9 @@ use bevy_ecs::{
     system::Resource,
     world::{FromWorld, World},
 };
-use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages};
+use wgpu::{
+    BindGroup, BindGroupLayout, BindingResource, PipelineLayout, RenderPipeline, ShaderStages,
+};
 use write_g_buffer_pipeline::GBufferTexturesBindGroup;
 
 use crate::{
@@ -16,6 +18,7 @@ use super::{
     camera::CameraBuffer,
     light::{DynamicLightBindGroup, LightUnifromBuffer},
     shader_loader::ShaderLoader,
+    shadow_mapping::ShadowMap,
     FullScreenVertexShader,
 };
 
@@ -41,19 +44,24 @@ impl FromWorld for MainGlobalBindGroup {
         let light = world.resource::<LightUnifromBuffer>();
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
+        let shadow_map = world.resource::<ShadowMap>();
 
         let bind_group_layout_desc = bg_layout_descriptor! {
-            ["Main PBR Pipeline"]
-            0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer(); // Camera
-            1: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer(); // Light
+            ["Main PBR Global Bind Group Layout"]
+            0: ShaderStages::all() => BGLEntry::UniformBuffer(); // Camera
+            1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Light
+            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Depth); // Light
+            3: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Comparison); // Light
         };
 
         let layout = Arc::new(device.create_bind_group_layout(&bind_group_layout_desc));
 
         let bind_group_desc = bg_descriptor! {
-            ["Main PBR BindGroup"][&layout]
+            ["Main PBR Global BindGroup"][&layout]
             0: camera.buffer.as_entire_binding();
             1: light.buffer.as_entire_binding();
+            2: BindingResource::TextureView(&shadow_map.image.view);
+            3: BindingResource::Sampler(&shadow_map.image.sampler);
         };
 
         let bind_group = Arc::new(device.create_bind_group(&bind_group_desc));
@@ -77,8 +85,8 @@ impl FromWorld for MainPipeline {
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
 
         let bind_group_layouts = vec![
-            Arc::clone(&world.resource::<GBufferTexturesBindGroup>().layout),
             Arc::clone(&world.resource::<MainGlobalBindGroup>().layout),
+            Arc::clone(&world.resource::<GBufferTexturesBindGroup>().layout),
             Arc::clone(&world.resource::<DynamicLightBindGroup>().layout),
         ];
 

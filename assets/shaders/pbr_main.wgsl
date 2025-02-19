@@ -1,19 +1,8 @@
 #import vertex::{ FullscreenV2F }
 #import pbr_type
 #import pbr_type::{ PBRSurface }
-
-struct CameraUniform {
-    view_proj: mat4x4<f32>,
-    position: vec3<f32>,
-    direction: vec3<f32>,
-}
-
-struct LightUniform {
-    direction: vec3<f32>,
-    color: vec4<f32>,
-    view_proj: mat4x4<f32>,
-    intensity: f32,
-    lights_nums: vec4<u32>,
+#import global_bindings::{
+    camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler
 }
 
 struct PointLight {
@@ -24,12 +13,9 @@ struct PointLight {
     decay: f32,
 }
 
-@group(0) @binding(0) var g_samp: sampler;
-@group(0) @binding(1) var world_pos_tex: texture_2d<f32>;
-@group(0) @binding(2) var g_buffer_tex: texture_2d<u32>;
-
-@group(1) @binding(0) var<uniform> camera: CameraUniform;
-@group(1) @binding(1) var<uniform> light: LightUniform;
+@group(1) @binding(0) var g_samp: sampler;
+@group(1) @binding(1) var world_pos_tex: texture_2d<f32>;
+@group(1) @binding(2) var g_buffer_tex: texture_2d<u32>;
 
 @group(2) @binding(0) var<storage, read> point_lights: array<PointLight>;
 
@@ -105,9 +91,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     if g_buffer.z == 0u {
         discard;
     }
-    // if g_buffer == vec4<u32>(0u) {
-    //     discard;
-    // }
 
     let surface: PBRSurface = pbr_type::unpack_g_buffer(g_buffer);
 
@@ -142,10 +125,34 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
             normalize(world2camera_unnorm),
         );
     }
+
     surface_color += vec3<f32>(0.1);
+
+    let shadow = sample_directional_shadow(world_pos);
+    surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
     return vec4<f32>(surface_color, 1.0);
     // return vec4<f32>(surface.material.base_color, 1.0);
     // return vec4<f32>(world_pos, 1.0);
     // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), 1.0);
+}
+
+
+fn sample_directional_shadow(world_pos: vec3<f32>) -> f32{
+    let pos = light.view_proj * vec4<f32>(world_pos, 1.0);
+    let light_space_clip_pos = pos.xyz / pos.w;
+    let coords = light_space_clip_pos.xy * vec2<f32>(0.5, -0.5) + vec2<f32>(0.5);
+    let current_depth = light_space_clip_pos.z;
+    var sample: f32 = 0.0;
+    for (var i = -1; i <= 1; i++) {
+        for (var j = -1; j <= 1; j++) {
+            sample += textureSampleCompare(
+                directional_shadow_map,
+                directional_shadow_map_comparison_sampler,
+                coords + vec2f(vec2(i, j)) / 2048.0,
+                current_depth
+            );
+        }
+    }
+    return sample / 9.;
 }

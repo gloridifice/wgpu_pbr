@@ -540,13 +540,6 @@ impl UploadedImageWithSampler {
 #[derive(Resource, Clone)]
 pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
 
-#[derive(Resource, Clone)]
-pub struct GBufferGlobalBindGroup {
-    #[allow(unused)]
-    pub layout: Arc<BindGroupLayout>,
-    pub bind_group: Arc<BindGroup>,
-}
-
 impl FromWorld for ObjectBindGroupLayout {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
@@ -557,40 +550,6 @@ impl FromWorld for ObjectBindGroupLayout {
                 0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Transform
             )));
         Self(object_bind_group_layout)
-    }
-}
-
-impl FromWorld for GBufferGlobalBindGroup {
-    fn from_world(world: &mut World) -> Self {
-        world.resource_scope(|world, rs: Mut<RenderState>| {
-            let device = &rs.device;
-
-            let bind_group_layout =
-                Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! (
-                    ["Global Bind Group Layout"]
-                    0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Camera Uniform
-                    1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Global Light Uniform
-                    2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Depth); // Shadow Map
-                    3: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Comparison); // Shadow Map
-                )));
-
-            let camera_uniform_buffer = &world.resource::<CameraBuffer>().buffer;
-            let light_uniform_buffer = &world.resource::<LightUnifromBuffer>().buffer;
-            let shadow_map_image = &world.resource::<ShadowMap>().image;
-
-            let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
-                ["Global Bind Group"] [ &bind_group_layout ]
-                0: camera_uniform_buffer.as_entire_binding();
-                1: light_uniform_buffer.as_entire_binding();
-                2: BindingResource::TextureView(&shadow_map_image.view);
-                3: BindingResource::Sampler(&shadow_map_image.sampler);
-            )));
-
-            GBufferGlobalBindGroup {
-                layout: bind_group_layout,
-                bind_group,
-            }
-        })
     }
 }
 
