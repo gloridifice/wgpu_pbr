@@ -11,9 +11,11 @@ use crate::render::defered_rendering::write_g_buffer_pipeline::{
 use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
 use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
+use crate::render::light::parallel_light::ParallelLight;
+use crate::render::light::point_light::PointLight;
 use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
-    DynamicLightBindGroup, DynamicLights, PointLight,
+    DynamicLightBindGroup, DynamicLights,
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::material::pbr::{
@@ -27,8 +29,8 @@ use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
-    GBufferGlobalBindGroup, MainPassObject, MissingTexture, NormalDefaultTexture,
-    ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
+    MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
+    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -38,16 +40,17 @@ use crate::{
     render::{
         self,
         camera::{CameraBuffer, CameraConfig},
-        light::{LightUnifromBuffer, ParallelLight},
+        light::LightUnifromBuffer,
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
         MeshRenderer,
     },
     RenderState, State,
 };
+use bevy_ecs::bundle::Bundle;
 use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{Commands, ResMut, Resource, Single};
-use bevy_ecs::world::{CommandQueue, FromWorld, Mut, World};
+use bevy_ecs::world::{Command, CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, RunSystemOnce},
@@ -63,6 +66,29 @@ pub struct Name(pub String);
 #[derive(Debug, Component)]
 pub struct RotationObject {
     pub speed: f32,
+}
+
+pub struct SpawnModelCmd<PB: Bundle, CB: Bundle + Clone> {
+    model: Arc<Model>,
+    parent_bundle: PB,
+    child_bundle: CB,
+}
+
+impl<PB: Bundle, CB: Bundle + Clone> Command for SpawnModelCmd<PB, CB> {
+    fn apply(self, world: &mut World) {
+        let parent = world.spawn(self.parent_bundle).id();
+        for mesh in self.model.meshes.iter() {
+            let uploaded = Arc::new(mesh.upload(&world));
+            world.spawn((
+                MeshRenderer::new(uploaded, &world),
+                TransformBuilder::default()
+                    .parent(Some(parent))
+                    .build()
+                    .unwrap(),
+                self.child_bundle.clone(),
+            ));
+        }
+    }
 }
 
 impl State {
@@ -102,7 +128,6 @@ impl State {
         self.insert_resource::<PBRMaterialBindGroupLayout>();
 
         // 1. Globals
-        self.insert_resource::<GBufferGlobalBindGroup>();
         self.insert_resource::<ShadowMapGlobalBindGroup>();
         self.insert_resource::<DynamicLightBindGroup>();
 
@@ -169,16 +194,28 @@ impl State {
             });
         }
 
-        let ship_model = render::Model::load(
-            AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
-            &mut self.world,
-        )
-        .unwrap();
-        let light_arrow = render::Model::load(
-            AssetPath::Assets("models/arrow.glb".to_string()),
-            &mut self.world,
-        )
-        .unwrap();
+        let dragon_model = Arc::new(
+            render::Model::load(
+                AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
+                &mut self.world,
+            )
+            .unwrap(),
+        );
+
+        let plane_model = Arc::new(
+            render::Model::load(
+                AssetPath::Assets("models/plane.glb".to_string()),
+                &mut self.world,
+            )
+            .unwrap(),
+        );
+        let light_arrow = Arc::new(
+            render::Model::load(
+                AssetPath::Assets("models/arrow.glb".to_string()),
+                &mut self.world,
+            )
+            .unwrap(),
+        );
 
         let white_image = Arc::new(
             UploadedImageWithSampler::load(
@@ -230,27 +267,44 @@ impl State {
             ));
         }
 
-        let parallel_light_id = cmd
-            .spawn((
-                Transform::with_position(Vec3::new(0., 0., 3.)),
-                ParallelLight::default(),
-                Name("Parallel Light".to_string()),
-            ))
-            .id();
-
-        for mesh in light_arrow.meshes {
-            let uploaded = Arc::new(mesh.upload(&self.world));
-            cmd.spawn((
+        cmd.queue(SpawnModelCmd {
+            model: light_arrow.clone(),
+            parent_bundle: (
                 TransformBuilder::default()
-                    .parent(Some(parallel_light_id))
+                    .position(Vec3::new(0., 4., 5.))
+                    .rotation(Quaternion::from_angle_x(Deg(-45.)))
                     .build()
                     .unwrap(),
-                MeshRenderer::new(uploaded, &self.world),
+                ParallelLight::default(),
+                Name("Parallel Light".to_string()),
+            ),
+            child_bundle: (MainPassObject,),
+        });
+
+        cmd.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                TransformBuilder::default()
+                    .position(Vec3::new(2., 0., 0.))
+                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                    .scale(Vec3::new_unit(0.5))
+                    .build()
+                    .unwrap(),
+                RotationObject { speed: 0.5 },
+                Name("Dragon 1".to_string()),
+            ),
+            child_bundle: (
+                CastShadow,
                 MainPassObject,
-            ));
-        }
-        let ship_parent = cmd
-            .spawn((
+                PBRMaterial {
+                    ..Default::default()
+                },
+            ),
+        });
+
+        cmd.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
                 TransformBuilder::default()
                     .rotation(Quaternion::from_angle_x(Deg(90.0)))
                     .scale(Vec3::new_unit(0.5))
@@ -258,25 +312,33 @@ impl State {
                     .unwrap(),
                 RotationObject { speed: 0.5 },
                 Name("Main Model".to_string()),
-            ))
-            .id();
-
-        for mesh in ship_model.meshes {
-            let uploaded = Arc::new(mesh.upload(&self.world));
-
-            cmd.spawn((
-                MeshRenderer::new(uploaded, &self.world),
-                TransformBuilder::default()
-                    .parent(Some(ship_parent))
-                    .build()
-                    .unwrap(),
+            ),
+            child_bundle: (
                 CastShadow,
                 MainPassObject,
                 PBRMaterial {
                     ..Default::default()
                 },
-            ));
-        }
+            ),
+        });
+
+        cmd.queue(SpawnModelCmd {
+            model: plane_model.clone(),
+            parent_bundle: (
+                TransformBuilder::default()
+                    .position(Vec3::new_y(-1.0))
+                    .build()
+                    .unwrap(),
+                Name("Main Model".to_string()),
+            ),
+            child_bundle: (
+                CastShadow,
+                MainPassObject,
+                PBRMaterial {
+                    ..Default::default()
+                },
+            ),
+        });
 
         queue.apply(&mut self.world);
     }

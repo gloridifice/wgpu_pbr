@@ -134,8 +134,8 @@ impl FromWorld for ShadowMap {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
             let image = crate::render::create_depth_texture(
                 &render_state.device,
-                1024,
-                1024,
+                2048,
+                2048,
                 Some(wgpu::CompareFunction::LessEqual),
             );
 

@@ -25,8 +25,7 @@ use crate::{
 use super::{
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, GBufferGlobalBindGroup,
-    MeshRenderer,
+    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, MeshRenderer,
 };
 
 const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
@@ -85,7 +84,7 @@ pub fn sys_render_write_g_buffer_pass(
     g_buffer_textures: Res<GBufferTexturesBindGroup>,
     depth_target: Res<DepthRenderTarget>,
     main_pipeline: Res<WriteGBufferPipeline>,
-    global_bind_group: Res<GBufferGlobalBindGroup>,
+    global_bind_group: Res<MainGlobalBindGroup>,
     default_material: Res<DefaultMainPipelineMaterial>,
     mesh_renderers: Query<
         (&MeshRenderer, Option<&PBRMaterialOverride>),
@@ -157,8 +156,8 @@ pub fn sys_render_main_pass(
     });
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
-    render_pass.set_bind_group(0, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
-    render_pass.set_bind_group(1, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(0, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
     render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
     render_pass.draw(0..3, 0..1);
 }

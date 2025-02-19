@@ -1,62 +1,23 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use bevy_ecs::{
-    change_detection::DetectChanges,
-    component::Component,
-    entity::Entity,
-    observer::Trigger,
-    query::{Changed, Or},
-    system::{Query, Res, ResMut, Resource, Single},
-    world::{FromWorld, OnRemove},
-};
-use cgmath::{Matrix, Matrix4, Vector4};
+use bevy_ecs::prelude::*;
+use parallel_light::ParallelLight;
+use point_light::{PointLight, RawPointLight};
 use wgpu::{BindGroup, BindGroupLayout, BufferDescriptor, BufferUsages, ShaderStages};
 
 use crate::{
-    bg_descriptor, bg_layout_descriptor,
-    cgmath_ext::{Vec4, VectorExt},
-    impl_pod_zeroable,
-    macro_utils::BGLEntry,
-    RenderState,
+    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable, macro_utils::BGLEntry, RenderState,
 };
 
-use super::{
-    camera::OPENGL_TO_WGPU_MATRIX,
-    transform::{Transform, WorldTransform},
-};
+use super::transform::{Transform, WorldTransform};
+
+pub mod parallel_light;
+pub mod point_light;
 
 #[derive(Resource)]
 pub struct LightUnifromBuffer {
     // pub main_light: MainLight,
     pub buffer: Arc<wgpu::Buffer>,
-}
-
-#[derive(Component)]
-pub struct ParallelLight {
-    pub intensity: f32,
-    pub color: Vector4<f32>,
-    pub size: f32,
-    pub near: f32,
-    pub far: f32,
-}
-
-#[derive(Component, Clone)]
-#[require(Transform)]
-pub struct PointLight {
-    pub color: Vec4,
-    pub intensity: f32,
-    pub distance: Option<f32>,
-    pub decay: f32,
-}
-
-#[repr(C, align(16))]
-#[derive(Debug, Clone, Copy)]
-pub struct RawPointLight {
-    pub color: [f32; 4],
-    pub position: [f32; 4],
-    pub intensity: f32,
-    pub distance: f32,
-    pub decay: f32,
 }
 
 #[repr(C, align(16))]
@@ -121,44 +82,6 @@ impl FromWorld for DynamicLightBindGroup {
     }
 }
 
-impl Default for PointLight {
-    fn default() -> Self {
-        Self {
-            color: Vec4::one(),
-            intensity: 1.0,
-            distance: None,
-            decay: 1.0,
-        }
-    }
-}
-
-impl Default for ParallelLight {
-    fn default() -> Self {
-        Self {
-            intensity: 1.0,
-            color: Vector4::new(0.6, 0.6, 0.5, 1.0),
-            size: 3.,
-            near: 1.,
-            far: 20.,
-        }
-    }
-}
-
-impl PointLight {
-    pub fn raw(&self, transform: &WorldTransform) -> RawPointLight {
-        let pos = transform.position;
-        RawPointLight {
-            color: self.color.into(),
-            intensity: self.intensity,
-            distance: self
-                .distance
-                .unwrap_or((self.intensity * 256.0 / self.decay).sqrt()),
-            decay: self.decay,
-            position: [pos.x, pos.y, pos.z, 1.0],
-        }
-    }
-}
-
 impl LightUnifromBuffer {
     pub fn new(device: &wgpu::Device) -> Self {
         let buffer = device.create_buffer(&BufferDescriptor {
@@ -174,15 +97,6 @@ impl LightUnifromBuffer {
 
     pub fn write_buffer(&self, queue: &wgpu::Queue, light_uniform: LightUniform) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[light_uniform]));
-    }
-}
-
-impl ParallelLight {
-    pub fn light_space_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
-        let size = self.size / 2.;
-        let proj = cgmath::ortho::<f32>(-size, size, -size, size, self.near, self.far).transpose();
-        let view = transform.view_matrix();
-        OPENGL_TO_WGPU_MATRIX * proj * view
     }
 }
 
