@@ -3,23 +3,19 @@ use std::sync::Arc;
 use bevy_ecs::{
     component::Component,
     system::Resource,
-    world::{FromWorld, Mut, World},
+    world::{FromWorld, World},
 };
-use camera::CameraBuffer;
 use defered_rendering::MainPipeline;
-use light::LightUnifromBuffer;
 use material::{
     pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial},
     UploadedMaterial,
 };
 use shader_loader::ShaderLoader;
-use shadow_mapping::ShadowMap;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor,
-    BufferUsages, Extent3d, RenderPass, Sampler, SamplerBindingType, ShaderModule, ShaderStages,
-    Texture, TextureDescriptor, TextureDimension, TextureSampleType, TextureUsages, TextureView,
-    TextureViewDescriptor,
+    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Extent3d,
+    RenderPass, Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor, TextureDimension,
+    TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 use crate::{
@@ -41,6 +37,7 @@ pub mod post_processing;
 pub mod prelude;
 pub mod shader_loader;
 pub mod shadow_mapping;
+pub mod skybox;
 pub mod systems;
 pub mod transform;
 
@@ -450,8 +447,8 @@ impl UploadedImageWithSampler {
         heigh: u32,
         pixel_size: u32,
         offset: u64,
-    ) -> wgpu::ImageDataLayout {
-        wgpu::ImageDataLayout {
+    ) -> wgpu::TexelCopyBufferLayout {
+        wgpu::TexelCopyBufferLayout {
             offset,
             bytes_per_row: Some(pixel_size * width),
             rows_per_image: Some(heigh),

@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
 use super::{
+    cubemap::CubeVerticesBuffer,
     defered_rendering::{
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
-        MainGlobalBindGroup, MainPipeline,
+        GlobalBindGroup, MainPipeline,
     },
     gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosPipeline},
     light::DynamicLightBindGroup,
     material::pbr::PBRMaterialOverride,
     prelude::*,
+    skybox::SkyboxPipeline,
     transform::Transform,
     MainPassObject,
 };
@@ -84,7 +86,7 @@ pub fn sys_render_write_g_buffer_pass(
     g_buffer_textures: Res<GBufferTexturesBindGroup>,
     depth_target: Res<DepthRenderTarget>,
     main_pipeline: Res<WriteGBufferPipeline>,
-    global_bind_group: Res<MainGlobalBindGroup>,
+    global_bind_group: Res<GlobalBindGroup>,
     default_material: Res<DefaultMainPipelineMaterial>,
     mesh_renderers: Query<
         (&MeshRenderer, Option<&PBRMaterialOverride>),
@@ -131,8 +133,10 @@ pub fn sys_render_main_pass(
     main_target: Res<ColorRenderTarget>,
     main_pipeline: Res<MainPipeline>,
     g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
-    main_global_bind_group: Res<MainGlobalBindGroup>,
+    main_global_bind_group: Res<GlobalBindGroup>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
+    skybox_pipeline: Res<SkyboxPipeline>,
+    cube_vertex_buffer: Res<CubeVerticesBuffer>,
 ) {
     let Some(main_image) = main_target.0.as_ref() else {
         return;
@@ -155,8 +159,12 @@ pub fn sys_render_main_pass(
         timestamp_writes: None,
     });
 
-    render_pass.set_pipeline(&main_pipeline.pipeline);
+    render_pass.set_pipeline(&skybox_pipeline.pipeline);
     render_pass.set_bind_group(0, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_vertex_buffer(0, cube_vertex_buffer.vertices_buffer.slice(..));
+    render_pass.draw(0..36, 0..1);
+
+    render_pass.set_pipeline(&main_pipeline.pipeline);
     render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
     render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
     render_pass.draw(0..3, 0..1);

@@ -4,11 +4,11 @@ use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
-use crate::render::cubemap::CubeMapConverter;
+use crate::render::cubemap::{CubeMapConverter, CubeMapConverterRgba8unorm, CubeVerticesBuffer};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
-use crate::render::defered_rendering::{MainGlobalBindGroup, MainPipeline};
+use crate::render::defered_rendering::{GlobalBindGroup, MainPipeline};
 use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
 use crate::render::light::parallel_light::ParallelLight;
@@ -25,6 +25,7 @@ use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
+use crate::render::skybox::SkyboxPipeline;
 use crate::render::systems::PassRenderContext;
 use crate::render::transform::WorldTransform;
 use crate::render::{
@@ -112,6 +113,8 @@ impl State {
         self.insert_resource::<ColorRenderTarget>();
         self.insert_resource::<DepthRenderTarget>();
         self.insert_resource::<RenderTargetEguiTexId>();
+        self.insert_resource::<CubeVerticesBuffer>();
+        self.insert_resource::<CubeMapConverterRgba8unorm>();
 
         // --- Render resource ---
         self.insert_resource::<CameraBuffer>();
@@ -133,10 +136,11 @@ impl State {
 
         // 1.5
         self.insert_resource::<GBufferTexturesBindGroup>();
-        self.insert_resource::<MainGlobalBindGroup>();
+        self.insert_resource::<GlobalBindGroup>();
 
         // 2. Pipelines
         self.insert_resource::<WriteGBufferPipeline>();
+        self.insert_resource::<SkyboxPipeline>();
         self.insert_resource::<MainPipeline>();
         self.insert_resource::<ShadowMappingPipeline>();
         self.insert_resource::<GizmosPipeline>();
@@ -224,12 +228,6 @@ impl State {
             )
             .unwrap(),
         );
-
-        {
-            let device = &self.world.resource::<RenderState>().device;
-            let converter = CubeMapConverter::new(device, TextureFormat::Rgba8Unorm);
-            let texture = converter.render_hdir_to_cube_map(device, &white_image.view, 256);
-        }
 
         let mut queue = CommandQueue::from_world(&mut self.world);
 

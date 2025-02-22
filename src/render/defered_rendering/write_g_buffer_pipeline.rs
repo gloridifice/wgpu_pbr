@@ -12,7 +12,7 @@ use crate::{
     },
 };
 
-use super::MainGlobalBindGroup;
+use super::GlobalBindGroup;
 
 #[derive(Resource, Clone)]
 pub struct GBufferTexturesBindGroup {
@@ -154,7 +154,7 @@ impl FromWorld for WriteGBufferPipeline {
             source: shader_source,
         });
 
-        let global_bind_group_layout = Arc::clone(&world.resource::<MainGlobalBindGroup>().layout);
+        let global_bind_group_layout = Arc::clone(&world.resource::<GlobalBindGroup>().layout);
         let material_bind_group_layout =
             Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0);
         let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);

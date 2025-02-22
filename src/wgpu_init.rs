@@ -167,6 +167,49 @@ pub fn full_screen_pipeline_desc<'a>(
     }
 }
 
+pub fn no_depth_stencil_pipeline_desc<'a>(
+    label: Option<&'a str>,
+    layout: &'a PipelineLayout,
+    vert: &'a ShaderModule,
+    vert_buffers: &'a [VertexBufferLayout<'a>],
+    frag: &'a ShaderModule,
+    targets: &'a [Option<ColorTargetState>],
+) -> RenderPipelineDescriptor<'a> {
+    wgpu::RenderPipelineDescriptor {
+        label,
+        layout: Some(layout),
+        vertex: wgpu::VertexState {
+            module: vert,
+            entry_point: Some("vs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            buffers: vert_buffers,
+        },
+        primitive: wgpu::PrimitiveState {
+            topology: wgpu::PrimitiveTopology::TriangleList,
+            strip_index_format: None,
+            front_face: wgpu::FrontFace::Ccw,
+            cull_mode: Some(wgpu::Face::Back),
+            unclipped_depth: false,
+            polygon_mode: wgpu::PolygonMode::Fill,
+            conservative: false,
+        },
+        depth_stencil: None,
+        multisample: wgpu::MultisampleState {
+            count: 1,
+            mask: 0,
+            alpha_to_coverage_enabled: false,
+        },
+        fragment: Some(wgpu::FragmentState {
+            module: &frag,
+            entry_point: Some("fs_main"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            targets,
+        }),
+        multiview: None,
+        cache: None,
+    }
+}
+
 pub fn color_target_replace_write_all(format: TextureFormat) -> ColorTargetState {
     wgpu::ColorTargetState {
         format,
