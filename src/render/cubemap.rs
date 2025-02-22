@@ -1,31 +1,82 @@
 use std::sync::Arc;
 
+use bevy_ecs::prelude::*;
 use cgmath::{Deg, Point3, Vector3};
 use wgpu::{
     include_wgsl, util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline,
     Sampler, ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,
-    VertexBufferLayout,
+    VertexAttribute, VertexBufferLayout,
 };
 
-use crate::{bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry};
+use crate::{
+    asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
+};
 
-use super::UploadedImage;
+use super::{
+    shader_loader::{self, ShaderLoader},
+    UploadedImage,
+};
+
+#[derive(Resource)]
+pub struct CubeVerticesBuffer {
+    pub vertices_buffer: wgpu::Buffer,
+}
 
 pub struct CubeMapConverter {
     pub pipeline: RenderPipeline,
     pub sampler: Sampler,
-    pub shader: ShaderModule,
     pub directions_matrices: [Arc<BindGroup>; 6],
     pub matrix_bgl: BindGroupLayout,
     pub texture_bgl: BindGroupLayout,
     pub format: TextureFormat,
-    vertices_buffer: wgpu::Buffer,
+}
+
+#[derive(Resource)]
+pub struct CubeMapConverterRgba8unorm(pub CubeMapConverter);
+
+impl FromWorld for CubeVerticesBuffer {
+    fn from_world(world: &mut World) -> Self {
+        let device = &world.resource::<RenderState>().device;
+        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&CUBE_VERTICES),
+            usage: BufferUsages::VERTEX,
+        });
+        Self { vertices_buffer }
+    }
+}
+
+const CUBE_VERTEX_ATTRIS: [VertexAttribute; 3] =
+    wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
+pub fn cube_vertex_layout() -> VertexBufferLayout<'static> {
+    VertexBufferLayout {
+        array_stride: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &CUBE_VERTEX_ATTRIS,
+    }
+}
+
+impl FromWorld for CubeMapConverterRgba8unorm {
+    fn from_world(world: &mut World) -> Self {
+        let shader_source = world
+            .resource_mut::<ShaderLoader>()
+            .load_source(AssetPath::new_shader_wgsl("env_to_cubemap"))
+            .unwrap();
+        let device = &world.resource::<RenderState>().device;
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Env to Cubemap"),
+            source: shader_source,
+        });
+        Self(CubeMapConverter::new(
+            device,
+            TextureFormat::Rgba8Unorm,
+            &shader,
+        ))
+    }
 }
 
 impl CubeMapConverter {
-    pub fn new(device: &wgpu::Device, format: TextureFormat) -> Self {
-        let shader =
-            device.create_shader_module(include_wgsl!("../../assets/shaders/env_to_cubemap.wgsl"));
+    pub fn new(device: &wgpu::Device, format: TextureFormat, shader: &ShaderModule) -> Self {
         let matrix_bgl = device.create_bind_group_layout(&bg_layout_descriptor! {
             ["Render Cubemap: Matrix"]
             0: ShaderStages::VERTEX => BGLEntry::UniformBuffer();
@@ -40,7 +91,6 @@ impl CubeMapConverter {
             bind_group_layouts: &[&matrix_bgl, &texture_bgl],
             push_constant_ranges: &[],
         });
-        let attris = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("equirectangular to cube map"),
             layout: Some(&layout),
@@ -48,11 +98,7 @@ impl CubeMapConverter {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[VertexBufferLayout {
-                    array_stride: std::mem::size_of::<[f32; 8]>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &attris,
-                }],
+                buffers: &[cube_vertex_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleStrip,
@@ -126,21 +172,13 @@ impl CubeMapConverter {
             Arc::new(bind_group)
         });
 
-        let vertices_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&CUBE_VERTICES),
-            usage: BufferUsages::VERTEX,
-        });
-
         Self {
             pipeline,
             sampler,
-            shader,
             directions_matrices,
             matrix_bgl,
             texture_bgl,
             format,
-            vertices_buffer,
         }
     }
 
@@ -148,6 +186,7 @@ impl CubeMapConverter {
         &self,
         device: &wgpu::Device,
         source: &wgpu::TextureView,
+        cube_vertex_buffer: &wgpu::Buffer,
         piece_size: u32,
     ) -> wgpu::Texture {
         let ret_texture = device.create_texture(&TextureDescriptor {
@@ -211,7 +250,7 @@ impl CubeMapConverter {
                 occlusion_query_set: None,
             });
             render_pass.set_pipeline(&self.pipeline);
-            render_pass.set_vertex_buffer(0, self.vertices_buffer.slice(..));
+            render_pass.set_vertex_buffer(0, cube_vertex_buffer.slice(..));
             render_pass.set_bind_group(0, matrix_bind_group.as_ref(), &[]);
             render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.draw(0..36, 0..1)

@@ -2,7 +2,8 @@
 #import pbr_type
 #import pbr_type::{ PBRSurface }
 #import global_bindings::{
-    camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler
+    camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler,
+    env_cubemap, env_cubemap_sampler,
 }
 
 struct PointLight {
@@ -87,10 +88,6 @@ fn calculate_light(
 fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
     let g_buffer: vec4<u32> = textureLoad(g_buffer_tex, vec2<i32>(in.clip_position.xy), 0);
-
-    if g_buffer.z == 0u {
-        discard;
-    }
 
     let surface: PBRSurface = pbr_type::unpack_g_buffer(g_buffer);
 

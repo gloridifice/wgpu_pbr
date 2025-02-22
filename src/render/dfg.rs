@@ -8,7 +8,7 @@ use super::UploadedImageWithSampler;
 
 #[derive(Resource)]
 pub struct DFGTexture {
-    texture: Arc<UploadedImageWithSampler>,
+    pub texture: Arc<UploadedImageWithSampler>,
 }
 impl FromWorld for DFGTexture {
     fn from_world(world: &mut World) -> Self {
