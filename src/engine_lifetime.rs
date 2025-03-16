@@ -176,8 +176,8 @@ impl State {
 
         {
             let mut vec = Vec::with_capacity(20usize);
-            for _ in 0..3 {
-                let x = rand::random::<f32>() * 2.;
+            for _ in 0..10 {
+                let x = rand::random::<f32>() * 12.;
                 let y = rand::random::<f32>() * 2.;
                 let z = rand::random::<f32>() * 2.;
                 let r = rand::random::<f32>();
@@ -279,46 +279,30 @@ impl State {
             child_bundle: (MainPassObject,),
         });
 
-        cmd.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new(2., 0., 0.))
-                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                    .scale(Vec3::new_unit(0.5))
-                    .build()
-                    .unwrap(),
-                RotationObject { speed: 0.5 },
-                Name("Dragon 1".to_string()),
-            ),
-            child_bundle: (
-                CastShadow,
-                MainPassObject,
-                PBRMaterial {
-                    ..Default::default()
-                },
-            ),
-        });
-
-        cmd.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                TransformBuilder::default()
-                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                    .scale(Vec3::new_unit(0.5))
-                    .build()
-                    .unwrap(),
-                RotationObject { speed: 0.5 },
-                Name("Main Model".to_string()),
-            ),
-            child_bundle: (
-                CastShadow,
-                MainPassObject,
-                PBRMaterial {
-                    ..Default::default()
-                },
-            ),
-        });
+        let count = 5;
+        for i in 0..5 {
+            cmd.queue(SpawnModelCmd {
+                model: dragon_model.clone(),
+                parent_bundle: (
+                    TransformBuilder::default()
+                        .position(Vec3::new(i as f32 * 2., 0., 0.))
+                        .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                        .scale(Vec3::new_unit(0.3))
+                        .build()
+                        .unwrap(),
+                    RotationObject { speed: 0.5 },
+                    Name(format!("龙模型 No_{}", i)),
+                ),
+                child_bundle: (
+                    CastShadow,
+                    MainPassObject,
+                    PBRMaterial {
+                        metallic: Some((i as f32) / (count - 1) as f32),
+                        ..Default::default()
+                    },
+                ),
+            });
+        }
 
         cmd.queue(SpawnModelCmd {
             model: plane_model.clone(),
@@ -327,7 +311,7 @@ impl State {
                     .position(Vec3::new_y(-1.0))
                     .build()
                     .unwrap(),
-                Name("Main Model".to_string()),
+                Name("平面".to_string()),
             ),
             child_bundle: (
                 CastShadow,
