@@ -131,7 +131,9 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     return vec4<f32>(surface_color, 1.0);
     // return vec4<f32>(surface.material.base_color, 1.0);
     // return vec4<f32>(world_pos, 1.0);
-    // return vec4<f32>(normal * 0.5 + vec3<f32>(0.5), 1.0);
+    // var a = vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);
+    // a.z = 1.0;
+    // return a;
 }
 
 
