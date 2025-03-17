@@ -3,14 +3,15 @@ use std::sync::Arc;
 use super::{
     cubemap::CubeVerticesBuffer,
     defered_rendering::{
+        global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd},
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
-        GlobalBindGroup, MainPipeline,
+        MainPipeline,
     },
     gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosPipeline},
     light::DynamicLightBindGroup,
     material::pbr::PBRMaterialOverride,
     prelude::*,
-    skybox::SkyboxPipeline,
+    skybox::{Skybox, SkyboxPipeline},
     transform::Transform,
     MainPassObject,
 };
@@ -164,10 +165,10 @@ pub fn sys_render_main_pass(
     render_pass.set_vertex_buffer(0, cube_vertex_buffer.vertices_buffer.slice(..));
     render_pass.draw(0..36, 0..1);
 
-    render_pass.set_pipeline(&main_pipeline.pipeline);
-    render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
-    render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
-    render_pass.draw(0..3, 0..1);
+    // render_pass.set_pipeline(&main_pipeline.pipeline);
+    // render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
+    // render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
+    // render_pass.draw(0..3, 0..1);
 }
 
 pub fn sys_render_egui(
@@ -288,4 +289,10 @@ pub fn sys_render_gizmos(
             mesh_renderer.draw_primitives(&mut render_pass);
         }
     });
+}
+
+pub fn sys_refersh_global_bind_group(mut commands: Commands, skybox: Res<Skybox>) {
+    if skybox.is_changed() {
+        commands.queue(RefreshGlobalBindGroupCmd);
+    }
 }
