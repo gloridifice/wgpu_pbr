@@ -4,14 +4,36 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::world::FromWorld;
 use wgpu::{PipelineLayout, RenderPipeline};
 
+use crate::asset::cubemap::load_cubemap_sliced;
 use crate::{asset::AssetPath, wgpu_init, RenderState};
 
-use super::{cubemap, defered_rendering::GlobalBindGroup, shader_loader::ShaderLoader};
+use super::defered_rendering::global_binding::GlobalBindGroup;
+use super::{cubemap, shader_loader::ShaderLoader, UploadedImage};
 
 #[derive(Resource)]
 pub struct SkyboxPipeline {
     pub pipeline_layout: Arc<PipelineLayout>,
     pub pipeline: Arc<RenderPipeline>,
+}
+
+#[derive(Resource, Default)]
+pub struct Skybox {
+    pub texture: Option<UploadedImage>,
+}
+
+#[derive(Resource)]
+pub struct DefaultSkybox {
+    pub texture: UploadedImage,
+}
+
+impl FromWorld for DefaultSkybox {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let paths = ["posx", "negx", "posy", "negy", "posz", "negz"]
+            .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
+        let texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
+        Self { texture }
+    }
 }
 
 impl FromWorld for SkyboxPipeline {

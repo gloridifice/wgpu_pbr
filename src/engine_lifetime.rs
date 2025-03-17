@@ -4,11 +4,11 @@ use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
-use crate::render::cubemap::{CubeMapConverter, CubeMapConverterRgba8unorm, CubeVerticesBuffer};
+use crate::render::cubemap::{CubeMapConverterRgba8unorm, CubeVerticesBuffer};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
-use crate::render::defered_rendering::{GlobalBindGroup, MainPipeline};
+use crate::render::defered_rendering::{global_binding::GlobalBindGroup, MainPipeline};
 use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
 use crate::render::light::parallel_light::ParallelLight;
@@ -25,8 +25,8 @@ use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
-use crate::render::skybox::SkyboxPipeline;
-use crate::render::systems::PassRenderContext;
+use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline};
+use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
@@ -115,9 +115,11 @@ impl State {
         self.insert_resource::<RenderTargetEguiTexId>();
         self.insert_resource::<CubeVerticesBuffer>();
         self.insert_resource::<CubeMapConverterRgba8unorm>();
+        self.insert_resource::<DefaultSkybox>();
 
         // --- Render resource ---
         self.insert_resource::<CameraBuffer>();
+        self.insert_resource::<Skybox>();
         self.world
             .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
         self.insert_resource::<ShadowMap>();
@@ -368,6 +370,9 @@ impl State {
     pub fn update(&mut self) {
         self.world.run_system_once(sys_update_camera).unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
+        self.world
+            .run_system_once(sys_refersh_global_bind_group)
+            .unwrap();
     }
 
     pub fn post_update(&mut self) {
