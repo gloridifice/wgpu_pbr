@@ -1,3 +1,4 @@
+use std::fs;
 use std::sync::Arc;
 
 use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
@@ -57,6 +58,7 @@ use bevy_ecs::{
     system::{Query, Res, RunSystemOnce},
 };
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
+use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
 use wgpu::TextureFormat;
 use winit::{event::WindowEvent, keyboard::KeyCode};
@@ -101,7 +103,24 @@ impl State {
         self.world.insert_resource(r);
     }
 
+    fn init_egui(&mut self) {
+        let renderer = self.world.resource_mut::<EguiRenderer>();
+        let ctx = renderer.context();
+        let font_data =
+            fs::read(AssetPath::Assets("fonts/MiSans-Normal.ttf".to_string()).final_path())
+                .unwrap();
+        ctx.add_font(egui::epaint::text::FontInsert::new(
+            "MiSans",
+            egui::FontData::from_owned(font_data),
+            vec![InsertFontFamily {
+                family: egui::FontFamily::Proportional,
+                priority: egui::epaint::text::FontPriority::Highest,
+            }],
+        ));
+    }
+
     pub fn init(&mut self) {
+        self.init_egui();
         self.insert_resource::<ShaderLoader>();
         self.insert_resource::<WhiteTexture>();
         self.insert_resource::<NormalDefaultTexture>();

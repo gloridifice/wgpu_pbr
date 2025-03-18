@@ -68,7 +68,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     let tangent_space_normal = textureSample(normal_tex, normal_samp, in.tex_coord).xyz * 2.0 - 1.0;
     let normal = normalize(tbn * tangent_space_normal);
 
-    var surface: PBRSurface;
+    var surface: PBRSurface = pbr_type::pbr_surface_new();
     var material: StandardMaterial = pbr_type::standard_material_new();
     surface.normal = normal;
     material.base_color = base_color.xyz;

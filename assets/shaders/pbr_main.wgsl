@@ -5,6 +5,7 @@
     camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler,
     env_cubemap, env_cubemap_sampler,
 }
+#import ibl_functions
 
 struct PointLight {
     color: vec4<f32>,
@@ -43,6 +44,8 @@ fn calculate_light(
     surface: PBRSurface,
     world2light: vec3<f32>,
     world2camera: vec3<f32>,
+    f0: vec3<f32>,
+    f90: vec3<f32>,
 ) -> vec3<f32> {
     let reflectance: f32 = surface.material.reflectance;
     let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
@@ -58,9 +61,9 @@ fn calculate_light(
 
     let diffuse_color = (1.0 - metallic) * base_color;
 
-    // Schlick Fresnel Function
-    let f0: vec3<f32> = vec3<f32>(0.16 * pow2(reflectance) * (1.0 - metallic)) + base_color * metallic;
-    let fresnel: vec3<f32> = f0 + (vec3<f32>(1.0) + f0) * pow5(1.0 - hDotV);
+    // Schlick Fresnel Function, f90 = vec3f(1.0)
+    // todo check '- f0 or + f0' ----> v here
+    let fresnel: vec3<f32> = f0 + (f90 - f0) * pow5(1.0 - hDotV);
 
     // ! Diffuse BRDF -------------
     let diffuse_brdf = diffuse_color / PI;
@@ -84,59 +87,6 @@ fn calculate_light(
     return ret;
 }
 
-@fragment
-fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
-    let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
-    let g_buffer: vec4<u32> = textureLoad(g_buffer_tex, vec2<i32>(in.clip_position.xy), 0);
-
-    let surface: PBRSurface = pbr_type::unpack_g_buffer(g_buffer);
-
-    var surface_color = vec3<f32>(0.0);
-
-    // Parallel Light
-    surface_color += calculate_light(
-        light.color.xyz,
-        light.intensity,
-        surface,
-        -light.direction,
-        -camera.direction
-    );
-
-    // Point Lights
-    let point_lights_num = light.lights_nums.x;
-
-    for (var i = 0u; i < point_lights_num; i += 1u) {
-        let li = point_lights[i];
-        let world2light_unnorm = li.position.xyz - world_pos;
-        let world2camera_unnorm = camera.position - world_pos;
-        let dist = length(world2light_unnorm);
-        if dist > li.distance { continue; }
-        let dir = normalize(world2light_unnorm);
-
-        let radiance = li.intensity / ((li.decay * pow2(dist)) + 0.001); // + 0.001 for division safety
-        surface_color += calculate_light(
-            li.color.xyz,
-            radiance,
-            surface,
-            dir,
-            normalize(world2camera_unnorm),
-        );
-    }
-
-    surface_color += vec3<f32>(0.1);
-
-    let shadow = sample_directional_shadow(world_pos);
-    surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
-
-    return vec4<f32>(surface_color, 1.0);
-    // return vec4<f32>(surface.material.base_color, 1.0);
-    // return vec4<f32>(world_pos, 1.0);
-    // var a = vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);
-    // a.z = 1.0;
-    // return a;
-}
-
-
 fn sample_directional_shadow(world_pos: vec3<f32>) -> f32{
     let pos = light.view_proj * vec4<f32>(world_pos, 1.0);
     let light_space_clip_pos = pos.xyz / pos.w;
@@ -155,3 +105,86 @@ fn sample_directional_shadow(world_pos: vec3<f32>) -> f32{
     }
     return sample / 9.;
 }
+
+@fragment
+fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
+    let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
+    let g_buffer: vec4<u32> = textureLoad(g_buffer_tex, vec2<i32>(in.clip_position.xy), 0);
+
+    let surface: PBRSurface = pbr_type::unpack_g_buffer(g_buffer);
+
+    if(all(surface.normal == vec3f(0.0))) {
+        discard;
+    }
+
+    let metallic = surface.material.metallic;
+    let base_color = surface.material.base_color;
+
+    let f0: vec3<f32> = 
+        vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
+         + base_color * metallic;
+    let f90 = vec3<f32>(1.0);
+
+    var surface_color = vec3<f32>(0.0);
+
+    let world2camera = -camera.direction;
+    // + Parallel Lighting
+    surface_color += calculate_light(
+        light.color.xyz,
+        light.intensity,
+        surface,
+        -light.direction,
+        world2camera,
+        f0,
+        f90,
+    );
+
+    // + Point Lighting
+    let point_lights_num = light.lights_nums.x;
+
+    for (var i = 0u; i < point_lights_num; i += 1u) {
+        let li = point_lights[i];
+        let world2light_unnorm = li.position.xyz - world_pos;
+        let dist = length(world2light_unnorm);
+        if dist > li.distance { continue; }
+        let dir = normalize(world2light_unnorm);
+
+        let radiance = li.intensity / ((li.decay * pow2(dist)) + 0.001); // + 0.001 for division safety
+        surface_color += calculate_light(
+            li.color.xyz,
+            radiance,
+            surface,
+            dir,
+            world2camera,
+            f0,
+            f90,
+        );
+    }
+
+    /// + Image based Lighting
+    let ibl = ibl_functions::evaluate_ibl(
+                        surface.normal,
+                        world2camera,
+                        base_color, 
+                        f0, 
+                        f90, 
+                        surface.material.perceptual_roughness
+                    );
+
+    surface_color += ibl;
+    surface_color += vec3<f32>(0.1);
+
+    /// -- Shadowing --
+    let shadow = sample_directional_shadow(world_pos);
+    surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
+
+
+    return vec4<f32>(ibl, 1.0);
+    // return vec4<f32>(surface.material.base_color, 1.0);
+    // return vec4<f32>(world_pos, 1.0);
+    // var a = vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);
+    // a.z = 1.0;
+    // return a;
+}
+
+
