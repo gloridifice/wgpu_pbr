@@ -56,16 +56,42 @@ impl FromWorld for SkyboxPipeline {
                 push_constant_ranges: &[],
             },
         ));
-        let pipeline = Arc::new(device.create_render_pipeline(
-            &wgpu_init::no_depth_stencil_pipeline_desc(
-                Some("Skybox"),
-                &pipeline_layout,
-                &skybox_shader,
-                &[cubemap::cube_vertex_layout()],
-                &skybox_shader,
-                &[Some(rs.config.format.into())],
-            ),
-        ));
+        let cube_vertex_layout = cubemap::cube_vertex_layout();
+        let pipeline = Arc::new(
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Skybox"),
+                layout: Some(&pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &skybox_shader,
+                    entry_point: Some("vs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    buffers: &[cube_vertex_layout],
+                },
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList,
+                    strip_index_format: None,
+                    front_face: wgpu::FrontFace::Ccw,
+                    cull_mode: Some(wgpu::Face::Front),
+                    unclipped_depth: false,
+                    polygon_mode: wgpu::PolygonMode::Fill,
+                    conservative: false,
+                },
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState {
+                    count: 1,
+                    mask: 0,
+                    alpha_to_coverage_enabled: false,
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &skybox_shader,
+                    entry_point: Some("fs_main"),
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    targets: &[Some(rs.config.format.into())],
+                }),
+                multiview: None,
+                cache: None,
+            }),
+        );
         Self {
             pipeline_layout,
             pipeline,
