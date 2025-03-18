@@ -31,6 +31,15 @@ struct PBRSurface {
     normal: vec3<f32>,
 }
 
+fn pbr_surface_new() -> PBRSurface {
+    var ret: PBRSurface;
+    let material = standard_material_new();
+    ret.roughness = 0.0;
+    ret.clear_coat_roughness = 0.5;
+    ret.normal = vec3f(0.0);
+    return ret;
+}
+
 fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
     let clamped = clamp(perceptual_roughness, 0.089, 1.0);
     return clamped * clamped;
@@ -68,7 +77,11 @@ fn unpack_g_buffer(in: vec4<u32>) -> PBRSurface {
     material.perceptual_roughness = color_rou.w;
 
     ret.material = material;
-    ret.normal = normalize((raw_normal - vec3<f32>(0.5)) * 2.0);
+    if(all(raw_normal == vec3f(0.0))) {
+        ret.normal = vec3f(0.0);
+    } else {
+        ret.normal = normalize((raw_normal - vec3<f32>(0.5)) * 2.0);
+    }
     ret.roughness = perceptual_roughness_to_roughness(material.perceptual_roughness);
     ret.clear_coat_roughness = perceptual_roughness_to_roughness(material.clear_coat_perceptual_roughness);
 
