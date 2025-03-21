@@ -15,8 +15,8 @@ fn prefiltered_dfg_lut(perceptual_roughness: f32, nDotV: f32) -> vec2<f32> {
 }
 
 fn evaluate_ibl_spectular(reflect: vec3<f32>, perceptual_roughness: f32) -> vec3<f32>{
-    let lod = 8.0 * perceptual_roughness;
-    return textureSampleLevel(env_cubemap, env_cubemap_sampler, reflect, lod).xyz;
+    let level = 5.0 * perceptual_roughness;
+    return textureSampleLevel(env_cubemap, env_cubemap_sampler, reflect, level).xyz;
 }
 
 /// IBL 仍然由 Specular + Diffuse 构成
@@ -40,4 +40,4 @@ fn evaluate_ibl(normal: vec3<f32>, world2camera: vec3<f32>, diffuse_color: vec3<
     let indirect_diffuse: vec3<f32> = vec3<f32>(0.0); //todo
 
     return diffuse_color * indirect_diffuse + specular_color * indirect_specular;
-} 
+}

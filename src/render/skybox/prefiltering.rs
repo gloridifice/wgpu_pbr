@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 use wgpu::{
     util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
     PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, Texture, TextureFormat,
-    TextureView,
+    TextureUsages, TextureView,
 };
 
 use crate::{
@@ -14,8 +14,8 @@ use crate::{
     render::{
         self,
         cubemap::{CubemapMatrixBindGroups, CubemapVertexShader},
-        defered_rendering::global_binding::GlobalBindGroup,
         shader_loader::ShaderLoader,
+        utils::cube::CubeVerticesBuffer,
         UploadedImage,
     },
     wgpu_init, RenderState,
@@ -52,15 +52,15 @@ impl FromWorld for PrefilteringPipeline {
         let bg_layout = device.create_bind_group_layout(&bg_layout_descriptor! {
             ["Prefiltering Env Map"]
             0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
-            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true });
+            1: ShaderStages::FRAGMENT => BGLEntry::TexCube(false, wgpu::TextureSampleType::Float { filterable: true });
             2: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
         });
 
-        let global = world.resource::<GlobalBindGroup>();
+        let matrix_bind_group_layout = world.resource::<CubemapMatrixBindGroups>();
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: LABEL,
-            bind_group_layouts: &[&global.layout, &bg_layout],
+            bind_group_layouts: &[&matrix_bind_group_layout.layout, &bg_layout],
             push_constant_ranges: &[],
         });
 
@@ -94,7 +94,7 @@ impl FromWorld for PrefilteringPipeline {
                 module: &shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
-                targets: &[Some(TextureFormat::Rgba8Unorm.into())],
+                targets: &[Some(TextureFormat::Rgba8UnormSrgb.into())],
             }),
             multiview: None,
             cache: None,
@@ -148,6 +148,7 @@ pub fn prefilter(
 
     pipeline: &PrefilteringPipeline,
     matrix_bind_groups: &CubemapMatrixBindGroups,
+    cube_vertex_buffer: &CubeVerticesBuffer,
 ) -> anyhow::Result<UploadedImage> {
     let size = source_texture.size();
     if size.depth_or_array_layers != 6 {
@@ -160,7 +161,7 @@ pub fn prefilter(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: source_texture.format(),
-        usage: source_texture.usage(),
+        usage: source_texture.usage() | TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_DST,
         view_formats: &[],
     });
 
@@ -171,8 +172,28 @@ pub fn prefilter(
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
-    for level in 0..level_count {
-        let roughness = 1.0 / level_count as f32 * level as f32;
+    encoder.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfoBase {
+            texture: &source_texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfoBase {
+            texture: &texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::Extent3d {
+            width: size.width,
+            height: size.height,
+            depth_or_array_layers: 6,
+        },
+    );
+
+    for level in 1..level_count {
+        let roughness = 1.0 / (level_count as f32) * (level as f32);
         let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: None,
             contents: bytemuck::cast_slice(&[PrefilteringEnvironmentUniform {
@@ -219,6 +240,7 @@ pub fn prefilter(
             });
 
             pass.set_pipeline(&pipeline.pipeline);
+            pass.set_vertex_buffer(0, cube_vertex_buffer.vertices_buffer.slice(..));
             pass.set_bind_group(
                 0,
                 matrix_bind_groups.bind_groups.get(j as usize).unwrap(),

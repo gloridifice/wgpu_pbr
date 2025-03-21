@@ -3,7 +3,7 @@ use std::any::type_name;
 use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::world::World;
-use cgmath::{Deg, Euler};
+use cgmath::{vec3, Deg, Euler};
 use egui::{Color32, Context, DragValue, Ui, Widget};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
@@ -11,9 +11,9 @@ use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use crate::cgmath_ext::{Vec4, Vector4Ext};
+use crate::cgmath_ext::{Vec3, Vec4, Vector4Ext, VectorExt};
 use crate::engine_lifetime::Name;
-use crate::render::camera::CameraController;
+use crate::render::camera::{Camera, CameraController};
 use crate::render::light::parallel_light::ParallelLight;
 use crate::render::light::point_light::PointLight;
 use crate::render::material::pbr::PBRMaterial;
@@ -162,34 +162,32 @@ fn color_vec4_srgba(ui: &mut Ui, color: &mut Vec4) -> egui::Response {
     ret
 }
 
-pub fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
+pub fn vec3_ui(ui: &mut Ui, label: &str, vec3: &mut Vec3, default_value: Vec3) {
     ui.horizontal(|ui| {
-        ui.label("Pos");
-        [
-            &mut transform.position.x,
-            &mut transform.position.y,
-            &mut transform.position.z,
-        ]
-        .into_iter()
-        .for_each(|it| value(ui, it));
-    });
-    ui.horizontal(|ui| {
-        let euler = Euler::from(transform.rotation);
-        ui.label("Rot");
-        let mut x = Deg::from(euler.x);
-        let mut y = Deg::from(euler.y);
-        let mut z = Deg::from(euler.z);
-        [&mut x.0, &mut y.0, &mut z.0]
+        ui.label(label);
+        if ui.button("〇").clicked() {
+            *vec3 = default_value;
+        }
+        [&mut vec3.x, &mut vec3.y, &mut vec3.z]
             .into_iter()
             .for_each(|it| value(ui, it));
-        transform.rotation = Euler::new(x, y, z).into();
     });
-    ui.horizontal(|ui| {
-        ui.label("Sca");
-        ui.add(DragValue::new(&mut transform.scale.x));
-        ui.add(DragValue::new(&mut transform.scale.y));
-        ui.add(DragValue::new(&mut transform.scale.z));
-    });
+}
+
+pub fn transform_ui(ui: &mut Ui, transform: &mut Transform) {
+    vec3_ui(ui, "Pos", &mut transform.position, Vec3::zero());
+    let euler = {
+        let euler = Euler::from(transform.rotation);
+        let mut vec = Vec3::new(
+            Deg::from(euler.x).0,
+            Deg::from(euler.y).0,
+            Deg::from(euler.z).0,
+        );
+        vec3_ui(ui, "Rot", &mut vec, Vec3::zero());
+        Euler::new(Deg(vec.x), Deg(vec.y), Deg(vec.z))
+    };
+    transform.rotation = euler.into();
+    vec3_ui(ui, "Sca", &mut transform.scale, Vec3::one());
 }
 
 macro_rules! impl_component_ui {
@@ -240,6 +238,10 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
 
     ui.collapsing(display_name, |ui: &mut Ui| {
         ui.separator();
+
+        impl_component_ui!(Camera, world, id, ui, ui, camera, {
+            label_value(ui, "FOV", &mut camera.fovy);
+        });
 
         impl_component_ui!(CameraController, world, id, ui, ui, camera, {
             ui.horizontal(|ui| {

@@ -22,5 +22,6 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: V2F) -> @location(0) vec4<f32> {
-    return textureSample(env_cubemap, env_cubemap_sampler, in.local_position);
+    return textureSampleLevel(env_cubemap, env_cubemap_sampler, normalize(in.local_position), 0.0);
+    // return vec4<f32>(in.local_position.xyz / 2.0 + 0.5, 1.0);
 }

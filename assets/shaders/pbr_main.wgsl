@@ -178,7 +178,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let shadow = sample_directional_shadow(world_pos);
     surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
-
     return vec4<f32>(surface_color, 1.0);
     // return vec4<f32>(ibl, 1.0);
     // return vec4<f32>(surface.material.base_color, 1.0);

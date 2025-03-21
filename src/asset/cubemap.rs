@@ -36,7 +36,9 @@ pub fn load_cubemap_sliced(
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
         format: wgpu::TextureFormat::Rgba8UnormSrgb,
-        usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        usage: wgpu::TextureUsages::TEXTURE_BINDING
+            | wgpu::TextureUsages::COPY_DST
+            | wgpu::TextureUsages::COPY_SRC,
         view_formats: &[],
     });
 
@@ -66,9 +68,10 @@ pub fn load_cubemap_sliced(
         );
     }
 
-    let mut desc = TextureViewDescriptor::default();
-    desc.dimension = Some(wgpu::TextureViewDimension::Cube);
-    let view = texture.create_view(&desc);
+    let view = texture.create_view(&TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::Cube),
+        ..Default::default()
+    });
 
     Ok(UploadedImage { texture, view })
 }
