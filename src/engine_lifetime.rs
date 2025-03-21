@@ -33,7 +33,7 @@ use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
     MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
-    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
+    RenderTargetSize, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{

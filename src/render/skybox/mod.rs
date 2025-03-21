@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::world::FromWorld;
 use wgpu::{PipelineLayout, RenderPipeline};
 
