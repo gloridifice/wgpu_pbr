@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fs};
 
 use bevy_ecs::prelude::*;
+use gltf::json::accessor::SHORT;
 use naga_oil::compose::Composer;
 use wgpu::ShaderSource;
 
@@ -28,6 +29,24 @@ impl ShaderLoader {
                 ..Default::default()
             })?;
         Ok(ShaderSource::Naga(Cow::Owned(source)))
+    }
+
+    pub fn load_module_by_world(
+        world: &mut World,
+        path: AssetPath,
+    ) -> anyhow::Result<wgpu::ShaderModule> {
+        let mut shader_loader = world.resource_mut::<ShaderLoader>();
+        let shader_source = shader_loader.load_source(path)?;
+
+        let rs = world.resource::<crate::RenderState>();
+        let device = &rs.device;
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Prefiltering Env Map"),
+            source: shader_source,
+        });
+
+        Ok(shader)
     }
 }
 

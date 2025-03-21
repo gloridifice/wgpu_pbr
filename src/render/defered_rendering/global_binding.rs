@@ -11,12 +11,8 @@ use crate::{
 };
 
 use super::super::{
-    camera::CameraBuffer,
-    cubemap::{CubeMapConverterRgba8unorm, CubeVerticesBuffer},
-    dfg::DFGTexture,
-    light::LightUnifromBuffer,
-    shadow_mapping::ShadowMap,
-    UploadedImageWithSampler,
+    camera::CameraBuffer, cubemap::CubemapConverterRgba8unorm, dfg::DFGTexture,
+    light::LightUnifromBuffer, shadow_mapping::ShadowMap, UploadedImageWithSampler,
 };
 
 #[derive(Resource)]
@@ -53,11 +49,13 @@ impl FromWorld for GlobalBindGroup {
 
         let dfg = world.resource::<DFGTexture>();
         let cubemap = {
-            let converter = world.resource::<CubeMapConverterRgba8unorm>();
+            let converter = world.resource::<CubemapConverterRgba8unorm>();
             converter.0.render_hdir_to_cube_map(
                 device,
                 &hdri.view,
-                &world.resource::<CubeVerticesBuffer>().vertices_buffer,
+                &world
+                    .resource::<crate::render::utils::cube::CubeVerticesBuffer>()
+                    .vertices_buffer,
                 512,
             )
         };

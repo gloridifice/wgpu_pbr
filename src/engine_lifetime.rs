@@ -5,7 +5,7 @@ use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
-use crate::render::cubemap::{CubeMapConverterRgba8unorm, CubeVerticesBuffer};
+use crate::render::cubemap::{CubemapConverterRgba8unorm, CubemapMatrixBindGroups};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
@@ -26,6 +26,7 @@ use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
+use crate::render::skybox::prefiltering::PrefilteringPipeline;
 use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
@@ -60,7 +61,6 @@ use bevy_ecs::{
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
 use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
-use wgpu::TextureFormat;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component, Clone)]
@@ -132,8 +132,11 @@ impl State {
         self.insert_resource::<ColorRenderTarget>();
         self.insert_resource::<DepthRenderTarget>();
         self.insert_resource::<RenderTargetEguiTexId>();
-        self.insert_resource::<CubeVerticesBuffer>();
-        self.insert_resource::<CubeMapConverterRgba8unorm>();
+        self.insert_resource::<render::utils::cube::CubeVerticesBuffer>();
+        self.insert_resource::<render::cubemap::CubemapVertexShader>();
+        self.insert_resource::<CubemapMatrixBindGroups>();
+        self.insert_resource::<CubemapConverterRgba8unorm>();
+        self.insert_resource::<PrefilteringPipeline>();
         self.insert_resource::<DefaultSkybox>();
 
         // --- Render resource ---
@@ -242,13 +245,13 @@ impl State {
             .unwrap(),
         );
 
-        let white_image = Arc::new(
-            UploadedImageWithSampler::load(
-                AssetPath::Assets("textures/white.png".to_string()),
-                &mut self.world,
-            )
-            .unwrap(),
-        );
+        // let white_image = Arc::new(
+        //     UploadedImageWithSampler::load(
+        //         AssetPath::Assets("textures/white.png".to_string()),
+        //         &mut self.world,
+        //     )
+        //     .unwrap(),
+        // );
 
         let mut queue = CommandQueue::from_world(&mut self.world);
 

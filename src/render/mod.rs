@@ -40,6 +40,7 @@ pub mod shadow_mapping;
 pub mod skybox;
 pub mod systems;
 pub mod transform;
+pub mod utils;
 
 #[derive(Resource)]
 pub struct ColorRenderTarget(pub Option<UploadedImageWithSampler>);

@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use super::{
-    cubemap::CubeVerticesBuffer,
     defered_rendering::{
         global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd},
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
@@ -13,6 +12,7 @@ use super::{
     prelude::*,
     skybox::{Skybox, SkyboxPipeline},
     transform::Transform,
+    utils::cube::CubeVerticesBuffer,
     MainPassObject,
 };
 use egui_wgpu::ScreenDescriptor;

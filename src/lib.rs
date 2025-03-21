@@ -4,7 +4,7 @@ use bevy_ecs::{change_detection::Mut, system::IntoSystem};
 use egui_tools::EguiRenderer;
 use pollster::block_on;
 use std::sync::Arc;
-use wgpu::{Instance, Surface};
+use wgpu::{Features, Instance, Surface};
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -19,6 +19,12 @@ mod engine_lifetime;
 mod macro_utils;
 mod render;
 pub mod wgpu_init;
+
+lazy_static::lazy_static! {
+    pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![
+        Features::TIMESTAMP_QUERY
+    ]);
+}
 
 pub async fn run() {
     env_logger::init();
@@ -205,10 +211,17 @@ impl RenderState {
             .await
             .unwrap();
 
+        let required_features = {
+            let mut ret = Features::empty();
+            for feat in DEVICE_FEATURES.iter() {
+                ret |= *feat;
+            }
+            ret
+        };
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
-                    required_features: wgpu::Features::empty(),
+                    required_features,
                     required_limits: if cfg!(target_arch = "wasm32") {
                         wgpu::Limits::downlevel_webgl2_defaults()
                     } else {
