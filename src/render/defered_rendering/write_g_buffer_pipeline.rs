@@ -65,7 +65,7 @@ impl GBufferTexturesBindGroup {
 
         let bind_group = Arc::new(device.create_bind_group(&bg_descriptor! {
             ["GBuffer Textures"][&layout]
-            0: BindingResource::Sampler(&sampler);
+            0: BindingResource::Sampler(sampler);
             1: BindingResource::TextureView(&textures[0].image.view);
             2: BindingResource::TextureView(&textures[1].image.view);
         }));

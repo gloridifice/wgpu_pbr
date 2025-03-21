@@ -68,11 +68,11 @@ impl FromWorld for CubemapMatrixBindGroups {
                 contents: bytemuck::cast_slice(&[mat]),
                 usage: BufferUsages::UNIFORM,
             });
-            let bind_group = device.create_bind_group(&bg_descriptor!(
+            
+            device.create_bind_group(&bg_descriptor!(
                 ["Render Cube Map Matrix"][&layout]
                 0: buffer.as_entire_binding();
-            ));
-            bind_group
+            ))
         });
 
         Self {
@@ -99,8 +99,8 @@ impl FromWorld for CubemapConverterRgba8unorm {
             device,
             TextureFormat::Rgba8Unorm,
             &shader,
-            &matrix_bind_groups,
-            &vert_shader,
+            matrix_bind_groups,
+            vert_shader,
         ))
     }
 }
@@ -149,7 +149,7 @@ impl CubemapConverter {
                 alpha_to_coverage_enabled: false,
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
+                module: shader,
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some((format).into())],
@@ -195,7 +195,7 @@ impl CubemapConverter {
         let texture_bind_group = device.create_bind_group(&bg_descriptor!(
             ["Texture BG"][&self.texture_bgl]
             0: wgpu::BindingResource::Sampler(&self.sampler);
-            1: wgpu::BindingResource::TextureView(&source);
+            1: wgpu::BindingResource::TextureView(source);
         ));
 
         let direction_contexts = self

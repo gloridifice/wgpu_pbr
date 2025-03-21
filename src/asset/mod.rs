@@ -49,8 +49,7 @@ impl<T> Assets<T> {
     pub fn get_by_name(&self, name: &str) -> Option<Arc<T>> {
         self.name_map
             .get(&name.to_string())
-            .map(|handle| self.get(handle))
-            .flatten()
+            .and_then(|handle| self.get(handle))
     }
 
     pub fn insert_with_name(&mut self, name: &str, value: Arc<T>) -> (Handle<T>, Option<Arc<T>>) {
@@ -66,7 +65,7 @@ impl<T> Assets<T> {
         self.map.insert(handle, (name.clone(), value));
         self.name_map.insert(name, handle);
 
-        (handle.clone(), removed)
+        (handle, removed)
     }
 
     pub fn push(&mut self, value: Arc<T>) -> Handle<T> {
@@ -84,8 +83,7 @@ impl<T> Assets<T> {
     pub fn remove_by_name(&mut self, name: &String) -> Option<Arc<T>> {
         let handle = self.name_map.remove(name);
         handle
-            .map(|it| self.map.remove(&it).map(|(name, value)| value))
-            .flatten()
+            .and_then(|it| self.map.remove(&it).map(|(name, value)| value))
     }
 
     pub fn remove(&mut self, handle: &Handle<T>) -> Option<Arc<T>> {
@@ -110,7 +108,7 @@ impl<T> Clone for Handle<T> {
     fn clone(&self) -> Self {
         Handle {
             pha: PhantomData::<T>,
-            uuid: self.uuid.clone(),
+            uuid: self.uuid,
         }
     }
 }
@@ -151,10 +149,10 @@ mod test {
         let name = "boooo1121321!";
         assets.insert_with_name(name, Arc::new("Hello".to_string()));
 
-        assert_eq!(*assets.get_by_name(&name.to_string()).unwrap(), "Hello");
+        assert_eq!(*assets.get_by_name(name).unwrap(), "Hello");
 
         assets.remove_by_name(&name.to_string());
 
-        assert!(assets.get_by_name(&name.to_string()).is_none());
+        assert!(assets.get_by_name(name).is_none());
     }
 }

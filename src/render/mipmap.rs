@@ -29,7 +29,7 @@ pub fn calculate_mip_level_count<const N: usize>(tex_size: &[u32; N]) -> u32 {
         .iter()
         .max()
         .map(|max| {
-            return 1u32 + (*max as f32).log2() as u32;
+            1u32 + (*max as f32).log2() as u32
         })
         .unwrap_or(1u32)
 }
@@ -46,13 +46,13 @@ pub fn generate_mip_map(
         label: Some("blit"),
         layout: None,
         vertex: wgpu::VertexState {
-            module: &shader,
+            module: shader,
             entry_point: Some("vs_main"),
             buffers: &[],
             compilation_options: Default::default(),
         },
         fragment: Some(wgpu::FragmentState {
-            module: &shader,
+            module: shader,
             entry_point: Some("fs_main"),
             targets: &[Some(format.into())],
             compilation_options: Default::default(),

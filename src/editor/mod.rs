@@ -22,7 +22,7 @@ struct TreeBehavior<'a> {
     world: &'a mut World,
 }
 
-impl<'a> egui_tiles::Behavior<Pane> for TreeBehavior<'a> {
+impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
     fn pane_ui(
         &mut self,
         ui: &mut egui::Ui,
@@ -82,11 +82,9 @@ pub fn sys_egui_tiles(world: &mut World) {
             if let Some(id) = id.0 {
                 let main_view = ui.image(SizedTexture::new(id, size));
                 let mut input = world.resource_mut::<Input>();
-                for (ec, mc) in vec![
-                    (egui::PointerButton::Primary, CursorButton::Left),
+                for (ec, mc) in [(egui::PointerButton::Primary, CursorButton::Left),
                     (egui::PointerButton::Secondary, CursorButton::Right),
-                    (egui::PointerButton::Middle, CursorButton::Middle),
-                ] {
+                    (egui::PointerButton::Middle, CursorButton::Middle)] {
                     if main_view.clicked_by(ec) {
                         input.down_cursor_buttons.insert(mc);
                     }

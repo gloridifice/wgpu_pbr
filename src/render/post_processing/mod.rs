@@ -76,7 +76,7 @@ impl PostProcessingManager {
 
         self.pipelines
             .entry(stage)
-            .or_insert(Vec::new())
+            .or_default()
             .push(PostProcessingPipeline {
                 pipeline: Arc::new(pipeline),
             });

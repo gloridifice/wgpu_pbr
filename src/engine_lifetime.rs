@@ -81,9 +81,9 @@ impl<PB: Bundle, CB: Bundle + Clone> Command for SpawnModelCmd<PB, CB> {
     fn apply(self, world: &mut World) {
         let parent = world.spawn(self.parent_bundle).id();
         for mesh in self.model.meshes.iter() {
-            let uploaded = Arc::new(mesh.upload(&world));
+            let uploaded = Arc::new(mesh.upload(world));
             world.spawn((
-                MeshRenderer::new(uploaded, &world),
+                MeshRenderer::new(uploaded, world),
                 TransformBuilder::default()
                     .parent(Some(parent))
                     .build()

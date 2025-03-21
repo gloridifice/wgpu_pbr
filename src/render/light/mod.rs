@@ -112,7 +112,7 @@ impl LightUniform {
             intensity: parallel.intensity,
             padding2: [0f32; 3],
             padding1: 0.,
-            space_matrix: parallel.light_space_matrix(&transform).into(),
+            space_matrix: parallel.light_space_matrix(transform).into(),
             lights_count: [dynamic.point_lights.len() as u32, 0, 0, 0],
         }
     }
