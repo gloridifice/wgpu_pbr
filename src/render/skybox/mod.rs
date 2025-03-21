@@ -10,6 +10,7 @@ use crate::{asset::AssetPath, RenderState};
 
 use super::cubemap::CubemapMatrixBindGroups;
 use super::defered_rendering::global_binding::GlobalBindGroup;
+use super::utils::cube::CubeVerticesBuffer;
 use super::{shader_loader::ShaderLoader, UploadedImage};
 
 pub mod prefiltering;
@@ -35,12 +36,14 @@ impl FromWorld for DefaultSkybox {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let paths = ["posx", "negx", "posy", "negy", "posz", "negz"]
+            // .map(|it| AssetPath::Assets(format!("textures/cubemap/test_{}.png", it)));
             .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
         let source_texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
 
         let rs = world.resource::<RenderState>();
         let pipeline = world.resource::<prefiltering::PrefilteringPipeline>();
         let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
+        let cube_vertex = world.resource::<CubeVerticesBuffer>();
         let texture = prefiltering::prefilter(
             Some("Default Skybox"),
             &rs.device,
@@ -48,9 +51,10 @@ impl FromWorld for DefaultSkybox {
             &source_texture.texture,
             &source_texture.view,
             5,
-            30,
+            1145,
             pipeline,
             matrix_bind_groups,
+            cube_vertex,
         )
         .unwrap();
         Self { texture }

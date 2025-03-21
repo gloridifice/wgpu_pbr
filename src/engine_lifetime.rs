@@ -192,51 +192,15 @@ impl State {
             egui.context().set_visuals(visual);
         }
 
-        let arrow = render::Model::load(
-            AssetPath::Assets("models/gizmos_arrow.glb".to_string()),
-            &mut self.world,
-        )
-        .unwrap();
+        let rs = &self.world.resource::<RenderState>().config;
+        let aspect = rs.width as f32 / rs.height as f32;
 
-        {
-            let mut vec = Vec::with_capacity(20usize);
-            for _ in 0..10 {
-                let x = rand::random::<f32>() * 12.;
-                let y = rand::random::<f32>() * 2.;
-                let z = rand::random::<f32>() * 2.;
-                let r = rand::random::<f32>();
-                let a = rand::random::<f32>();
-                let g = (1. - r) * a;
-                let b = (1. - r) - g;
-                vec.push((
-                    PointLight {
-                        color: Vec4::new(r, g, b, 1.),
-                        ..Default::default()
-                    },
-                    Transform::with_position(Vec3::new(x, y, z)),
-                    Name("Point Light".to_string()),
-                ))
-            }
-            vec.into_iter().for_each(|it| {
-                self.world.spawn(it);
-            });
-        }
+        self.world.spawn((
+            Camera::new(aspect),
+            CameraController::default(),
+            Name("Camera".to_string()),
+        ));
 
-        let dragon_model = Arc::new(
-            render::Model::load(
-                AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
-                &mut self.world,
-            )
-            .unwrap(),
-        );
-
-        let plane_model = Arc::new(
-            render::Model::load(
-                AssetPath::Assets("models/plane.glb".to_string()),
-                &mut self.world,
-            )
-            .unwrap(),
-        );
         let light_arrow = Arc::new(
             render::Model::load(
                 AssetPath::Assets("models/arrow.glb".to_string()),
@@ -244,52 +208,7 @@ impl State {
             )
             .unwrap(),
         );
-
-        // let white_image = Arc::new(
-        //     UploadedImageWithSampler::load(
-        //         AssetPath::Assets("textures/white.png".to_string()),
-        //         &mut self.world,
-        //     )
-        //     .unwrap(),
-        // );
-
-        let mut queue = CommandQueue::from_world(&mut self.world);
-
-        let instance = Arc::new(self.world.resource_scope(|world, rs: Mut<RenderState>| {
-            world
-                .resource_mut::<BufferMaterialManager>()
-                .instantiate_material::<GizmosMaterial>(
-                    GizmosMaterial::new(Vec4::new(0., 1., 0., 1.)),
-                    &rs.device,
-                )
-                .unwrap()
-        }));
-
-        let mut cmd = Commands::new(&mut queue, &self.world);
-        let rs = &self.world.resource::<RenderState>().config;
-        let aspect = rs.width as f32 / rs.height as f32;
-
-        cmd.spawn((
-            Camera::new(aspect),
-            CameraController::default(),
-            Name("Camera".to_string()),
-        ));
-
-        for mesh in arrow.meshes {
-            let uploaded = Arc::new(mesh.upload(&self.world));
-
-            cmd.spawn((
-                MeshRenderer::new(uploaded, &self.world),
-                {
-                    Gizmos {
-                        instance: Arc::clone(&instance),
-                    }
-                },
-                Transform::with_position(Vec3::new(0., 0., -1.)),
-            ));
-        }
-
-        cmd.queue(SpawnModelCmd {
+        SpawnModelCmd {
             model: light_arrow.clone(),
             parent_bundle: (
                 TransformBuilder::default()
@@ -301,52 +220,10 @@ impl State {
                 Name("Parallel Light".to_string()),
             ),
             child_bundle: (MainPassObject,),
-        });
-
-        let count = 5;
-        for i in 0..5 {
-            cmd.queue(SpawnModelCmd {
-                model: dragon_model.clone(),
-                parent_bundle: (
-                    TransformBuilder::default()
-                        .position(Vec3::new(i as f32 * 2., 0., 0.))
-                        .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                        .scale(Vec3::new_unit(0.3))
-                        .build()
-                        .unwrap(),
-                    RotationObject { speed: 0.5 },
-                    Name(format!("龙模型 No_{}", i)),
-                ),
-                child_bundle: (
-                    CastShadow,
-                    MainPassObject,
-                    PBRMaterial {
-                        metallic: Some((i as f32) / (count - 1) as f32),
-                        ..Default::default()
-                    },
-                ),
-            });
         }
+        .apply(&mut self.world);
 
-        cmd.queue(SpawnModelCmd {
-            model: plane_model.clone(),
-            parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new_y(-1.0))
-                    .build()
-                    .unwrap(),
-                Name("平面".to_string()),
-            ),
-            child_bundle: (
-                CastShadow,
-                MainPassObject,
-                PBRMaterial {
-                    ..Default::default()
-                },
-            ),
-        });
-
-        queue.apply(&mut self.world);
+        self.world.run_system_once(sys_startup_scene).unwrap();
     }
 
     pub fn input(&mut self, event: &WindowEvent) -> bool {
@@ -593,4 +470,120 @@ fn sys_update_camera_uniform(
 ) {
     let (camera, transform) = single.into_inner();
     render_camera.update_uniform2gpu(camera, transform, &rs.queue);
+}
+
+fn sys_startup_scene(world: &mut World) {
+    let arrow = render::Model::load(
+        AssetPath::Assets("models/gizmos_arrow.glb".to_string()),
+        world,
+    )
+    .unwrap();
+
+    {
+        let mut vec = Vec::with_capacity(20usize);
+        for _ in 0..10 {
+            let x = rand::random::<f32>() * 12.;
+            let y = rand::random::<f32>() * 2.;
+            let z = rand::random::<f32>() * 2.;
+            let r = rand::random::<f32>();
+            let a = rand::random::<f32>();
+            let g = (1. - r) * a;
+            let b = (1. - r) - g;
+            vec.push((
+                PointLight {
+                    color: Vec4::new(r, g, b, 1.),
+                    ..Default::default()
+                },
+                Transform::with_position(Vec3::new(x, y, z)),
+                Name("Point Light".to_string()),
+            ))
+        }
+        vec.into_iter().for_each(|it| {
+            world.spawn(it);
+        });
+    }
+
+    let dragon_model = Arc::new(
+        render::Model::load(
+            AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
+            world,
+        )
+        .unwrap(),
+    );
+    let plane_model = Arc::new(
+        render::Model::load(AssetPath::Assets("models/plane.glb".to_string()), world).unwrap(),
+    );
+
+    let mut queue = CommandQueue::from_world(world);
+
+    let instance = Arc::new(world.resource_scope(|world, rs: Mut<RenderState>| {
+        world
+            .resource_mut::<BufferMaterialManager>()
+            .instantiate_material::<GizmosMaterial>(
+                GizmosMaterial::new(Vec4::new(0., 1., 0., 1.)),
+                &rs.device,
+            )
+            .unwrap()
+    }));
+
+    let mut cmd = Commands::new(&mut queue, world);
+
+    for mesh in arrow.meshes {
+        let uploaded = Arc::new(mesh.upload(world));
+
+        cmd.spawn((
+            MeshRenderer::new(uploaded, world),
+            {
+                Gizmos {
+                    instance: Arc::clone(&instance),
+                }
+            },
+            Transform::with_position(Vec3::new(0., 0., -1.)),
+        ));
+    }
+
+    let count = 5;
+    for i in 0..5 {
+        cmd.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                TransformBuilder::default()
+                    .position(Vec3::new(i as f32 * 2., 0., 0.))
+                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                    .scale(Vec3::new_unit(0.3))
+                    .build()
+                    .unwrap(),
+                RotationObject { speed: 0.5 },
+                Name(format!("龙模型 No_{}", i)),
+            ),
+            child_bundle: (
+                CastShadow,
+                MainPassObject,
+                PBRMaterial {
+                    metallic: Some((i as f32) / (count - 1) as f32),
+                    ..Default::default()
+                },
+            ),
+        });
+    }
+
+    cmd.queue(SpawnModelCmd {
+        model: plane_model.clone(),
+        parent_bundle: (
+            TransformBuilder::default()
+                .position(Vec3::new_y(-1.0))
+                .build()
+                .unwrap(),
+            Name("平面".to_string()),
+        ),
+        child_bundle: (
+            CastShadow,
+            MainPassObject,
+            PBRMaterial {
+                ..Default::default()
+            },
+        ),
+    });
+
+    queue.apply(world);
 }

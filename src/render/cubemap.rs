@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::{f32::consts::PI, sync::Arc};
 
 use bevy_ecs::prelude::*;
-use cgmath::{Deg, Point3, Vector3};
+use cgmath::{Deg, Point3, Rad, Vector3};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline, Sampler,
     ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,
@@ -11,7 +11,7 @@ use crate::{
     asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
 };
 
-use super::{shader_loader::ShaderLoader, UploadedImage};
+use super::{camera::OPENGL_TO_WGPU_MATRIX, shader_loader::ShaderLoader, UploadedImage};
 
 pub struct CubemapConverter {
     pub pipeline: RenderPipeline,
@@ -45,34 +45,21 @@ impl FromWorld for CubemapMatrixBindGroups {
         });
 
         let center = Point3::<f32>::new(0., 0., 0.);
-        let proj = cgmath::perspective(Deg(90.), 1., 0.1, 10.);
+        let proj = cgmath::perspective(Deg(90.0), 1., 0.1, 10.);
         let directions_matrices = [
-            // +x
-            cgmath::Matrix4::look_at_rh(Point3::new(1., 0., 0.), center, Vector3::new(0., -1., 0.)),
-            // -x
-            cgmath::Matrix4::look_at_rh(
-                Point3::new(-1., 0., 0.),
-                center,
-                Vector3::new(0., -1., 0.),
-            ),
-            // +y
-            cgmath::Matrix4::look_at_rh(Point3::new(0., 1., 0.), center, Vector3::new(0., 0., 1.)),
-            // -y
-            cgmath::Matrix4::look_at_rh(
-                Point3::new(0., -1., 0.),
-                center,
-                Vector3::new(0., 0., -1.),
-            ),
-            // +z
-            cgmath::Matrix4::look_at_rh(Point3::new(0., 0., 1.), center, Vector3::new(0., -1., 0.)),
-            // -z
-            cgmath::Matrix4::look_at_rh(
-                Point3::new(0., 0., -1.),
-                center,
-                Vector3::new(0., -1., 0.),
-            ),
+            ((1., 0., 0.), (0., -1., 0.)),  // +x
+            ((-1., 0., 0.), (0., -1., 0.)), // -x
+            ((0., 1., 0.), (0., 0., 1.)),   // +y
+            ((0., -1., 0.), (0., 0., -1.)), // -y
+            ((0., 0., 1.), (0., -1., 0.)),  // +z
+            ((0., 0., -1.), (0., -1., 0.)), // -z
         ]
-        .map(|view| {
+        .map(|((px, py, pz), (ux, uy, uz))| {
+            let view = cgmath::Matrix4::look_to_lh(
+                center,
+                Vector3::new(px, py, pz),
+                Vector3::new(ux, uy, uz),
+            );
             let mat = proj * view;
             let mat: [[f32; 4]; 4] = mat.into();
 

@@ -6,6 +6,7 @@
 fn vs_main(in: CubeVertexInput) -> CubemapVertexOutput{
     var ret: CubemapVertexOutput;
     ret.local_position = in.position;
+    ret.local_position.y = -ret.local_position.y;
     ret.clip_position = view_proj * vec4<f32>(in.position, 1.0);
     return ret;
 }
