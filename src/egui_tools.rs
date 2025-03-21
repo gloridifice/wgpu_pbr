@@ -3,7 +3,7 @@ use std::any::type_name;
 use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::world::World;
-use cgmath::{vec3, Deg, Euler};
+use cgmath::{Deg, Euler};
 use egui::{Color32, Context, DragValue, Ui, Widget};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};

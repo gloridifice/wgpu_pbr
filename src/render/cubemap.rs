@@ -1,7 +1,7 @@
-use std::{f32::consts::PI, sync::Arc};
+use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use cgmath::{Deg, Point3, Rad, Vector3};
+use cgmath::{Deg, Point3, Vector3};
 use wgpu::{
     util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline, Sampler,
     ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,
@@ -11,7 +11,7 @@ use crate::{
     asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
 };
 
-use super::{camera::OPENGL_TO_WGPU_MATRIX, shader_loader::ShaderLoader, UploadedImage};
+use super::{shader_loader::ShaderLoader, UploadedImage};
 
 pub struct CubemapConverter {
     pub pipeline: RenderPipeline,

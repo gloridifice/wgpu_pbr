@@ -3,8 +3,8 @@ use std::sync::Arc;
 use bevy_ecs::prelude::*;
 use wgpu::{
     util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
-    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, Texture, TextureFormat,
-    TextureUsages, TextureView,
+    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat,
+    TextureUsages,
 };
 
 use crate::{
@@ -18,7 +18,7 @@ use crate::{
         utils::cube::CubeVerticesBuffer,
         UploadedImage,
     },
-    wgpu_init, RenderState,
+    wgpu_init,
 };
 
 const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
