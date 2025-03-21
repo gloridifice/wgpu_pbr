@@ -120,7 +120,7 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let metallic = surface.material.metallic;
     let base_color = surface.material.base_color;
 
-    let f0: vec3<f32> = 
+    let f0: vec3<f32> =
         vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
     let f90 = vec3<f32>(1.0);
@@ -165,9 +165,9 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let ibl = ibl_functions::evaluate_ibl(
                         surface.normal,
                         world2camera,
-                        base_color, 
-                        f0, 
-                        f90, 
+                        base_color,
+                        f0,
+                        f90,
                         surface.material.perceptual_roughness
                     );
 
@@ -179,12 +179,11 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
 
-    return vec4<f32>(ibl, 1.0);
+    return vec4<f32>(surface_color, 1.0);
+    // return vec4<f32>(ibl, 1.0);
     // return vec4<f32>(surface.material.base_color, 1.0);
     // return vec4<f32>(world_pos, 1.0);
     // var a = vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);
     // a.z = 1.0;
     // return a;
 }
-
-

@@ -16,7 +16,6 @@ fn prefiltered_dfg_lut(perceptual_roughness: f32, nDotV: f32) -> vec2<f32> {
 
 fn evaluate_ibl_spectular(reflect: vec3<f32>, perceptual_roughness: f32) -> vec3<f32>{
     let lod = 8.0 * perceptual_roughness;
-    // let lod = 0.0;
     return textureSampleLevel(env_cubemap, env_cubemap_sampler, reflect, lod).xyz;
 }
 

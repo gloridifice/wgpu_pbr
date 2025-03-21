@@ -1,17 +1,22 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
+use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::world::FromWorld;
 use wgpu::{PipelineLayout, RenderPipeline};
 
 use crate::asset::cubemap::load_cubemap_sliced;
-use crate::{asset::AssetPath, wgpu_init, RenderState};
+use crate::{asset::AssetPath, RenderState};
 
+use super::cubemap::CubemapMatrixBindGroups;
 use super::defered_rendering::global_binding::GlobalBindGroup;
-use super::{cubemap, shader_loader::ShaderLoader, UploadedImage};
+use super::{shader_loader::ShaderLoader, UploadedImage};
+
+pub mod prefiltering;
 
 #[derive(Resource)]
 pub struct SkyboxPipeline {
+    #[allow(unused)]
     pub pipeline_layout: Arc<PipelineLayout>,
     pub pipeline: Arc<RenderPipeline>,
 }
@@ -31,7 +36,23 @@ impl FromWorld for DefaultSkybox {
         let rs = world.resource::<RenderState>();
         let paths = ["posx", "negx", "posy", "negy", "posz", "negz"]
             .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
-        let texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
+        let source_texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
+
+        let rs = world.resource::<RenderState>();
+        let pipeline = world.resource::<prefiltering::PrefilteringPipeline>();
+        let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
+        let texture = prefiltering::prefilter(
+            Some("Default Skybox"),
+            &rs.device,
+            &rs.queue,
+            &source_texture.texture,
+            &source_texture.view,
+            5,
+            30,
+            pipeline,
+            matrix_bind_groups,
+        )
+        .unwrap();
         Self { texture }
     }
 }
@@ -56,7 +77,7 @@ impl FromWorld for SkyboxPipeline {
                 push_constant_ranges: &[],
             },
         ));
-        let cube_vertex_layout = cubemap::cube_vertex_layout();
+        let cube_vertex_layout = super::utils::cube::cube_vertex_layout();
         let pipeline = Arc::new(
             device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Skybox"),
