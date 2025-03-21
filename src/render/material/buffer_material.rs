@@ -31,7 +31,7 @@ pub struct BufferMaterialManager {
     pub map: HashMap<TypeId, UploadedBufferMaterialLayout>,
 }
 
-static NOT_FOUND_LAYOUT_STR: &'static str = "NOT found the MaterialLayout of this MaterialData";
+static NOT_FOUND_LAYOUT_STR: &str = "NOT found the MaterialLayout of this MaterialData";
 
 impl BufferMaterialManager {
     pub fn register<M: BufferMaterialData + 'static>(
@@ -40,18 +40,15 @@ impl BufferMaterialManager {
         desc: &wgpu::BindGroupLayoutDescriptor,
     ) -> Result<Arc<BindGroupLayout>> {
         let key = TypeId::of::<M>();
-        if self.map.contains_key(&key) {
+        if let std::collections::hash_map::Entry::Vacant(e) = self.map.entry(key) {
+            e.insert(UploadedBufferMaterialLayout {
+                    layout: Arc::new(device.create_bind_group_layout(desc)),
+                });
+        } else {
             return Err(anyhow!(
                 "MaterialLayout of {} already exists! Do NOT register twice!",
                 type_name::<M>()
             ));
-        } else {
-            self.map.insert(
-                key,
-                UploadedBufferMaterialLayout {
-                    layout: Arc::new(device.create_bind_group_layout(desc)),
-                },
-            );
         }
         Ok(Arc::clone(&self.map.get(&key).unwrap().layout))
     }
@@ -85,7 +82,7 @@ impl BufferMaterialManager {
         buffer: &Buffer,
     ) -> BindGroup {
         let entries = data
-            .binding_resources(&buffer)
+            .binding_resources(buffer)
             .into_iter()
             .enumerate()
             .map(|(index, res)| BindGroupEntry {
@@ -95,7 +92,7 @@ impl BufferMaterialManager {
             .collect::<Vec<_>>();
         let desc = wgpu::BindGroupDescriptor {
             label: None,
-            layout: &layout,
+            layout,
             entries: &entries,
         };
         device.create_bind_group(&desc)

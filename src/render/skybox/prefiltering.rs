@@ -174,7 +174,7 @@ pub fn prefilter(
 
     encoder.copy_texture_to_texture(
         wgpu::TexelCopyTextureInfoBase {
-            texture: &source_texture,
+            texture: source_texture,
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -254,5 +254,5 @@ pub fn prefilter(
     queue.submit(std::iter::once(encoder.finish()));
     // TODO write texture
 
-    return Ok(UploadedImage { texture, view });
+    Ok(UploadedImage { texture, view })
 }

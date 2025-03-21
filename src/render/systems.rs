@@ -123,8 +123,7 @@ pub fn sys_render_write_g_buffer_pass(
             &mut render_pass,
             default_material.0.clone(),
             override_mat
-                .map(|it| it.material.as_ref().map(|it| it.as_ref()))
-                .flatten(),
+                .and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
         );
     }
 }
@@ -187,7 +186,7 @@ pub fn sys_render_egui(
         &render_state.device,
         &render_state.queue,
         &mut ctx.encoder,
-        &window,
+        window,
         &ctx.output_view,
         screen_descriptor,
     );

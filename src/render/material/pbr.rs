@@ -161,23 +161,20 @@ pub fn sys_update_override_pbr_material_bind_group(
         let raw_mat = mesh
             .mesh
             .as_ref()
-            .map(|it| {
+            .and_then(|it| {
                 it.primitives
                     .first()
                     .as_ref()
                     .map(|primitive| primitive.material.as_ref())
             })
-            .flatten()
             .flatten();
         let mat = GltfMaterial {
             base_color_texture: ove_mat.base_color_texture.clone().or(raw_mat
                 .as_ref()
-                .map(|it| it.base_color_texture.clone())
-                .flatten()),
+                .and_then(|it| it.base_color_texture.clone())),
             normal_texture: ove_mat.normal_texture.clone().or(raw_mat
                 .as_ref()
-                .map(|it| it.normal_texture.clone())
-                .flatten()),
+                .and_then(|it| it.normal_texture.clone())),
             roughness: ove_mat
                 .roughness
                 .unwrap_or(raw_mat.map(|it| it.roughness).unwrap_or(Default::default())),

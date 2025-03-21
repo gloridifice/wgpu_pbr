@@ -42,7 +42,7 @@ impl Camera {
     pub fn build_view_projection_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
         let view = transform.view_matrix();
         let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
-        return OPENGL_TO_WGPU_MATRIX * proj * view;
+        OPENGL_TO_WGPU_MATRIX * proj * view
     }
 
     pub fn new(aspect: f32) -> Camera {

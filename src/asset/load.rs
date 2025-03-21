@@ -80,7 +80,6 @@ impl Loadable for Model {
 
         let meshes = document
             .meshes()
-            .into_iter()
             .map(|mesh| {
                 let mut vertices = Vec::<Vertex>::new();
                 let mut indices = Vec::<u32>::new();

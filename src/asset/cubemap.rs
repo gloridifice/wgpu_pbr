@@ -54,7 +54,7 @@ pub fn load_cubemap_sliced(
                 },
                 aspect: wgpu::TextureAspect::All,
             },
-            &image,
+            image,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * width),

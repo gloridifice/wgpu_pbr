@@ -50,21 +50,21 @@ impl Input {
 
     #[allow(unused)]
     pub fn is_key_down(&self, key: KeyCode) -> bool {
-        return self.down_keys.contains(&key);
+        self.down_keys.contains(&key)
     }
 
     #[allow(unused)]
     pub fn is_key_up(&self, key: KeyCode) -> bool {
-        return self.up_keys.contains(&key);
+        self.up_keys.contains(&key)
     }
 
     pub fn is_key_hold(&self, key: KeyCode) -> bool {
-        return self.hold_keys.contains(&key);
+        self.hold_keys.contains(&key)
     }
 
     #[allow(unused)]
     pub fn is_cursor_button_down(&self, button: CursorButton) -> bool {
-        return self.down_cursor_buttons.contains(&button);
+        self.down_cursor_buttons.contains(&button)
     }
 
     pub fn input(&mut self, event: &WindowEvent) {

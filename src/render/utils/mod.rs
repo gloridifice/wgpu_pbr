@@ -6,4 +6,4 @@ pub struct RenderPipelineDescriptionBuilder<'a> {
     pub desc: RenderPipelineDescriptor<'a>,
 }
 
-impl<'a> RenderPipelineDescriptionBuilder<'a> {}
+impl RenderPipelineDescriptionBuilder<'_> {}

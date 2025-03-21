@@ -291,7 +291,7 @@ impl MeshRenderer {
                 if last_material.is_none()
                     || Arc::ptr_eq(last_material.as_ref().unwrap(), material_instance)
                 {
-                    last_material = Some(Arc::clone(&material_instance));
+                    last_material = Some(Arc::clone(material_instance));
                     render_pass.set_bind_group(1, material_instance.get_bind_group(), &[]);
                 }
             }
@@ -422,11 +422,11 @@ impl Mesh {
                     it.material.as_ref().map(|gltf_mat| {
                         Arc::new(UploadedPBRMaterial::from_gltf(
                             device,
-                            &layout,
+                            layout,
                             &white_tex.0,
                             &normal_default.0,
                             Arc::clone(&main_pipeline.pipeline),
-                            &gltf_mat,
+                            gltf_mat,
                         ))
                     })
                 },
@@ -610,7 +610,7 @@ impl FromWorld for DefaultMainPipelineMaterial {
 
         let mat = UploadedPBRMaterial::from_gltf(
             device,
-            &layout,
+            layout,
             white_tex,
             normal_default_tex,
             Arc::clone(&main_pipeline.pipeline),

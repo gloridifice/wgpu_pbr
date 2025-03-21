@@ -55,12 +55,12 @@ pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> Bi
     }
 }
 
-pub fn texture_desc_2d_one_mip_sample_level<'a>(
-    label: Option<&'a str>,
+pub fn texture_desc_2d_one_mip_sample_level(
+    label: Option<&str>,
     size: Extent3d,
     format: wgpu::TextureFormat,
     usage: wgpu::TextureUsages,
-) -> TextureDescriptor<'a> {
+) -> TextureDescriptor<'_> {
     TextureDescriptor {
         label,
         size,
@@ -157,7 +157,7 @@ pub fn full_screen_pipeline_desc<'a>(
             alpha_to_coverage_enabled: false,
         },
         fragment: Some(wgpu::FragmentState {
-            module: &frag,
+            module: frag,
             entry_point: Some("fs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
@@ -200,7 +200,7 @@ pub fn no_depth_stencil_pipeline_desc<'a>(
             alpha_to_coverage_enabled: false,
         },
         fragment: Some(wgpu::FragmentState {
-            module: &frag,
+            module: frag,
             entry_point: Some("fs_main"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
