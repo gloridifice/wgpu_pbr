@@ -11,7 +11,7 @@ use crate::{
     asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
 };
 
-use super::{shader_loader::ShaderLoader, UploadedImage};
+use super::shader_loader::ShaderLoader;
 
 pub struct CubemapConverter {
     pub pipeline: RenderPipeline,
@@ -68,7 +68,7 @@ impl FromWorld for CubemapMatrixBindGroups {
                 contents: bytemuck::cast_slice(&[mat]),
                 usage: BufferUsages::UNIFORM,
             });
-            
+
             device.create_bind_group(&bg_descriptor!(
                 ["Render Cube Map Matrix"][&layout]
                 0: buffer.as_entire_binding();
@@ -134,10 +134,10 @@ impl CubemapConverter {
                 buffers: &[super::utils::cube::cube_vertex_layout()],
             },
             primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleStrip,
+                topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: None,
+                cull_mode: Some(wgpu::Face::Front),
                 unclipped_depth: false,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 conservative: false,
@@ -158,6 +158,9 @@ impl CubemapConverter {
             cache: None,
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::MirrorRepeat,
+            address_mode_v: wgpu::AddressMode::MirrorRepeat,
+            address_mode_w: wgpu::AddressMode::MirrorRepeat,
             ..Default::default()
         });
 
@@ -173,6 +176,7 @@ impl CubemapConverter {
     pub fn render_hdir_to_cube_map(
         &self,
         device: &wgpu::Device,
+        queue: &wgpu::Queue,
         source: &wgpu::TextureView,
         cube_vertex_buffer: &wgpu::Buffer,
         piece_size: u32,
@@ -188,7 +192,9 @@ impl CubemapConverter {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: self.format,
-            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+            usage: TextureUsages::COPY_DST
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });
 
@@ -198,42 +204,25 @@ impl CubemapConverter {
             1: wgpu::BindingResource::TextureView(source);
         ));
 
-        let direction_contexts = self
-            .matrix_bind_groups
-            .iter()
-            .map(|it| {
-                let texture = device.create_texture(&TextureDescriptor {
-                    label: Some("Render cubemap"),
-                    size: wgpu::Extent3d {
-                        width: piece_size,
-                        height: piece_size,
-                        depth_or_array_layers: 1,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: self.format,
-                    usage: TextureUsages::COPY_SRC | TextureUsages::RENDER_ATTACHMENT,
-                    view_formats: &[],
-                });
-                let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let image = UploadedImage { texture, view };
-                (it, image)
-            })
-            .collect::<Vec<_>>();
-
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Cubemap"),
         });
 
-        for (matrix_bind_group, target_image) in direction_contexts.iter() {
+        for i in 0..6 {
+            let matrix_bind_group = self.matrix_bind_groups.get(i).unwrap();
+            let target = ret_texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_array_layer: i as u32,
+                array_layer_count: Some(1),
+                ..Default::default()
+            });
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render cubemap"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &target_image.view,
+                    view: &target,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Load,
+                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         store: wgpu::StoreOp::Store,
                     },
                 })],
@@ -243,37 +232,13 @@ impl CubemapConverter {
             });
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_vertex_buffer(0, cube_vertex_buffer.slice(..));
-            render_pass.set_bind_group(0, *matrix_bind_group, &[]);
+            render_pass.set_bind_group(0, matrix_bind_group, &[]);
             render_pass.set_bind_group(1, &texture_bind_group, &[]);
             render_pass.draw(0..36, 0..1)
-            //todo draw cube
         }
 
-        for (index, (_, image)) in direction_contexts.iter().enumerate() {
-            encoder.copy_texture_to_texture(
-                wgpu::TexelCopyTextureInfoBase {
-                    texture: &image.texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d::ZERO,
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::TexelCopyTextureInfoBase {
-                    texture: &ret_texture,
-                    mip_level: 0,
-                    origin: wgpu::Origin3d {
-                        x: 0,
-                        y: 0,
-                        z: index as u32,
-                    },
-                    aspect: wgpu::TextureAspect::All,
-                },
-                wgpu::Extent3d {
-                    width: piece_size,
-                    height: piece_size,
-                    depth_or_array_layers: 1,
-                },
-            );
-        }
+        queue.submit(std::iter::once(encoder.finish()));
+
         ret_texture
     }
 }

@@ -23,3 +23,4 @@ struct LightUniform {
 @group(0) @binding(4) var dfg_lut: texture_2d<f32>;
 @group(0) @binding(5) var env_cubemap: texture_cube<f32>;
 @group(0) @binding(6) var env_cubemap_sampler: sampler;
+@group(0) @binding(7) var<uniform> env_sh_coefficients: array<vec3<f32>, 9>;

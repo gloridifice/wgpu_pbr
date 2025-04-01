@@ -27,13 +27,13 @@ use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::skybox::prefiltering::PrefilteringPipeline;
-use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline};
+use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::{
     ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
     MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
-    RenderTargetSize, WhiteTexture,
+    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -141,7 +141,7 @@ impl State {
 
         // --- Render resource ---
         self.insert_resource::<CameraBuffer>();
-        self.insert_resource::<Skybox>();
+        self.insert_resource::<SkyboxSHBuffer>();
         self.world
             .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
         self.insert_resource::<ShadowMap>();
@@ -222,6 +222,36 @@ impl State {
             child_bundle: (MainPassObject,),
         }
         .apply(&mut self.world);
+
+        let hdri = UploadedImageWithSampler::load(
+            AssetPath::Assets("textures/hdr/qwantani_afternoon_2k.png".to_string()),
+            &mut self.world,
+        )
+        .unwrap();
+        let cubemap_texture = {
+            let converter = self.world.resource::<CubemapConverterRgba8unorm>();
+            converter.0.render_hdir_to_cube_map(
+                &self.render_state().device,
+                &self.render_state().queue,
+                &hdri.view,
+                &self
+                    .world
+                    .resource::<crate::render::utils::cube::CubeVerticesBuffer>()
+                    .vertices_buffer,
+                512,
+            )
+        };
+        let cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
+            dimension: Some(wgpu::TextureViewDimension::Cube),
+            ..Default::default()
+        });
+
+        // self.world.spawn(Skybox {
+        //     texture: Some(render::UploadedImage {
+        //         texture: cubemap_texture,
+        //         view: cubemap_view,
+        //     }),
+        // });
 
         self.world.run_system_once(sys_startup_scene).unwrap();
     }

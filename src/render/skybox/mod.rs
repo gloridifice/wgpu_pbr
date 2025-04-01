@@ -2,9 +2,11 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::FromWorld;
-use wgpu::{PipelineLayout, RenderPipeline};
+use wgpu::util::DeviceExt;
+use wgpu::{Buffer, BufferUsages, PipelineLayout, RenderPipeline};
 
 use crate::asset::cubemap::load_cubemap_sliced;
+use crate::impl_pod_zeroable;
 use crate::{asset::AssetPath, RenderState};
 
 use super::cubemap::CubemapMatrixBindGroups;
@@ -21,7 +23,7 @@ pub struct SkyboxPipeline {
     pub pipeline: Arc<RenderPipeline>,
 }
 
-#[derive(Resource, Default)]
+#[derive(Component, Default)]
 pub struct Skybox {
     pub texture: Option<UploadedImage>,
 }
@@ -119,6 +121,49 @@ impl FromWorld for SkyboxPipeline {
         Self {
             pipeline_layout,
             pipeline,
+        }
+    }
+}
+
+#[derive(Resource)]
+pub struct SkyboxSHBuffer {
+    pub buffer: Arc<Buffer>,
+}
+
+#[derive(Clone, Copy)]
+pub struct ComputedSH {
+    #[allow(unused)]
+    pub array: [[f32; 4]; 9],
+}
+
+impl_pod_zeroable!(ComputedSH);
+
+impl FromWorld for SkyboxSHBuffer {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let buffer = rs
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Computed SH"),
+                contents: bytemuck::cast_slice(&[ComputedSH {
+                    array: [
+                        [0.79, 0.44, 0.54],
+                        [0.39, 0.35, 0.60],
+                        [-0.34, -0.18, -0.27],
+                        [-0.29, -0.06, -0.1],
+                        [-0.11, -0.05, -0.12],
+                        [-0.26, -0.22, -0.47],
+                        [-0.16, -0.09, -0.15],
+                        [0.56, 0.21, 0.14],
+                        [0.21, -0.05, -0.3],
+                    ]
+                    .map(|it| [it[0], it[1], it[2], 0.0]),
+                }]),
+                usage: BufferUsages::UNIFORM,
+            });
+
+        Self {
+            buffer: Arc::new(buffer),
         }
     }
 }
