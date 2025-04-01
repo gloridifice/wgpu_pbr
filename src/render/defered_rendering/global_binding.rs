@@ -87,8 +87,7 @@ fn refresh_global_bind_group(
     let skybox_texture = skybox
         .get_single()
         .ok()
-        .map(|it| it.texture.as_ref())
-        .flatten()
+        .and_then(|it| it.texture.as_ref())
         .unwrap_or(&default_skybox.texture);
 
     let bind_group_desc = bg_descriptor! {
