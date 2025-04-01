@@ -122,8 +122,7 @@ pub fn sys_render_write_g_buffer_pass(
         mesh_renderer.draw_main(
             &mut render_pass,
             default_material.0.clone(),
-            override_mat
-                .and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
+            override_mat.and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
         );
     }
 }
@@ -290,8 +289,11 @@ pub fn sys_render_gizmos(
     });
 }
 
-pub fn sys_refersh_global_bind_group(mut commands: Commands, skybox: Res<Skybox>) {
-    if skybox.is_changed() {
+pub fn sys_refersh_global_bind_group(
+    mut commands: Commands,
+    q_skybox: Query<&Skybox, Changed<Skybox>>,
+) {
+    if q_skybox.get_single().is_ok() {
         commands.queue(RefreshGlobalBindGroupCmd);
     }
 }
