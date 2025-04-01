@@ -27,7 +27,7 @@ use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::skybox::prefiltering::PrefilteringPipeline;
-use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline, SkyboxSHBuffer};
+use crate::render::skybox::{DefaultSkybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::{
