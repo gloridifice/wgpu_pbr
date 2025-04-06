@@ -5,7 +5,7 @@ use bevy_ecs::{
     world::FromWorld,
 };
 use winit::{
-    event::{ElementState, KeyEvent, WindowEvent},
+    event::{DeviceEvent, ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
@@ -18,8 +18,11 @@ pub struct Input {
     pub up_keys: HashSet<KeyCode>,
     pub last_cursor_position: Vec2,
     pub cursor_position: Vec2,
+    /// Will always be zero when curosr is locked. Use `cursor_delta` instead.
     pub cursor_offset: Vec2,
     pub down_cursor_buttons: HashSet<CursorButton>,
+    /// Ignore cursor locking. From device input.
+    pub cursor_delta: Vec2,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -45,6 +48,7 @@ impl Input {
             cursor_position: Vec2::zero(),
             cursor_offset: Vec2::zero(),
             down_cursor_buttons: HashSet::with_capacity(8),
+            cursor_delta: Vec2::zero(),
         }
     }
 
@@ -67,11 +71,8 @@ impl Input {
         self.down_cursor_buttons.contains(&button)
     }
 
-    pub fn input(&mut self, event: &WindowEvent) {
+    pub fn window_input(&mut self, event: &WindowEvent) {
         match event {
-            WindowEvent::CursorMoved { .. } => {
-                // self.cursor_position = Vec2::new(position.x as f32, position.y as f32);
-            }
             WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
@@ -100,13 +101,24 @@ impl Input {
         };
     }
 
+    pub fn device_input(&mut self, event: &DeviceEvent) {
+        match event {
+            DeviceEvent::MouseMotion { delta } => {
+                self.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
+            }
+            _ => {}
+        }
+    }
+
     pub fn sys_pre_update(mut input: ResMut<Input>) {
         input.cursor_offset = input.cursor_position - input.last_cursor_position;
         input.last_cursor_position = input.cursor_position;
     }
+
     pub fn sys_post_update(mut input: ResMut<Input>) {
         input.down_keys.clear();
         input.up_keys.clear();
         input.down_cursor_buttons.clear();
+        input.cursor_delta = Vec2::zero();
     }
 }
