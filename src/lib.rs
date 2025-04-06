@@ -83,8 +83,8 @@ impl App {
         let mut state =
             State::new(&self.instance, surface, window.clone(), i_width, i_height).await;
 
-        state.init();
         state.world.insert_resource(MainWindow(Arc::clone(&window)));
+        state.init();
 
         window.request_redraw();
 
@@ -102,6 +102,16 @@ impl ApplicationHandler for App {
         block_on(self.set_window_and_init(window));
     }
 
+    fn device_event(
+        &mut self,
+        _event_loop: &winit::event_loop::ActiveEventLoop,
+        _device_id: winit::event::DeviceId,
+        event: winit::event::DeviceEvent,
+    ) {
+        let state = self.state.as_mut().unwrap();
+        state.device_input(&event);
+    }
+
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
@@ -111,7 +121,7 @@ impl ApplicationHandler for App {
         let state = self.state.as_mut().unwrap();
         let window = self.window.as_ref().unwrap();
         state.egui_renderer_mut().handle_input(window, &event);
-        if !state.input(&event) {
+        if !state.window_input(&event) {
             match event {
                 //Update and Render
                 WindowEvent::RedrawRequested => {

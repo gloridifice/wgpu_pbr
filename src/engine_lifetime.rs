@@ -61,6 +61,7 @@ use bevy_ecs::{
 use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
 use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
+use winit::event::DeviceEvent;
 use winit::{event::WindowEvent, keyboard::KeyCode};
 
 #[derive(Debug, Component, Clone)]
@@ -241,7 +242,7 @@ impl State {
                 512,
             )
         };
-        let cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
+        let _cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
             dimension: Some(wgpu::TextureViewDimension::Cube),
             ..Default::default()
         });
@@ -254,11 +255,15 @@ impl State {
         // });
 
         self.world.run_system_once(sys_startup_scene).unwrap();
+        self.world.run_system_cached(sys_control_state).unwrap();
     }
 
-    pub fn input(&mut self, event: &WindowEvent) -> bool {
-        self.world.resource_mut::<Input>().input(event);
+    pub fn window_input(&mut self, event: &WindowEvent) -> bool {
+        self.world.resource_mut::<Input>().window_input(event);
         false
+    }
+    pub fn device_input(&mut self, event: &DeviceEvent) {
+        self.world.resource_mut::<Input>().device_input(event);
     }
 
     pub fn handle_redraw(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
@@ -297,6 +302,7 @@ impl State {
     }
 
     pub fn update(&mut self) {
+        self.world.run_system_once(sys_input).unwrap();
         self.world.run_system_once(sys_update_camera).unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
         self.world
@@ -425,12 +431,33 @@ pub fn sys_update_rotation(mut q: Query<(&mut Transform, &RotationObject)>, time
     }
 }
 
+pub fn sys_input(
+    mut commands: Commands,
+    input: Res<Input>,
+    mut control_state: ResMut<ControlState>,
+) {
+    if input.is_key_down(KeyCode::Escape) {
+        control_state.is_focused = !control_state.is_focused;
+        commands.queue(|world: &mut World| {
+            world.run_system_cached(sys_control_state).unwrap();
+        });
+    }
+}
+
+pub fn sys_control_state(control_state: ResMut<ControlState>, main_window: Res<MainWindow>) {
+    main_window.0.set_cursor_visible(!control_state.is_focused);
+    let _ = main_window.0.set_cursor_grab(if control_state.is_focused {
+        winit::window::CursorGrabMode::Locked
+    } else {
+        winit::window::CursorGrabMode::None
+    });
+}
+
 pub fn sys_update_camera(
     config: Res<CameraConfig>,
     input: Res<Input>,
     time: Res<Time>,
-    main_window: Res<MainWindow>,
-    mut control_state: ResMut<ControlState>,
+    control_state: Res<ControlState>,
     camera_query: Single<(
         &Camera,
         &mut Transform,
@@ -438,10 +465,6 @@ pub fn sys_update_camera(
         &mut CameraController,
     )>,
 ) {
-    if input.is_key_down(KeyCode::Escape) {
-        control_state.is_focused = !control_state.is_focused;
-        main_window.0.set_cursor_visible(!control_state.is_focused);
-    }
     if !control_state.is_focused {
         return;
     }
@@ -477,8 +500,8 @@ pub fn sys_update_camera(
     }
 
     let factor = vec2(0.6, 0.4);
-    controller.row -= input.cursor_offset.x * factor.x;
-    controller.yaw = (controller.yaw - input.cursor_offset.y * factor.y).clamp(-40.0, 80.0);
+    controller.row -= input.cursor_delta.x * factor.x;
+    controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
     cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
         * Quaternion::from_angle_x(Deg(controller.yaw));
 }
