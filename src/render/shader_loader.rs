@@ -1,6 +1,7 @@
 use std::{borrow::Cow, fs};
 
 use bevy_ecs::prelude::*;
+use log::{error, info};
 use naga_oil::compose::Composer;
 use wgpu::ShaderSource;
 
@@ -52,20 +53,34 @@ impl ShaderLoader {
 impl FromWorld for ShaderLoader {
     fn from_world(_world: &mut World) -> Self {
         let mut composer = Composer::default();
-        let paths =
-            fs::read_dir(AssetPath::Assets("shaders/libs/".to_string()).final_path()).unwrap();
-        for path in paths {
-            let path = &path.unwrap().path();
-            let shader_string = fs::read_to_string(path).unwrap();
-            match composer.add_composable_module(naga_oil::compose::ComposableModuleDescriptor {
-                source: &shader_string,
-                file_path: path.to_str().unwrap(),
-                ..Default::default()
-            }) {
-                Ok(_) => {}
-                Err(e) => println!("? -> {e:#?}"),
+        let mut add_folder = |path: AssetPath| {
+            let paths = fs::read_dir(path.final_path()).unwrap();
+            for path in paths {
+                let path = &path.unwrap().path();
+                let valid = path.is_file() && path.to_str().unwrap().ends_with(".wgsl");
+                if !valid {
+                    continue;
+                }
+                let result = fs::read_to_string(path);
+                let Ok(shader_string) = result else {
+                    error!("Failed to read file <{:?}>.", path);
+                    result.unwrap();
+                    panic!();
+                };
+                match composer.add_composable_module(
+                    naga_oil::compose::ComposableModuleDescriptor {
+                        source: &shader_string,
+                        file_path: path.to_str().unwrap(),
+                        ..Default::default()
+                    },
+                ) {
+                    Ok(_) => {}
+                    Err(e) => println!("? -> {e:#?}"),
+                }
             }
-        }
+        };
+        add_folder(AssetPath::Assets("shaders/libs/primary".to_string()));
+        add_folder(AssetPath::Assets("shaders/libs/".to_string()));
         Self { composer }
     }
 }

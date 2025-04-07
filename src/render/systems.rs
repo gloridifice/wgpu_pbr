@@ -170,7 +170,7 @@ pub fn sys_render_main_pass(
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
     render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
-    render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
     render_pass.draw(0..3, 0..1);
 }
 
