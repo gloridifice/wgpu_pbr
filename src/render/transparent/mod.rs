@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::{asset::AssetPath, render::prelude::*};
 
 use super::{
-    defered_rendering::global_binding::GlobalBindGroup, material::pbr::PBRMaterialBindGroupLayout,
-    shader_loader::ShaderLoader,
+    defered_rendering::global_binding::GlobalBindGroup, light::DynamicLightBindGroup,
+    material::pbr::PBRMaterialBindGroupLayout, shader_loader::ShaderLoader,
 };
 
 /// Transparent 是一个不进行深度写入，但是使用 Opaque 阶段的深度图进行深度测试的 Pipeline
@@ -12,6 +12,7 @@ use super::{
 #[derive(Resource)]
 pub struct TransparentPipeline {
     pub pipeline: Arc<RenderPipeline>,
+    #[allow(unused)]
     pub layout: Arc<PipelineLayout>,
 }
 
@@ -31,6 +32,7 @@ impl FromWorld for TransparentPipeline {
         let global_bind_group = world.resource::<GlobalBindGroup>();
         let material_bind_group = world.resource::<PBRMaterialBindGroupLayout>();
         let object_bind_group = world.resource::<ObjectBindGroupLayout>();
+        let dynamic_light = world.resource::<DynamicLightBindGroup>();
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -41,6 +43,7 @@ impl FromWorld for TransparentPipeline {
             global_bind_group.layout.as_ref(),
             material_bind_group.0.as_ref(),
             object_bind_group.0.as_ref(),
+            dynamic_light.layout.as_ref(),
         ];
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
