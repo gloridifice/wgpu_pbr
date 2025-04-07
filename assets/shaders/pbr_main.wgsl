@@ -51,7 +51,7 @@ fn calculate_light(
     let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
     let metallic: f32 = surface.material.metallic;
     let normal: vec3<f32> = surface.normal;
-    let base_color: vec3<f32> = surface.material.base_color;
+    let base_color: vec3<f32> = surface.material.base_color.xyz;
 
     let nDotL = max(dot(normal, world2light), 0.0);
     let half = normalize(world2light + world2camera);
@@ -118,7 +118,7 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     }
 
     let metallic = surface.material.metallic;
-    let base_color = surface.material.base_color;
+    let base_color = surface.material.base_color.xyz;
 
     let f0: vec3<f32> =
         vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))

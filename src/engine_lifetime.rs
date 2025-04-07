@@ -30,8 +30,9 @@ use crate::render::skybox::prefiltering::PrefilteringPipeline;
 use crate::render::skybox::{DefaultSkybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
+use crate::render::transparent::TransparentPipeline;
 use crate::render::{
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, FullScreenVertexShader,
+    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
     MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
     RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
@@ -167,6 +168,7 @@ impl State {
         self.insert_resource::<WriteGBufferPipeline>();
         self.insert_resource::<SkyboxPipeline>();
         self.insert_resource::<MainPipeline>();
+        self.insert_resource::<TransparentPipeline>();
         self.insert_resource::<ShadowMappingPipeline>();
         self.insert_resource::<GizmosPipeline>();
 
@@ -180,7 +182,7 @@ impl State {
         self.world.insert_resource(Time::default());
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(CameraConfig::default());
-        self.insert_resource::<DefaultMainPipelineMaterial>();
+        self.insert_resource::<DefaultPBRMaterial>();
 
         // Add Events'Observers
         self.world.add_observer(event_on_remove_point_light);
@@ -386,6 +388,10 @@ impl State {
         ctx.stage = RenderStage::BeforeTransparent;
         world
             .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
+            .unwrap();
+
+        world
+            .run_system_cached_with(render::systems::sys_render_transparent, &mut ctx)
             .unwrap();
 
         ctx.stage = RenderStage::AfterTransparent;

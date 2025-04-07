@@ -40,6 +40,7 @@ pub mod shadow_mapping;
 pub mod skybox;
 pub mod systems;
 pub mod transform;
+pub mod transparent;
 pub mod utils;
 
 #[derive(Resource)]
@@ -249,7 +250,8 @@ impl MeshRenderer {
 }
 
 impl MeshRenderer {
-    fn draw_depth(&self, render_pass: &mut RenderPass) {
+    /// Bind vertex buffer and index buffer, and set bind group of 1 (ObjectBindGroup)
+    fn draw(&self, render_pass: &mut RenderPass) {
         let Some(mesh) = self.mesh.as_ref() else {
             return;
         };
@@ -263,6 +265,7 @@ impl MeshRenderer {
             render_pass.draw_indexed(start..(start + num), 0, 0..1);
         }
     }
+
     fn draw_main(
         &self,
         render_pass: &mut RenderPass,
@@ -561,7 +564,7 @@ pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler>);
 pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
 
 #[derive(Resource, Clone)]
-pub struct DefaultMainPipelineMaterial(pub Arc<UploadedPBRMaterial>);
+pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 
 impl FromWorld for WhiteTexture {
     fn from_world(world: &mut World) -> Self {
@@ -599,7 +602,7 @@ impl FromWorld for MissingTexture {
     }
 }
 
-impl FromWorld for DefaultMainPipelineMaterial {
+impl FromWorld for DefaultPBRMaterial {
     fn from_world(world: &mut World) -> Self {
         let missing_tex = &world.resource::<MissingTexture>().0;
         let white_tex = &world.resource::<WhiteTexture>().0;

@@ -1,7 +1,7 @@
 #define_import_path pbr_type
 
 struct StandardMaterial {
-    base_color: vec3<f32>,
+    base_color: vec4<f32>,
     emissive: vec4<f32>,
     perceptual_roughness: f32,
     metallic: f32,
@@ -13,7 +13,7 @@ struct StandardMaterial {
 fn standard_material_new() -> StandardMaterial{
     var material: StandardMaterial;
 
-    material.base_color = vec3<f32>(1.0);
+    material.base_color = vec4<f32>(1.0);
     material.emissive = vec4<f32>(0.0, 0.0, 0.0, 1.0);
     material.perceptual_roughness = 0.5;
     material.metallic = 0.0;
@@ -52,13 +52,13 @@ fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
 
 fn pack_g_buffer(in: PBRSurface) -> vec4<u32> {
     return vec4<u32>(
-        pack4x8unorm(vec4<f32>(in.normal * 0.5 + vec3<f32>(0.5), 1.0)),
+        pack4x8unorm(vec4<f32>(in.normal * 0.5 + vec3<f32>(0.5), in.material.perceptual_roughness)),
         pack4x8unorm(vec4<f32>(
             in.material.metallic,
             in.material.reflectance,
             in.material.clear_coat_perceptual_roughness,
             in.material.clear_coat)),
-        pack4x8unorm(vec4<f32>(in.material.base_color, in.material.perceptual_roughness)),
+        pack4x8unorm(in.material.base_color),
         pack4x8unorm(in.material.emissive),
     );
 }
@@ -66,15 +66,16 @@ fn pack_g_buffer(in: PBRSurface) -> vec4<u32> {
 fn unpack_g_buffer(in: vec4<u32>) -> PBRSurface {
     var material = standard_material_new();
     var ret: PBRSurface;
-    let raw_normal = unpack4x8unorm(in.x).xyz;
+    let normal_roughness = unpack4x8unorm(in.x);
+    let raw_normal = normal_roughness.xyz;
     let props = unpack4x8unorm(in.y);
     material.metallic = props.x;
     material.reflectance = props.y;
     material.clear_coat_perceptual_roughness = props.z;
     material.clear_coat = props.w;
     let color_rou = unpack4x8unorm(in.z);
-    material.base_color = color_rou.xyz;
-    material.perceptual_roughness = color_rou.w;
+    material.base_color = color_rou;
+    material.perceptual_roughness = normal_roughness.w;
 
     ret.material = material;
     if(all(raw_normal == vec3f(0.0))) {

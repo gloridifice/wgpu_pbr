@@ -12,6 +12,7 @@ use super::{
     prelude::*,
     skybox::{Skybox, SkyboxPipeline},
     transform::Transform,
+    transparent::{TransparentPassObject, TransparentPipeline},
     utils::cube::CubeVerticesBuffer,
     MainPassObject,
 };
@@ -28,7 +29,7 @@ use crate::{
 use super::{
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-    ColorRenderTarget, DefaultMainPipelineMaterial, DepthRenderTarget, MeshRenderer,
+    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, MeshRenderer,
 };
 
 const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
@@ -78,7 +79,7 @@ pub fn sys_render_shadow_mapping_pass(
         &[],
     );
     for mesh_renderer in mesh_renderers.iter() {
-        mesh_renderer.draw_depth(&mut shadow_map_render_pass);
+        mesh_renderer.draw(&mut shadow_map_render_pass);
     }
 }
 
@@ -88,10 +89,14 @@ pub fn sys_render_write_g_buffer_pass(
     depth_target: Res<DepthRenderTarget>,
     main_pipeline: Res<WriteGBufferPipeline>,
     global_bind_group: Res<GlobalBindGroup>,
-    default_material: Res<DefaultMainPipelineMaterial>,
+    default_material: Res<DefaultPBRMaterial>,
     mesh_renderers: Query<
         (&MeshRenderer, Option<&PBRMaterialOverride>),
-        (With<Transform>, With<MainPassObject>),
+        (
+            With<Transform>,
+            With<MainPassObject>,
+            Without<TransparentPassObject>,
+        ),
     >,
 ) {
     let Some(depth_image) = depth_target.0.as_ref() else {
@@ -167,6 +172,59 @@ pub fn sys_render_main_pass(
     render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
     render_pass.set_bind_group(2, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
     render_pass.draw(0..3, 0..1);
+}
+
+pub fn sys_render_transparent(
+    InMut(ctx): InMut<PassRenderContext>,
+    main_target: Res<ColorRenderTarget>,
+    transparent_pipeline: Res<TransparentPipeline>,
+    main_global_bind_group: Res<GlobalBindGroup>,
+    dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
+    depth_target: Res<DepthRenderTarget>,
+    default_material: Res<DefaultPBRMaterial>,
+    q_objects: Query<
+        (&MeshRenderer, &WorldTransform, Option<&PBRMaterialOverride>),
+        (With<TransparentPassObject>, Without<MainPassObject>),
+    >,
+) {
+    let Some(main_image) = main_target.0.as_ref() else {
+        return;
+    };
+    let Some(depth_image) = depth_target.0.as_ref() else {
+        return;
+    };
+
+    let encoder = &mut ctx.encoder;
+
+    let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Main Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &main_image.view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            },
+        })],
+        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &depth_image.view,
+            depth_ops: None,
+            stencil_ops: None,
+        }),
+        occlusion_query_set: None,
+        timestamp_writes: None,
+    });
+
+    for (renderer, _trans, pbr) in q_objects.iter() {
+        render_pass.set_pipeline(&transparent_pipeline.pipeline);
+        render_pass.set_bind_group(0, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+        render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
+        renderer.draw_main(
+            &mut render_pass,
+            default_material.0.clone(),
+            pbr.and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
+        );
+    }
 }
 
 pub fn sys_render_egui(
