@@ -71,7 +71,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var surface: PBRSurface = pbr_type::pbr_surface_new();
     var material: StandardMaterial = pbr_type::standard_material_new();
     surface.normal = normal;
-    material.base_color = base_color.xyz;
+    material.base_color = base_color;
     material.metallic = pbr_mat.metallic;
     material.perceptual_roughness = pbr_mat.roughness;
     material.reflectance = pbr_mat.reflectance;
