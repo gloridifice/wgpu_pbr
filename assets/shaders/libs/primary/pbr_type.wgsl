@@ -45,11 +45,10 @@ fn perceptual_roughness_to_roughness(perceptual_roughness: f32) -> f32 {
     return clamped * clamped;
 }
 
-// x: mapped_normal (3),
+// x: mapped_normal (3), perceptual_roughness,
 // y: metallic, reflectance, clear_coat_perceptual_roughness, clear_coat,
-// z: base_color (3), perceptual_roughness,
+// z: base_color (4),
 // w: emissive (3),
-
 fn pack_g_buffer(in: PBRSurface) -> vec4<u32> {
     return vec4<u32>(
         pack4x8unorm(vec4<f32>(in.normal * 0.5 + vec3<f32>(0.5), in.material.perceptual_roughness)),

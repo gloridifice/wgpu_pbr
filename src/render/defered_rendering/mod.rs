@@ -7,7 +7,10 @@ use write_g_buffer_pipeline::GBufferTexturesBindGroup;
 
 use crate::{asset::AssetPath, wgpu_init, RenderState};
 
-use super::{light::DynamicLightBindGroup, shader_loader::ShaderLoader, FullScreenVertexShader};
+use super::{
+    light::DynamicLightBindGroup, material::pbr::PBRMaterialBindGroupLayout,
+    shader_loader::ShaderLoader, FullScreenVertexShader,
+};
 
 pub mod global_binding;
 pub mod write_g_buffer_pipeline;
@@ -37,6 +40,7 @@ impl FromWorld for MainPipeline {
         let bind_group_layouts = vec![
             Arc::clone(&world.resource::<GlobalBindGroup>().layout),
             Arc::clone(&world.resource::<GBufferTexturesBindGroup>().layout),
+            Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0),
             Arc::clone(&world.resource::<DynamicLightBindGroup>().layout),
         ];
 
