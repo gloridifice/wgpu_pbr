@@ -40,6 +40,13 @@ pub mod shadow_mapping;
 pub mod skybox;
 pub mod systems;
 pub mod transform;
+
+/// 想要一个物体以 Transparent 的管线渲染，需要至少有以下 Component:
+/// - `TransparentPassObject`
+/// - `WorldTransform`
+/// - `MeshRenderer`
+///
+/// 同时物体不能持有 `MainPassObject`
 pub mod transparent;
 pub mod utils;
 
