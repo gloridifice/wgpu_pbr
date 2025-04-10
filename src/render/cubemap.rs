@@ -86,7 +86,7 @@ impl FromWorld for CubemapConverterRgba8unorm {
     fn from_world(world: &mut World) -> Self {
         let shader_source = world
             .resource_mut::<ShaderLoader>()
-            .load_source(AssetPath::new_shader_wgsl("env_to_cubemap"))
+            .load_source(AssetPath::new_shader_wgsl("utils/env_to_cubemap"))
             .unwrap();
         let device = &world.resource::<RenderState>().device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -249,7 +249,7 @@ impl FromWorld for CubemapVertexShader {
             module: Arc::new(
                 ShaderLoader::load_module_by_world(
                     world,
-                    AssetPath::new_shader_wgsl("render_cubemap_vert"),
+                    AssetPath::new_shader_wgsl("utils/render_cubemap_vert"),
                 )
                 .unwrap(),
             ),

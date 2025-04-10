@@ -171,7 +171,7 @@ impl FromWorld for FullScreenVertexShader {
     fn from_world(world: &mut World) -> Self {
         let source = world
             .resource_mut::<ShaderLoader>()
-            .load_source(AssetPath::new_shader_wgsl("fullscreen_vertex"))
+            .load_source(AssetPath::new_shader_wgsl("utils/fullscreen_vertex"))
             .unwrap();
         let shader = world.resource::<RenderState>().device.create_shader_module(
             wgpu::ShaderModuleDescriptor {

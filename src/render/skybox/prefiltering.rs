@@ -3,8 +3,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::*;
 use wgpu::{
     util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
-    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat,
-    TextureUsages,
+    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat, TextureUsages,
 };
 
 use crate::{
@@ -42,7 +41,7 @@ impl FromWorld for PrefilteringPipeline {
     fn from_world(world: &mut World) -> Self {
         let shader = ShaderLoader::load_module_by_world(
             world,
-            AssetPath::new_shader_wgsl("prefiltering_env_map"),
+            AssetPath::new_shader_wgsl("prefiltering/prefiltering_env_map"),
         )
         .unwrap();
 

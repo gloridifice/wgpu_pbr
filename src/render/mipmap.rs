@@ -15,7 +15,7 @@ impl FromWorld for DefaultMipmapGenShader {
         Self {
             shader: Arc::new(
                 ShaderModule::load(
-                    crate::asset::AssetPath::Assets("shaders/blit.wgsl".to_string()),
+                    crate::asset::AssetPath::Assets("shaders/postprocessing/blit.wgsl".to_string()),
                     world,
                 )
                 .unwrap(),
@@ -28,9 +28,7 @@ pub fn calculate_mip_level_count<const N: usize>(tex_size: &[u32; N]) -> u32 {
     tex_size
         .iter()
         .max()
-        .map(|max| {
-            1u32 + (*max as f32).log2() as u32
-        })
+        .map(|max| 1u32 + (*max as f32).log2() as u32)
         .unwrap_or(1u32)
 }
 
