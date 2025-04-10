@@ -37,6 +37,7 @@ impl FromWorld for PBRMaterialBindGroupLayout {
 pub struct GltfMaterial {
     pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
     pub normal_texture: Option<Arc<UploadedImageWithSampler>>,
+    pub color: [f32; 4],
     pub roughness: f32,
     pub metallic: f32,
     pub reflectance: f32,
@@ -47,6 +48,7 @@ impl Default for GltfMaterial {
         Self {
             base_color_texture: None,
             normal_texture: None,
+            color: [1.0; 4],
             roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.5,
@@ -123,16 +125,20 @@ pub struct PBRMaterialOverride {
 pub struct PBRMaterial {
     pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
     pub normal_texture: Option<Arc<UploadedImageWithSampler>>,
+    pub color: Option<Vec4>,
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,
     pub reflectance: Option<f32>,
 }
 
 #[derive(Clone, Copy, Debug)]
+#[allow(unused)]
 pub struct RawPBRMaterial {
+    pub color: [f32; 4],
     pub metallic: f32,
     pub roughness: f32,
     pub reflectance: f32,
+    pub padding: f32,
 }
 impl_pod_zeroable!(RawPBRMaterial);
 
@@ -142,6 +148,8 @@ impl From<&GltfMaterial> for RawPBRMaterial {
             metallic: value.metallic,
             roughness: value.roughness,
             reflectance: value.reflectance,
+            color: value.color,
+            padding: 0.0,
         }
     }
 }
@@ -172,9 +180,10 @@ pub fn sys_update_override_pbr_material_bind_group(
             base_color_texture: ove_mat.base_color_texture.clone().or(raw_mat
                 .as_ref()
                 .and_then(|it| it.base_color_texture.clone())),
-            normal_texture: ove_mat.normal_texture.clone().or(raw_mat
-                .as_ref()
-                .and_then(|it| it.normal_texture.clone())),
+            normal_texture: ove_mat
+                .normal_texture
+                .clone()
+                .or(raw_mat.as_ref().and_then(|it| it.normal_texture.clone())),
             roughness: ove_mat
                 .roughness
                 .unwrap_or(raw_mat.map(|it| it.roughness).unwrap_or(Default::default())),
@@ -186,6 +195,7 @@ pub fn sys_update_override_pbr_material_bind_group(
                     .map(|it| it.reflectance)
                     .unwrap_or(Default::default()),
             ),
+            color: ove_mat.color.unwrap_or(Vec4::one()).into(),
         };
         ove.material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
             &rs.device,
