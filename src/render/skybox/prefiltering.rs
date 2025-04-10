@@ -25,11 +25,13 @@ const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
 #[derive(Resource)]
 pub struct PrefilteringPipeline {
     pub pipeline: Arc<RenderPipeline>,
+    #[allow(unused)]
     pub layout: Arc<PipelineLayout>,
     pub uniform_bind_group_layout: Arc<BindGroupLayout>,
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(unused)]
 pub struct PrefilteringEnvironmentUniform {
     pub roughness: f32,
     pub sample_count: u32,
