@@ -4,10 +4,16 @@
 #import global_bindings::{
     camera, light
 }
+#import material_bindings::{
+    pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
+}
+#import object_bindings::{
+    transform,
+}
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) color: vec4<f32>,
+    @location(0) vertex_color: vec4<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) tangent: vec3<f32>,
     @location(3) tex_coord: vec2<f32>,
@@ -19,28 +25,6 @@ struct FragmentOutput {
     @location(1) g_buffer: vec4<u32>,
 }
 
-struct TransformUniform {
-    model: mat4x4<f32>,
-    normal: mat3x3<f32>,
-}
-
-struct PBRMaterial {
-    metallic: f32,
-    roughness: f32,
-    reflectance: f32,
-}
-
-// Material -----
-@group(1) @binding(0) var<uniform> pbr_mat: PBRMaterial;
-@group(1) @binding(1) var tex_0: texture_2d<f32>;
-@group(1) @binding(2) var samp_0: sampler;
-@group(1) @binding(3) var normal_tex: texture_2d<f32>;
-@group(1) @binding(4) var normal_samp: sampler;
-
-// Object -----
-@group(2) @binding(0)
-var<uniform> transform: TransformUniform;
-
 @vertex
 fn vs_main(
     model: VertexInput,
@@ -48,7 +32,7 @@ fn vs_main(
     let model_mat = transform.model;
 
     var out: VertexOutput;
-    out.color = model.color;
+    out.vertex_color = model.color;
     out.world_pos = (model_mat * vec4<f32>(model.position, 1.0)).xyz;
     out.normal = transform.normal * model.normal;
     out.tangent = transform.normal * model.tangent;
@@ -71,7 +55,7 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     var surface: PBRSurface = pbr_type::pbr_surface_new();
     var material: StandardMaterial = pbr_type::standard_material_new();
     surface.normal = normal;
-    material.base_color = base_color;
+    material.base_color = base_color * pbr_mat.color;
     material.metallic = pbr_mat.metallic;
     material.perceptual_roughness = pbr_mat.roughness;
     material.reflectance = pbr_mat.reflectance;

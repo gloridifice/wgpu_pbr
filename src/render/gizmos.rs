@@ -54,6 +54,7 @@ impl_pod_zeroable!(RawGizmosMaterial);
 #[derive(Resource, Clone)]
 pub struct GizmosPipeline {
     pub pipeline: Arc<RenderPipeline>,
+    #[allow(unused)]
     pub layout: Arc<PipelineLayout>,
     pub depth_texture: Arc<UploadedImageWithSampler>,
 }
