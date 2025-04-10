@@ -24,6 +24,7 @@ pub enum RenderStage {
 #[derive(Resource)]
 pub struct PostProcessingManager {
     pub pipelines: HashMap<RenderStage, Vec<PostProcessingPipeline>>,
+    #[allow(unused)]
     pub pipeline_layout: Arc<PipelineLayout>,
     #[allow(unused)]
     pub bind_group_layout: Arc<BindGroupLayout>,
@@ -32,6 +33,7 @@ pub struct PostProcessingManager {
     temp_texture_0: Arc<UploadedImageWithSampler>,
     temp_texture_1: Arc<UploadedImageWithSampler>,
     temp_texture_index: usize,
+    #[allow(unused)]
     pub vs_shader: Arc<ShaderModule>,
 }
 
@@ -56,6 +58,8 @@ impl PostProcessingManager {
         self.temp_texture_index = (self.temp_texture_index + 1) % 2;
         ret
     }
+
+    #[allow(unused)]
     pub fn add_pipeline_from_shader(
         &mut self,
         label: Option<&str>,

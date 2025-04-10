@@ -6,5 +6,6 @@ pub mod pbr;
 pub trait UploadedMaterial {
     /// Return the material bind group
     fn get_bind_group(&self) -> &BindGroup;
+    #[allow(unused)]
     fn get_render_pipeline(&self) -> &RenderPipeline;
 }

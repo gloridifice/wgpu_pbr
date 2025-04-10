@@ -13,6 +13,7 @@ pub struct UploadedBufferMaterialLayout {
     pub layout: Arc<BindGroupLayout>,
 }
 
+#[allow(unused)]
 pub struct UploadedBufferMaterialInstance<M: BufferMaterialData> {
     pub data: M,
     pub buffer: Buffer,
@@ -42,8 +43,8 @@ impl BufferMaterialManager {
         let key = TypeId::of::<M>();
         if let std::collections::hash_map::Entry::Vacant(e) = self.map.entry(key) {
             e.insert(UploadedBufferMaterialLayout {
-                    layout: Arc::new(device.create_bind_group_layout(desc)),
-                });
+                layout: Arc::new(device.create_bind_group_layout(desc)),
+            });
         } else {
             return Err(anyhow!(
                 "MaterialLayout of {} already exists! Do NOT register twice!",
