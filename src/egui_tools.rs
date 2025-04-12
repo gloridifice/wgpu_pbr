@@ -283,6 +283,14 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                         ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
                     });
                     ui.end_row();
+
+                    ui.label("Color");
+                    option_value(ui, &mut mat.color, Vec4::one(), |ui, it| {
+                        let mut array_color = (*it).into();
+                        ui.color_edit_button_rgba_unmultiplied(&mut array_color);
+                        *it = array_color.into();
+                    });
+                    ui.end_row();
                 });
         });
 

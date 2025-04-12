@@ -30,7 +30,7 @@ use crate::render::skybox::prefiltering::PrefilteringPipeline;
 use crate::render::skybox::{DefaultSkybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
-use crate::render::transparent::TransparentPipeline;
+use crate::render::transparent::{TransparentPassObject, TransparentPipeline};
 use crate::render::{
     ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
     MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
@@ -585,12 +585,12 @@ fn sys_startup_scene(world: &mut World) {
             .unwrap()
     }));
 
-    let mut cmd = Commands::new(&mut queue, world);
+    let mut commands = Commands::new(&mut queue, world);
 
     for mesh in arrow.meshes {
         let uploaded = Arc::new(mesh.upload(world));
 
-        cmd.spawn((
+        commands.spawn((
             MeshRenderer::new(uploaded, world),
             {
                 Gizmos {
@@ -602,8 +602,8 @@ fn sys_startup_scene(world: &mut World) {
     }
 
     let count = 5;
-    for i in 0..5 {
-        cmd.queue(SpawnModelCmd {
+    for i in 0..count {
+        commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
             parent_bundle: (
                 TransformBuilder::default()
@@ -626,7 +626,29 @@ fn sys_startup_scene(world: &mut World) {
         });
     }
 
-    cmd.queue(SpawnModelCmd {
+    commands.queue(SpawnModelCmd {
+        model: dragon_model.clone(),
+        parent_bundle: (
+            TransformBuilder::default()
+                .position(Vec3::new(0., 0., 5.))
+                .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                .scale(Vec3::new_unit(0.3))
+                .build()
+                .unwrap(),
+            RotationObject { speed: 0.5 },
+            Name(format!("透明龙模型测试")),
+        ),
+        child_bundle: (
+            CastShadow,
+            TransparentPassObject,
+            PBRMaterial {
+                color: Some(Vec4::new(1., 1., 1., 0.5)),
+                ..Default::default()
+            },
+        ),
+    });
+
+    commands.queue(SpawnModelCmd {
         model: plane_model.clone(),
         parent_bundle: (
             TransformBuilder::default()

@@ -6,8 +6,15 @@ use crate::{
     egui_tools::{world_tree, EguiRenderer},
     engine::input::{CursorButton, Input},
     render::{
-        self, camera::Camera, defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
-        gizmos::GizmosPipeline, post_processing::PostProcessingManager, transform::Transform,
+        self,
+        camera::Camera,
+        defered_rendering::{
+            global_binding::RefreshGlobalBindGroupCmd,
+            write_g_buffer_pipeline::GBufferTexturesBindGroup,
+        },
+        gizmos::GizmosPipeline,
+        post_processing::PostProcessingManager,
+        transform::Transform,
         ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
     },
     RenderState,
@@ -77,14 +84,19 @@ pub fn sys_egui_tiles(world: &mut World) {
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            let id = world.resource::<RenderTargetEguiTexId>();
+            let ids = world.resource::<RenderTargetEguiTexId>();
             let size = ui.available_size();
-            if let Some(id) = id.0 {
-                let main_view = ui.image(SizedTexture::new(id, size));
+            if let Some(render_target_egui_tex_ids) = ids.0.as_ref() {
+                let main_view = ui.image(SizedTexture::new(
+                    render_target_egui_tex_ids[render::get_sampleable_target_index()],
+                    size,
+                ));
                 let mut input = world.resource_mut::<Input>();
-                for (ec, mc) in [(egui::PointerButton::Primary, CursorButton::Left),
+                for (ec, mc) in [
+                    (egui::PointerButton::Primary, CursorButton::Left),
                     (egui::PointerButton::Secondary, CursorButton::Right),
-                    (egui::PointerButton::Middle, CursorButton::Middle)] {
+                    (egui::PointerButton::Middle, CursorButton::Middle),
+                ] {
                     if main_view.clicked_by(ec) {
                         input.down_cursor_buttons.insert(mc);
                     }
@@ -103,10 +115,11 @@ pub fn sys_egui_tiles(world: &mut World) {
     });
 }
 
-#[derive(Resource, Clone, Copy, Default)]
-pub struct RenderTargetEguiTexId(Option<egui::TextureId>);
+#[derive(Resource, Clone, Default)]
+pub struct RenderTargetEguiTexId(Option<Vec<egui::TextureId>>);
 
 pub fn sys_on_resize_render_target(
+    mut commands: Commands,
     target_size: Res<RenderTargetSize>,
     render_state: Res<RenderState>,
     mut color_target: ResMut<ColorRenderTarget>,
@@ -123,17 +136,23 @@ pub fn sys_on_resize_render_target(
         let config = &render_state.config;
         let width = target_size.width;
         let height = target_size.height;
-        color_target.0 = Some(render::create_color_render_target_image(
-            width, height, device, config,
-        ));
+
+        color_target.update_images(width, height, device, config);
+        commands.queue(RefreshGlobalBindGroupCmd);
         depth_target.0 = Some(render::create_depth_texture(device, width, height, None));
 
-        let id = egui.renderer.register_native_texture(
-            device,
-            &color_target.0.as_ref().unwrap().view,
-            wgpu::FilterMode::Linear,
-        );
-        egui_tex_id.0 = Some(id);
+        let vec = [0, 1]
+            .into_iter()
+            .map(|it| {
+                egui.renderer.register_native_texture(
+                    device,
+                    &color_target.ping_pong[it].as_ref().unwrap().view,
+                    wgpu::FilterMode::Linear,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        egui_tex_id.0 = Some(vec);
         camera.aspect = height as f32 / width as f32;
 
         post_processing_manager.resize(width, height, device, config);

@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, LazyLock,
+};
 
 use bevy_ecs::{
     component::Component,
@@ -50,8 +53,20 @@ pub mod transform;
 pub mod transparent;
 pub mod utils;
 
+pub static COLOR_TARGET_INDEX: LazyLock<AtomicUsize> = LazyLock::new(|| AtomicUsize::new(0));
+
+pub fn get_color_target_index() -> usize {
+    COLOR_TARGET_INDEX.load(Ordering::Relaxed)
+}
+pub fn get_sampleable_target_index() -> usize {
+    (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2
+}
+
 #[derive(Resource)]
-pub struct ColorRenderTarget(pub Option<UploadedImageWithSampler>);
+pub struct ColorRenderTarget {
+    pub ping_pong: Vec<Option<UploadedImageWithSampler>>,
+}
+
 #[derive(Resource)]
 pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
 
@@ -85,6 +100,75 @@ impl From<&RenderTargetSize> for Extent3d {
             height: value.height,
             depth_or_array_layers: 1,
         }
+    }
+}
+
+/// 包含两个部分，target 是用于被写入的。
+/// sampleable 是用于作为读取的可被采样的。
+pub struct PingPongImages<'a> {
+    pub target: Option<&'a UploadedImageWithSampler>,
+    pub sampleable: Option<&'a UploadedImageWithSampler>,
+}
+
+impl ColorRenderTarget {
+    pub fn new(
+        width: u32,
+        height: u32,
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> Self {
+        let a = create_color_render_target_image(width, height, device, config);
+        let b = create_color_render_target_image(width, height, device, config);
+        Self {
+            ping_pong: vec![Some(a), Some(b)],
+        }
+    }
+
+    pub fn update_images(
+        &mut self,
+        width: u32,
+        height: u32,
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) {
+        let a = create_color_render_target_image(width, height, device, config);
+        let b = create_color_render_target_image(width, height, device, config);
+        self.ping_pong[0] = Some(a);
+        self.ping_pong[1] = Some(b);
+    }
+
+    /// 更新序号，然后获取当前的 Target 和采样贴图。
+    pub fn switch_and_get_images(&mut self) -> PingPongImages {
+        COLOR_TARGET_INDEX.store(
+            (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2,
+            Ordering::Relaxed,
+        );
+        PingPongImages {
+            target: self
+                .ping_pong
+                .get(get_color_target_index())
+                .map(|it| it.as_ref())
+                .flatten(),
+            sampleable: self
+                .ping_pong
+                .get(get_sampleable_target_index())
+                .map(|it| it.as_ref())
+                .flatten(),
+        }
+    }
+
+    pub fn get_target(&self) -> Option<&UploadedImageWithSampler> {
+        self.ping_pong
+            .get(get_color_target_index())
+            .map(|it| it.as_ref())
+            .flatten()
+    }
+
+    pub fn get_sampleable(&self) -> Option<&UploadedImageWithSampler> {
+        self.ping_pong
+            .get(get_sampleable_target_index())
+            .map(|it| it.as_ref())
+            .flatten()
     }
 }
 
@@ -197,14 +281,12 @@ impl FromWorld for ColorRenderTarget {
         let render_state = world.resource::<RenderState>();
         let size = world.resource::<RenderTargetSize>();
 
-        let target = create_color_render_target_image(
+        Self::new(
             size.width,
             size.height,
             &render_state.device,
             &render_state.config,
-        );
-
-        Self(Some(target))
+        )
     }
 }
 
