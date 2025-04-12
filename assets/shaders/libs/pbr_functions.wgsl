@@ -19,35 +19,16 @@ fn V_smith_ggx_correlated_fast(nDotV: f32, nDotL: f32, roughness: f32) -> f32 {
     return 0.5 / (0.001 + GGXL + GGXV);
 }
 
-fn calculate_light(
-    light_color: vec3<f32>,
-    light_diffuse_intensity: f32,
-    surface: pbr_type::PBRSurface,
-    world2light: vec3<f32>,
-    world2camera: vec3<f32>,
-    f0: vec3<f32>,
-    f90: vec3<f32>,
-) -> vec3<f32> {
-    let reflectance: f32 = surface.material.reflectance;
-    let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
-    let metallic: f32 = surface.material.metallic;
-    let normal: vec3<f32> = surface.normal;
-    let base_color: vec3<f32> = surface.material.base_color.xyz;
-
-    let nDotL = max(dot(normal, world2light), 0.0);
-    let half = normalize(world2light + world2camera);
-    let nDotH = max(dot(normal, half), 0.0);
-    let nDotV = max(dot(normal, world2camera), 0.0);
-    let hDotV = max(dot(half, world2camera), 0.0);
-
+fn diffuse_brdf(metallic: f32, base_color: vec3<f32>) -> vec3<f32> {
     let diffuse_color = (1.0 - metallic) * base_color;
+    // - Lambertan diffuse brdf
+    return diffuse_color / PI;
+}
 
+fn specular_brdf(f0: vec3<f32>, f90: vec3<f32>, roughness: f32, nDotH: f32, nDotL: f32, nDotV: f32, hDotV: f32) -> vec3<f32>{
     // Schlick Fresnel Function, f90 = vec3f(1.0)
     // todo check '- f0 or + f0' ----> v here
     let fresnel: vec3<f32> = f0 + (f90 - f0) * pow5(1.0 - hDotV);
-
-    // ! Diffuse BRDF -------------
-    let diffuse_brdf = diffuse_color / PI;
 
     // ! Specular BRDF ------------
     // - GGX Normal Distribution Function
@@ -60,10 +41,63 @@ fn calculate_light(
 
     // final specular BRDF
     let specular_brdf = fresnel * (D_GGX * V_SmithGGX);
+    return specular_brdf;
+}
+
+struct LightCalculationResult {
+    diffuse: vec3<f32>,
+    specular: vec3<f32>,
+}
+
+fn calculate_light(
+    light_color: vec3<f32>,
+    light_diffuse_intensity: f32,
+    surface: pbr_type::PBRSurface,
+    world2light: vec3<f32>,
+    world2camera: vec3<f32>,
+    f0: vec3<f32>,
+    f90: vec3<f32>,
+) -> vec3<f32> {
+    let result = calculate_light_separately(
+        light_color,
+        light_diffuse_intensity,
+        surface,
+        world2light,
+        world2camera,
+        f0,
+        f90,
+    );
+    return result.diffuse + result.specular;
+}
+
+fn calculate_light_separately(
+    light_color: vec3<f32>,
+    light_diffuse_intensity: f32,
+    surface: pbr_type::PBRSurface,
+    world2light: vec3<f32>,
+    world2camera: vec3<f32>,
+    f0: vec3<f32>,
+    f90: vec3<f32>,
+) -> LightCalculationResult {
+    let reflectance: f32 = surface.material.reflectance;
+    let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
+    let metallic: f32 = surface.material.metallic;
+    let normal: vec3<f32> = surface.normal;
+    let base_color: vec3<f32> = surface.material.base_color.xyz;
+
+    let nDotL = max(dot(normal, world2light), 0.0);
+    let half = normalize(world2light + world2camera);
+    let nDotH = max(dot(normal, half), 0.0);
+    let nDotV = max(dot(normal, world2camera), 0.0);
+    let hDotV = max(dot(half, world2camera), 0.0);
+
+    let diffuse_brdf = diffuse_brdf(metallic, base_color);
+    let specular_brdf = specular_brdf(f0, f90, roughness, nDotH, nDotL, nDotV, hDotV);
 
     let light_intensity = light_color * light_diffuse_intensity;
 
-    let ret = (specular_brdf + diffuse_brdf) * light_intensity * nDotL;
-
-    return ret;
+    return LightCalculationResult(
+        diffuse_brdf * light_intensity * nDotL,
+        specular_brdf * light_intensity * nDotL,
+    );
 }

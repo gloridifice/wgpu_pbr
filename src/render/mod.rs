@@ -124,6 +124,10 @@ impl ColorRenderTarget {
         }
     }
 
+    pub fn get_size(&self) -> Option<Extent3d> {
+        self.get_target().map(|it| it.size)
+    }
+
     pub fn update_images(
         &mut self,
         width: u32,

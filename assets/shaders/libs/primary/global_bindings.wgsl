@@ -15,6 +15,10 @@ struct LightUniform {
     lights_nums: vec4<u32>,
 }
 
+struct GlobalUniform {
+    screen_resolution: vec2<f32>,
+}
+
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
 @group(0) @binding(1) var<uniform> light: LightUniform;
 @group(0) @binding(2) var directional_shadow_map: texture_depth_2d;
@@ -27,3 +31,5 @@ struct LightUniform {
 
 @group(0) @binding(8) var rendered_image: texture_2d<f32>;
 @group(0) @binding(9) var rendered_sampler: sampler;
+
+@group(0) @binding(10) var<uniform> global: GlobalUniform;
