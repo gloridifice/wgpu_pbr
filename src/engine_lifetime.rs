@@ -6,6 +6,7 @@ use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{Camera, CameraController};
 use crate::render::cubemap::{CubemapConverterRgba8unorm, CubemapMatrixBindGroups};
+use crate::render::defered_rendering::global_binding::GlobalUniformBuffer;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
@@ -140,6 +141,7 @@ impl State {
         self.insert_resource::<CubemapConverterRgba8unorm>();
         self.insert_resource::<PrefilteringPipeline>();
         self.insert_resource::<DefaultSkybox>();
+        self.insert_resource::<GlobalUniformBuffer>();
 
         // --- Render resource ---
         self.insert_resource::<CameraBuffer>();
@@ -639,7 +641,6 @@ fn sys_startup_scene(world: &mut World) {
             Name(format!("透明龙模型测试")),
         ),
         child_bundle: (
-            CastShadow,
             TransparentPassObject,
             PBRMaterial {
                 color: Some(Vec4::new(1., 1., 1., 0.5)),

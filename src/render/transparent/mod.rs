@@ -67,7 +67,7 @@ impl FromWorld for TransparentPipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: ColorWrites::ALL,
                 })],
             }),

@@ -10,7 +10,7 @@
 }
 #import shadow
 #import global_bindings::{
-    camera, light, rendered_image, rendered_sampler,
+    camera, light, rendered_image, rendered_sampler, global
 }
 #import material_bindings::{
     pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
@@ -47,8 +47,8 @@ fn vs_main(
 @fragment
 fn fs_main(
     in: VertexOutput,
-    @builtin(frag_coord) frag_coord: vec4<f32>
 ) -> @location(0) vec4<f32> {
+    let frag_coord = in.clip_position;
     let base_color4 = textureSample(tex_0, samp_0, in.tex_coord) * pbr_mat.color;
 
     let n_normal = normalize(in.normal);
@@ -77,11 +77,13 @@ fn fs_main(
          + base_color * metallic;
     let f90 = vec3<f32>(1.0);
 
-    var surface_color = vec3<f32>(0.0);
+    var diffuse_color = vec3f(0.0);
+    var specular_color = vec3f(0.0);
 
     let world2camera = -camera.direction;
+
     // + Parallel Lighting
-    surface_color += pbr_functions::calculate_light(
+    let parallel_light_result = pbr_functions::calculate_light_separately(
         light.color.xyz,
         light.intensity,
         surface,
@@ -90,52 +92,56 @@ fn fs_main(
         f0,
         f90,
     );
+    diffuse_color += parallel_light_result.diffuse;
+    specular_color += parallel_light_result.specular;
 
     // + Point Lighting
-    let point_lights_num = light.lights_nums.x;
+    // let point_lights_num = light.lights_nums.x;
 
-    for (var i = 0u; i < point_lights_num; i += 1u) {
-        let li = point_lights[i];
-        let world2light_unnorm = li.position.xyz - world_pos;
-        let dist = length(world2light_unnorm);
-        if dist > li.distance { continue; }
-        let dir = normalize(world2light_unnorm);
+    // for (var i = 0u; i < point_lights_num; i += 1u) {
+    //     let li = point_lights[i];
+    //     let world2light_unnorm = li.position.xyz - world_pos;
+    //     let dist = length(world2light_unnorm);
+    //     if dist > li.distance { continue; }
+    //     let dir = normalize(world2light_unnorm);
 
-        let radiance = li.intensity / ((li.decay * pow2(dist)) + 0.001); // + 0.001 for division safety
-        surface_color += pbr_functions::calculate_light(
-            li.color.xyz,
-            radiance,
-            surface,
-            dir,
-            world2camera,
-            f0,
-            f90,
-        );
-    }
+    //     let radiance = li.intensity / ((li.decay * pow2(dist)) + 0.001); // + 0.001 for division safety
+    //     surface_color += pbr_functions::calculate_light(
+    //         li.color.xyz,
+    //         radiance,
+    //         surface,
+    //         dir,
+    //         world2camera,
+    //         f0,
+    //         f90,
+    //     );
+    // }
 
     /// + Image based Lighting
-    let ibl = ibl_functions::evaluate_ibl(
-                        surface.normal,
-                        world2camera,
-                        base_color,
-                        f0,
-                        f90,
-                        surface.material.perceptual_roughness
-                    );
+    // let ibl = ibl_functions::evaluate_ibl(
+    //                     surface.normal,
+    //                     world2camera,
+    //                     base_color,
+    //                     f0,
+    //                     f90,
+    //                     surface.material.perceptual_roughness
+    //                 );
 
-    surface_color += ibl;
-    surface_color += vec3<f32>(0.1);
+    // surface_color += ibl;
+    // surface_color += vec3<f32>(0.1);
 
     /// -- Shadowing --
     let shadow = shadow::sample_directional_shadow(world_pos);
-    surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
+    let shadow_factor = mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
+    diffuse_color *= shadow_factor;
+    specular_color *= shadow_factor;
 
     /// Blending
     let normal_ndc = normalize((camera.view_proj * vec4<f32>(normal, 1.0)).xyz);
-    let uv = in.clip_position.xy * vec2f(0.5, 0.5) + vec2f(0.5);
+    let uv = frag_coord.xy / global.screen_resolution - normal_ndc.xy * 0.1;
     let prev_color4 = textureSample(rendered_image, rendered_sampler, uv);
 
-    // return vec4<f32>(surface_color, base_color4.a);
-    // return vec4<f32>(1.0);
-    return vec4f(prev_color4.xyz, 1.0);
+    let alpha = base_color4.a;
+    let ret_color = diffuse_color * alpha + prev_color4.xyz * (1.0 - alpha) + specular_color;
+    return vec4f(ret_color, 1.0);
 }
