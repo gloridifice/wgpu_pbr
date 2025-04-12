@@ -10,7 +10,7 @@
 }
 #import shadow
 #import global_bindings::{
-    camera, light
+    camera, light, rendered_image, rendered_sampler,
 }
 #import material_bindings::{
     pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
@@ -45,8 +45,11 @@ fn vs_main(
 }
 
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let base_color4 = textureSample(tex_0, samp_0, in.tex_coord);
+fn fs_main(
+    in: VertexOutput,
+    @builtin(frag_coord) frag_coord: vec4<f32>
+) -> @location(0) vec4<f32> {
+    let base_color4 = textureSample(tex_0, samp_0, in.tex_coord) * pbr_mat.color;
 
     let n_normal = normalize(in.normal);
     let n_tangent = normalize(in.tangent);
@@ -127,5 +130,12 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let shadow = shadow::sample_directional_shadow(world_pos);
     surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
-    return vec4<f32>(surface_color, base_color4.a);
+    /// Blending
+    let normal_ndc = normalize((camera.view_proj * vec4<f32>(normal, 1.0)).xyz);
+    let uv = in.clip_position.xy * vec2f(0.5, 0.5) + vec2f(0.5);
+    let prev_color4 = textureSample(rendered_image, rendered_sampler, uv);
+
+    // return vec4<f32>(surface_color, base_color4.a);
+    // return vec4<f32>(1.0);
+    return vec4f(prev_color4.xyz, 1.0);
 }

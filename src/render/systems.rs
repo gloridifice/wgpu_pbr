@@ -14,9 +14,10 @@ use super::{
     transform::Transform,
     transparent::{TransparentPassObject, TransparentPipeline},
     utils::cube::CubeVerticesBuffer,
-    MainPassObject,
+    MainPassObject, PingPongImages,
 };
 use egui_wgpu::ScreenDescriptor;
+use log::warn;
 use wgpu::{CommandEncoder, TextureView};
 use wgpu_init::copy_texture;
 use winit::window::Window;
@@ -121,7 +122,7 @@ pub fn sys_render_write_g_buffer_pass(
     });
 
     render_pass.set_pipeline(&main_pipeline.pipeline);
-    render_pass.set_bind_group(0, Some(global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(0, Some(global_bind_group.get_bind_group().as_ref()), &[]);
 
     for (mesh_renderer, override_mat) in mesh_renderers.iter() {
         mesh_renderer.draw_main(
@@ -143,7 +144,7 @@ pub fn sys_render_main_pass(
     cube_vertex_buffer: Res<CubeVerticesBuffer>,
     default_material: Res<DefaultPBRMaterial>,
 ) {
-    let Some(main_image) = main_target.0.as_ref() else {
+    let Some(main_image) = main_target.get_target() else {
         return;
     };
 
@@ -165,7 +166,11 @@ pub fn sys_render_main_pass(
     });
 
     render_pass.set_pipeline(&skybox_pipeline.pipeline);
-    render_pass.set_bind_group(0, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+    render_pass.set_bind_group(
+        0,
+        Some(main_global_bind_group.get_bind_group().as_ref()),
+        &[],
+    );
     render_pass.set_vertex_buffer(0, cube_vertex_buffer.vertices_buffer.slice(..));
     render_pass.draw(0..36, 0..1);
 
@@ -178,7 +183,7 @@ pub fn sys_render_main_pass(
 
 pub fn sys_render_transparent(
     InMut(ctx): InMut<PassRenderContext>,
-    main_target: Res<ColorRenderTarget>,
+    mut main_target: ResMut<ColorRenderTarget>,
     transparent_pipeline: Res<TransparentPipeline>,
     main_global_bind_group: Res<GlobalBindGroup>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
@@ -189,7 +194,11 @@ pub fn sys_render_transparent(
         (With<TransparentPassObject>, Without<MainPassObject>),
     >,
 ) {
-    let Some(main_image) = main_target.0.as_ref() else {
+    let PingPongImages {
+        target: Some(main_image),
+        sampleable: Some(sampleable),
+    } = main_target.switch_and_get_images()
+    else {
         return;
     };
     let Some(depth_image) = depth_target.0.as_ref() else {
@@ -197,6 +206,21 @@ pub fn sys_render_transparent(
     };
 
     let encoder = &mut ctx.encoder;
+    encoder.copy_texture_to_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: &sampleable.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyTextureInfo {
+            texture: &main_image.texture,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        main_image.size,
+    );
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Main Pass"),
@@ -219,7 +243,11 @@ pub fn sys_render_transparent(
 
     for (renderer, _trans, pbr) in q_objects.iter() {
         render_pass.set_pipeline(&transparent_pipeline.pipeline);
-        render_pass.set_bind_group(0, Some(main_global_bind_group.bind_group.as_ref()), &[]);
+        render_pass.set_bind_group(
+            0,
+            Some(main_global_bind_group.get_bind_group().as_ref()),
+            &[],
+        );
         render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
         renderer.draw_main(
             &mut render_pass,
@@ -256,7 +284,7 @@ pub fn sys_render_post_processing(
     mut manager: ResMut<PostProcessingManager>,
     color_target: Res<ColorRenderTarget>,
 ) {
-    let Some(color_target) = color_target.0.as_ref() else {
+    let Some(color_target) = color_target.get_target() else {
         return;
     };
     let stage = ctx.stage;
@@ -314,7 +342,7 @@ pub fn sys_render_gizmos(
     gizmos_global_bind_group: Res<GizmosGlobalBindGroup>,
     q_gizomos_meshes: Query<(&MeshRenderer, &Gizmos)>,
 ) {
-    color_target.0.as_ref().inspect(|target| {
+    color_target.get_target().inspect(|target| {
         let encoder = &mut ctx.encoder;
 
         let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {

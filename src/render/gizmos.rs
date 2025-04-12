@@ -95,7 +95,7 @@ impl FromWorld for GizmosGlobalBindGroup {
             ["Gizmos Global"]
             0: ShaderStages::VERTEX => BGLEntry::UniformBuffer();
         };
-        let size = color_target.0.as_ref().unwrap().size;
+        let size = color_target.get_target().unwrap().size;
         let right = 1.0f32;
         let top = right * size.height as f32 / size.width as f32;
         let view = Matrix4::look_at_rh(

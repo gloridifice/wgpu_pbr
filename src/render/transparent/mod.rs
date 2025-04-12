@@ -82,7 +82,7 @@ impl FromWorld for TransparentPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: true,
+                depth_write_enabled: false,
                 depth_compare: wgpu::CompareFunction::Less,
                 stencil: Default::default(),
                 bias: Default::default(),
