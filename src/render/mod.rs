@@ -61,6 +61,10 @@ pub fn get_color_target_index() -> usize {
 pub fn get_sampleable_target_index() -> usize {
     (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2
 }
+pub fn switch_color_target_ping_pong() {
+    let new_value = COLOR_TARGET_INDEX.load(Ordering::Relaxed);
+    COLOR_TARGET_INDEX.store(new_value + 1, Ordering::Relaxed);
+}
 
 #[derive(Resource)]
 pub struct ColorRenderTarget {
@@ -168,6 +172,7 @@ impl ColorRenderTarget {
             .flatten()
     }
 
+    #[allow(unused)]
     pub fn get_sampleable(&self) -> Option<&UploadedImageWithSampler> {
         self.ping_pong
             .get(get_sampleable_target_index())

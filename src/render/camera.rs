@@ -1,12 +1,20 @@
 use std::sync::Arc;
 
 use bevy_ecs::component::Component;
+use bevy_ecs::prelude::*;
+use bevy_ecs::query::{Changed, Or};
+use bevy_ecs::system::Single;
 use bevy_ecs::{system::Resource, world::FromWorld};
-use bevy_reflect::Reflect;
-use cgmath::{perspective, Matrix4};
+use cgmath::{
+    perspective, vec2, Deg, InnerSpace, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3,
+};
 use wgpu::BufferDescriptor;
+use winit::keyboard::KeyCode;
 
-use crate::impl_pod_zeroable;
+use crate::engine::input::Input;
+use crate::engine::time::Time;
+use crate::engine_lifetime::ControlState;
+use crate::{impl_pod_zeroable, RenderState};
 
 use super::transform::{Transform, WorldTransform};
 
@@ -15,7 +23,7 @@ pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
 }
 
-#[derive(Component, Clone, Reflect)]
+#[derive(Component, Clone)]
 #[require(Transform)]
 pub struct Camera {
     // Height / Width
@@ -23,9 +31,10 @@ pub struct Camera {
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+    pub view_proj: Matrix4<f32>,
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Clone, Default)]
 pub struct CameraController {
     pub row: f32,
     pub yaw: f32,
@@ -51,6 +60,7 @@ impl Camera {
             fovy: 45.0,
             znear: 0.01,
             zfar: 100.0,
+            view_proj: Matrix4::identity(),
         }
     }
 
@@ -89,19 +99,6 @@ impl CameraBuffer {
             buffer: Arc::new(camera_buffer),
         }
     }
-
-    pub fn update_uniform2gpu(
-        &self,
-        camera: &Camera,
-        transform: &WorldTransform,
-        queue: &wgpu::Queue,
-    ) {
-        queue.write_buffer(
-            &self.buffer,
-            0,
-            bytemuck::cast_slice(&[camera.get_uniform(transform)]),
-        );
-    }
 }
 
 #[repr(C)]
@@ -121,3 +118,72 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 0.5,
     0.0, 0.0, 0.0, 1.0,
 );
+
+pub fn sys_update_camera_control(
+    config: Res<CameraConfig>,
+    input: Res<Input>,
+    time: Res<Time>,
+    control_state: Res<ControlState>,
+    camera_query: Single<(
+        &Camera,
+        &mut Transform,
+        &WorldTransform,
+        &mut CameraController,
+    )>,
+) {
+    if !control_state.is_focused {
+        return;
+    }
+
+    let (_, mut cam_transform, world_trans, mut controller) = camera_query.into_inner();
+
+    let speed = config.speed;
+
+    let mut move_vec = Vector3::new(0., 0., 0.);
+    if input.is_key_hold(KeyCode::KeyW) {
+        move_vec += world_trans.forward();
+    }
+    if input.is_key_hold(KeyCode::KeyA) {
+        move_vec += world_trans.left();
+    }
+    if input.is_key_hold(KeyCode::KeyS) {
+        move_vec -= world_trans.forward();
+    }
+    if input.is_key_hold(KeyCode::KeyD) {
+        move_vec -= world_trans.left();
+    }
+    if input.is_key_hold(KeyCode::Space) {
+        if input.is_key_hold(KeyCode::ShiftLeft) {
+            move_vec += Vector3::new(0.0, -1.0, 0.0);
+        } else {
+            move_vec += Vector3::new(0.0, 1.0, 1.0);
+        }
+    }
+    let delta_time_sec = time.delta_time.as_secs_f32();
+    if move_vec != Vector3::new(0., 0., 0.) {
+        move_vec = move_vec.normalize() * speed * delta_time_sec;
+        cam_transform.position += move_vec;
+    }
+
+    let factor = vec2(0.6, 0.4);
+    controller.row -= input.cursor_delta.x * factor.x;
+    controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
+    cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
+        * Quaternion::from_angle_x(Deg(controller.yaw));
+}
+
+pub fn sys_update_camera_uniform(
+    camera_buffer: Res<CameraBuffer>,
+    single: Single<(&mut Camera, &WorldTransform), Or<(Changed<Camera>, Changed<WorldTransform>)>>,
+    rs: Res<RenderState>,
+) {
+    let (mut camera, transform) = single.into_inner();
+
+    camera.view_proj = camera.build_view_projection_matrix(transform);
+
+    rs.queue.write_buffer(
+        &camera_buffer.buffer,
+        0,
+        bytemuck::cast_slice(&[camera.get_uniform(transform)]),
+    );
+}

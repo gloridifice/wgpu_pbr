@@ -155,7 +155,7 @@ fn label_value(ui: &mut Ui, text: &str, v: &mut f32) {
     });
 }
 
-fn color_vec4_srgba(ui: &mut Ui, color: &mut Vec4) -> egui::Response {
+fn color_vec4_rgba(ui: &mut Ui, color: &mut Vec4) -> egui::Response {
     let mut c = color.to_color32();
     let ret = ui.color_edit_button_srgba(&mut c);
     *color = Vec4::from_color32(&c);
@@ -255,7 +255,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
         impl_component_ui!(PointLight, world, id, ui, ui, light, {
             ui.horizontal(|ui| {
                 ui.label("Color");
-                color_vec4_srgba(ui, &mut light.color);
+                color_vec4_rgba(ui, &mut light.color);
             });
             label_value(ui, "Intensity", &mut light.intensity);
             label_value(ui, "Iecay", &mut light.decay);
@@ -308,7 +308,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                     ui.end_row();
 
                     ui.label("Color");
-                    color_vec4_srgba(ui, &mut light.color);
+                    color_vec4_rgba(ui, &mut light.color);
                     ui.end_row();
                 });
         });

@@ -4,7 +4,9 @@ use std::sync::Arc;
 use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
-use crate::render::camera::{Camera, CameraController};
+use crate::render::camera::{
+    sys_update_camera_control, sys_update_camera_uniform, Camera, CameraController,
+};
 use crate::render::cubemap::{CubemapConverterRgba8unorm, CubemapMatrixBindGroups};
 use crate::render::defered_rendering::global_binding::GlobalUniformBuffer;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
@@ -52,15 +54,14 @@ use crate::{
     },
     RenderState, State,
 };
-use bevy_ecs::bundle::Bundle;
-use bevy_ecs::query::{Changed, Or};
-use bevy_ecs::system::{Commands, ResMut, Resource, Single};
+use bevy_ecs::prelude::*;
+use bevy_ecs::system::{Commands, ResMut, Resource};
 use bevy_ecs::world::{Command, CommandQueue, FromWorld, Mut, World};
 use bevy_ecs::{
     component::Component,
     system::{Query, Res, RunSystemOnce},
 };
-use cgmath::{vec2, Deg, InnerSpace, Quaternion, Rad, Rotation3, Vector3};
+use cgmath::{Deg, Quaternion, Rad, Rotation3};
 use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
 use winit::event::DeviceEvent;
@@ -203,7 +204,7 @@ impl State {
         self.world.spawn((
             Camera::new(aspect),
             CameraController::default(),
-            Name("Camera".to_string()),
+            Name("相机".to_string()),
         ));
 
         let light_arrow = Arc::new(
@@ -222,7 +223,7 @@ impl State {
                     .build()
                     .unwrap(),
                 ParallelLight::default(),
-                Name("Parallel Light".to_string()),
+                Name("平行光源".to_string()),
             ),
             child_bundle: (MainPassObject,),
         }
@@ -307,7 +308,9 @@ impl State {
 
     pub fn update(&mut self) {
         self.world.run_system_once(sys_input).unwrap();
-        self.world.run_system_once(sys_update_camera).unwrap();
+        self.world
+            .run_system_once(sys_update_camera_control)
+            .unwrap();
         self.world.run_system_once(sys_update_rotation).unwrap();
         self.world
             .run_system_once(sys_refersh_global_bind_group)
@@ -461,59 +464,6 @@ pub fn sys_control_state(control_state: ResMut<ControlState>, main_window: Res<M
     });
 }
 
-pub fn sys_update_camera(
-    config: Res<CameraConfig>,
-    input: Res<Input>,
-    time: Res<Time>,
-    control_state: Res<ControlState>,
-    camera_query: Single<(
-        &Camera,
-        &mut Transform,
-        &WorldTransform,
-        &mut CameraController,
-    )>,
-) {
-    if !control_state.is_focused {
-        return;
-    }
-
-    let (_, mut cam_transform, world_trans, mut controller) = camera_query.into_inner();
-
-    let speed = config.speed;
-
-    let mut move_vec = Vector3::new(0., 0., 0.);
-    if input.is_key_hold(KeyCode::KeyW) {
-        move_vec += world_trans.forward();
-    }
-    if input.is_key_hold(KeyCode::KeyA) {
-        move_vec += world_trans.left();
-    }
-    if input.is_key_hold(KeyCode::KeyS) {
-        move_vec -= world_trans.forward();
-    }
-    if input.is_key_hold(KeyCode::KeyD) {
-        move_vec -= world_trans.left();
-    }
-    if input.is_key_hold(KeyCode::Space) {
-        if input.is_key_hold(KeyCode::ShiftLeft) {
-            move_vec += Vector3::new(0.0, -1.0, 0.0);
-        } else {
-            move_vec += Vector3::new(0.0, 1.0, 1.0);
-        }
-    }
-    let delta_time_sec = time.delta_time.as_secs_f32();
-    if move_vec != Vector3::new(0., 0., 0.) {
-        move_vec = move_vec.normalize() * speed * delta_time_sec;
-        cam_transform.position += move_vec;
-    }
-
-    let factor = vec2(0.6, 0.4);
-    controller.row -= input.cursor_delta.x * factor.x;
-    controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
-    cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
-        * Quaternion::from_angle_x(Deg(controller.yaw));
-}
-
 fn sys_update_transform_buffers(world: &mut World) {
     world.resource_scope(|world, render_state: Mut<RenderState>| {
         let mut query =
@@ -522,15 +472,6 @@ fn sys_update_transform_buffers(world: &mut World) {
             mesh_renderer.update_transform_buffer(&render_state.queue, world_trans.get_uniform());
         }
     });
-}
-
-fn sys_update_camera_uniform(
-    render_camera: Res<CameraBuffer>,
-    single: Single<(&Camera, &WorldTransform), Or<(Changed<Camera>, Changed<WorldTransform>)>>,
-    rs: Res<RenderState>,
-) {
-    let (camera, transform) = single.into_inner();
-    render_camera.update_uniform2gpu(camera, transform, &rs.queue);
 }
 
 fn sys_startup_scene(world: &mut World) {
@@ -556,7 +497,7 @@ fn sys_startup_scene(world: &mut World) {
                     ..Default::default()
                 },
                 Transform::with_position(Vec3::new(x, y, z)),
-                Name("Point Light".to_string()),
+                Name("点光源".to_string()),
             ))
         }
         vec.into_iter().for_each(|it| {
@@ -628,26 +569,28 @@ fn sys_startup_scene(world: &mut World) {
         });
     }
 
-    commands.queue(SpawnModelCmd {
-        model: dragon_model.clone(),
-        parent_bundle: (
-            TransformBuilder::default()
-                .position(Vec3::new(0., 0., 5.))
-                .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                .scale(Vec3::new_unit(0.3))
-                .build()
-                .unwrap(),
-            RotationObject { speed: 0.5 },
-            Name(format!("透明龙模型测试")),
-        ),
-        child_bundle: (
-            TransparentPassObject,
-            PBRMaterial {
-                color: Some(Vec4::new(1., 1., 1., 0.5)),
-                ..Default::default()
-            },
-        ),
-    });
+    for i in 0..count {
+        commands.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                TransformBuilder::default()
+                    .position(Vec3::new(i as f32 * 2., 0., 6.))
+                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                    .scale(Vec3::new_unit(0.3))
+                    .build()
+                    .unwrap(),
+                RotationObject { speed: 0.5 },
+                Name(format!("透明龙模型 No_{}", i)),
+            ),
+            child_bundle: (
+                TransparentPassObject,
+                PBRMaterial {
+                    color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
+                    ..Default::default()
+                },
+            ),
+        });
+    }
 
     commands.queue(SpawnModelCmd {
         model: plane_model.clone(),
