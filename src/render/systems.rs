@@ -1,6 +1,7 @@
-use std::sync::Arc;
+use std::{cmp::Ordering, sync::Arc};
 
 use super::{
+    camera::Camera,
     defered_rendering::{
         global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd},
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
@@ -17,7 +18,6 @@ use super::{
     MainPassObject, PingPongImages,
 };
 use egui_wgpu::ScreenDescriptor;
-use log::warn;
 use wgpu::{CommandEncoder, TextureView};
 use wgpu_init::copy_texture;
 use winit::window::Window;
@@ -189,6 +189,7 @@ pub fn sys_render_transparent(
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
     depth_target: Res<DepthRenderTarget>,
     default_material: Res<DefaultPBRMaterial>,
+    q_camera: Query<&Camera>,
     q_objects: Query<
         (&MeshRenderer, &WorldTransform, Option<&PBRMaterialOverride>),
         (With<TransparentPassObject>, Without<MainPassObject>),
@@ -196,7 +197,7 @@ pub fn sys_render_transparent(
 ) {
     let PingPongImages {
         target: Some(main_image),
-        sampleable: Some(sampleable),
+        ..
     } = main_target.switch_and_get_images()
     else {
         return;
@@ -204,23 +205,11 @@ pub fn sys_render_transparent(
     let Some(depth_image) = depth_target.0.as_ref() else {
         return;
     };
+    let Ok(camera) = q_camera.get_single() else {
+        return;
+    };
 
     let encoder = &mut ctx.encoder;
-    encoder.copy_texture_to_texture(
-        wgpu::TexelCopyTextureInfo {
-            texture: &sampleable.texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        wgpu::TexelCopyTextureInfo {
-            texture: &main_image.texture,
-            mip_level: 0,
-            origin: wgpu::Origin3d::ZERO,
-            aspect: wgpu::TextureAspect::All,
-        },
-        main_image.size,
-    );
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Main Pass"),
@@ -241,7 +230,15 @@ pub fn sys_render_transparent(
         timestamp_writes: None,
     });
 
-    for (renderer, _trans, pbr) in q_objects.iter() {
+    for (renderer, _trans, pbr) in q_objects.iter().sort_by::<&WorldTransform>(|a, b| {
+        let result_a = camera.view_proj * a.position.with_w(1.0);
+        let result_b = camera.view_proj * b.position.with_w(1.0);
+        if result_a.z > result_b.z {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }) {
         render_pass.set_pipeline(&transparent_pipeline.pipeline);
         render_pass.set_bind_group(
             0,
