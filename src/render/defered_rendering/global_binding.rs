@@ -1,8 +1,8 @@
-use bevy_ecs::{prelude::*, system::RunSystemOnce, world::WorldId};
+use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use std::sync::Arc;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferAddress,
-    BufferUsages, ShaderStages,
+    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferUsages,
+    ShaderStages,
 };
 
 use crate::{

@@ -5,6 +5,7 @@ use std::{
 };
 use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayoutDescriptor, BufferUsages};
 
+use bevy_ecs::prelude::*;
 use egui::ahash::HashMap;
 
 use crate::render::prelude::*;

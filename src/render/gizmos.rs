@@ -1,5 +1,4 @@
-use std::sync::Arc;
-
+use bevy_ecs::prelude::*;
 use cgmath::{ortho, Matrix4, Point3};
 use wgpu::{util::DeviceExt, BufferUsages, ShaderStages};
 

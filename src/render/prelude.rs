@@ -1,20 +1,27 @@
 #[allow(unused)]
 pub use crate::{
-    bg_layout_descriptor,
+    bg_descriptor, bg_layout_descriptor,
     cgmath_ext::*,
     render::{
-        transform::Transform, transform::WorldTransform, ObjectBindGroupLayout, RenderTargetSize,
-        UploadedImageWithSampler, Vertex,
+        material::pbr::GltfMaterial,
+        mesh::{
+            renderer::MeshRenderer, Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex,
+        },
+        transform::Transform,
+        transform::WorldTransform,
+        ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler,
     },
     wgpu_init, RenderState,
 };
 
 #[allow(unused)]
-pub use bevy_ecs::prelude::*;
+pub use std::sync::Arc;
+
 #[allow(unused)]
 pub use bevy_ecs::world::FromWorld;
 #[allow(unused)]
 pub use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, ColorWrites, Extent3d, PipelineLayout, RenderPipeline,
-    SamplerBindingType, ShaderStages, TextureFormat, TextureSampleType, TextureUsages,
+    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, ColorWrites, Extent3d,
+    PipelineLayout, RenderPass, RenderPassDescriptor, RenderPipeline, SamplerBindingType,
+    ShaderStages, TextureFormat, TextureSampleType, TextureUsages,
 };

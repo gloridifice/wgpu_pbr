@@ -35,9 +35,9 @@ use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::transparent::{TransparentPassObject, TransparentPipeline};
 use crate::render::{
-    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
-    MainPassObject, MissingTexture, Model, NormalDefaultTexture, ObjectBindGroupLayout,
-    RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
+    prelude::*, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
+    MainPassObject, MissingTexture, NormalDefaultTexture, ObjectBindGroupLayout, RenderTargetSize,
+    UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -50,7 +50,6 @@ use crate::{
         light::LightUnifromBuffer,
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
-        MeshRenderer,
     },
     RenderState, State,
 };
@@ -208,7 +207,7 @@ impl State {
         ));
 
         let light_arrow = Arc::new(
-            render::Model::load(
+            Model::load(
                 AssetPath::Assets("models/arrow.glb".to_string()),
                 &mut self.world,
             )
@@ -475,7 +474,7 @@ fn sys_update_transform_buffers(world: &mut World) {
 }
 
 fn sys_startup_scene(world: &mut World) {
-    let arrow = render::Model::load(
+    let arrow = Model::load(
         AssetPath::Assets("models/gizmos_arrow.glb".to_string()),
         world,
     )
@@ -505,11 +504,9 @@ fn sys_startup_scene(world: &mut World) {
         });
     }
 
-    let dragon_model = Arc::new(
-        render::Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap(),
-    );
-    let plane_model =
-        Arc::new(render::Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
+    let dragon_model =
+        Arc::new(Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap());
+    let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
     // let after_the_rain_model = Arc::new(
     //     render::Model::load(AssetPath::new("models/animated_ocean_scene.glb"), world).unwrap(),
     // );

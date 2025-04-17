@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::cmp::Ordering;
 
 use super::{
     camera::Camera,
@@ -17,6 +17,7 @@ use super::{
     utils::cube::CubeVerticesBuffer,
     MainPassObject, PingPongImages,
 };
+use bevy_ecs::prelude::*;
 use egui_wgpu::ScreenDescriptor;
 use wgpu::{CommandEncoder, TextureView};
 use wgpu_init::copy_texture;
@@ -30,7 +31,7 @@ use crate::{
 use super::{
     post_processing::{PostProcessingManager, RenderStage},
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, MeshRenderer,
+    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,
 };
 
 const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {

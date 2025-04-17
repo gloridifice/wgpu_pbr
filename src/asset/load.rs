@@ -1,8 +1,8 @@
 use std::fs;
 use std::{fs::File, io::Read, sync::Arc};
 
-use crate::render::material::pbr::GltfMaterial;
-use crate::render::{self, Model, Primitive, UploadedImageWithSampler, Vertex};
+use crate::render::prelude::*;
+use crate::render::{self, UploadedImageWithSampler};
 use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
@@ -83,7 +83,7 @@ impl Loadable for Model {
             .map(|mesh| {
                 let mut vertices = Vec::<Vertex>::new();
                 let mut indices = Vec::<u32>::new();
-                let mut primitives = Vec::<render::Primitive>::new();
+                let mut primitives = Vec::<Primitive>::new();
                 for primitive in mesh.primitives() {
                     let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
@@ -167,13 +167,13 @@ impl Loadable for Model {
                         material: Some(material_instance),
                     });
                 }
-                render::Mesh {
+                render::mesh::Mesh {
                     vertices,
                     indices,
                     primitives,
                 }
             })
-            .collect::<Vec<render::Mesh>>();
+            .collect::<Vec<render::mesh::Mesh>>();
 
         Ok(Model { meshes })
     }

@@ -5,7 +5,7 @@ use crate::{
     macro_utils::BGLEntry,
     render::{
         defered_rendering::MainPipeline, prelude::*, transparent::TransparentPassObject, AlphaMode,
-        MeshRenderer, NormalDefaultTexture, WhiteTexture,
+        NormalDefaultTexture, WhiteTexture,
     },
 };
 use bevy_ecs::prelude::*;

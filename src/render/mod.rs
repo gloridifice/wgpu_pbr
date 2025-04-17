@@ -16,14 +16,14 @@ use material::{
 use shader_loader::ShaderLoader;
 use transform::TransformUniform;
 use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Extent3d,
-    RenderPass, Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor, TextureDimension,
+    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Extent3d, RenderPass,
+    Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor, TextureDimension,
     TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 use crate::{
     asset::{load::Loadable, AssetPath},
-    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
+    bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
     wgpu_init, RenderState,
 };
@@ -35,6 +35,7 @@ pub mod dfg;
 pub mod gizmos;
 pub mod light;
 pub mod material;
+pub mod mesh;
 pub mod mipmap;
 pub mod post_processing;
 pub mod prelude;
@@ -60,10 +61,6 @@ pub fn get_color_target_index() -> usize {
 }
 pub fn get_sampleable_target_index() -> usize {
     (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2
-}
-pub fn switch_color_target_ping_pong() {
-    let new_value = COLOR_TARGET_INDEX.load(Ordering::Relaxed);
-    COLOR_TARGET_INDEX.store(new_value + 1, Ordering::Relaxed);
 }
 
 #[derive(Resource)]
@@ -311,162 +308,13 @@ impl FromWorld for DepthRenderTarget {
 }
 
 #[derive(Component, Clone)]
-pub struct MeshRenderer {
-    pub mesh: Option<Arc<UploadedMesh>>,
-    pub object_bind_group: Arc<BindGroup>,
-    pub transform_buffer: Arc<Buffer>,
-}
-
-#[derive(Component, Clone)]
 pub struct MainPassObject;
-
-impl MeshRenderer {
-    pub fn new(mesh: Arc<UploadedMesh>, world: &World) -> Self {
-        let device = &world.resource::<RenderState>().device;
-        let layout = &world.resource::<ObjectBindGroupLayout>().0;
-
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("transform buffer"),
-            size: size_of::<TransformUniform>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
-        let object_bind_group = device.create_bind_group(&bg_descriptor!(
-            ["Object Bind Group"] [layout]
-            0: buffer.as_entire_binding();
-        ));
-        Self {
-            mesh: Some(mesh),
-            object_bind_group: Arc::new(object_bind_group),
-            transform_buffer: Arc::new(buffer),
-        }
-    }
-
-    pub fn update_transform_buffer(&self, queue: &wgpu::Queue, uniform: TransformUniform) {
-        queue.write_buffer(&self.transform_buffer, 0, bytemuck::cast_slice(&[uniform]));
-    }
-}
-
-impl MeshRenderer {
-    /// Bind vertex buffer and index buffer, and set bind group of 1 (ObjectBindGroup)
-    fn draw(&self, render_pass: &mut RenderPass) {
-        let Some(mesh) = self.mesh.as_ref() else {
-            return;
-        };
-
-        render_pass.set_bind_group(1, self.object_bind_group.as_ref(), &[]);
-        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        for primitive in mesh.primitives.iter() {
-            let start = primitive.indices_start;
-            let num = primitive.indices_num;
-            render_pass.draw_indexed(start..(start + num), 0, 0..1);
-        }
-    }
-
-    fn draw_main(
-        &self,
-        render_pass: &mut RenderPass,
-        default_material: Arc<UploadedPBRMaterial>,
-        override_material: Option<&UploadedPBRMaterial>,
-    ) {
-        let Some(mesh) = self.mesh.as_ref() else {
-            return;
-        };
-
-        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-        render_pass.set_bind_group(2, self.object_bind_group.as_ref(), &[]);
-
-        let mut last_material: Option<Arc<UploadedPBRMaterial>> = None;
-
-        if let Some(ove) = override_material {
-            render_pass.set_bind_group(1, ove.bind_group.as_ref(), &[]);
-        }
-        for primitive in mesh.primitives.iter() {
-            if override_material.is_none() {
-                let material_instance = match primitive.uploaded_material.as_ref() {
-                    Some(a) => a,
-                    None => &default_material,
-                };
-                if last_material.is_none()
-                    || Arc::ptr_eq(last_material.as_ref().unwrap(), material_instance)
-                {
-                    last_material = Some(Arc::clone(material_instance));
-                    render_pass.set_bind_group(1, material_instance.get_bind_group(), &[]);
-                }
-            }
-
-            let start = primitive.indices_start;
-            let num = primitive.indices_num;
-            render_pass.draw_indexed(start..(start + num), 0, 0..1);
-        }
-    }
-
-    fn draw_primitives(&self, render_pass: &mut RenderPass) {
-        let Some(mesh) = self.mesh.as_ref() else {
-            return;
-        };
-
-        render_pass.set_vertex_buffer(0, mesh.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
-
-        for primitive in mesh.primitives.iter() {
-            let start = primitive.indices_start;
-            let num = primitive.indices_num;
-            render_pass.draw_indexed(start..(start + num), 0, 0..1);
-        }
-    }
-}
 
 #[derive(Debug, Clone, Copy)]
 pub enum AlphaMode {
     Opaque,
     Mask,
     Blend,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy, Debug, Default)]
-pub struct Vertex {
-    pub position: [f32; 3],
-    pub normal: [f32; 3],
-    pub tangent: [f32; 3],
-    pub color: [f32; 4],
-    pub tex_coord: [f32; 2],
-}
-
-impl_pod_zeroable!(Vertex);
-
-impl Vertex {
-    #[rustfmt::skip]
-    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-        0 => Float32x3, // Position
-        1 => Float32x3, // Normal
-        2 => Float32x3, // Tangent
-        3 => Float32x4, // Color
-        4 => Float32x2, // UV0
-    ];
-    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Vertex::ATTRIBS,
-        }
-    }
-}
-
-pub struct UploadedMesh {
-    pub vertex_buffer: Buffer,
-    pub index_buffer: Buffer,
-    pub primitives: Vec<UploadedPrimitive>,
-}
-
-pub struct UploadedPrimitive {
-    pub indices_start: u32,
-    pub indices_num: u32,
-    pub uploaded_material: Option<Arc<UploadedPBRMaterial>>,
-    pub material: Option<Arc<GltfMaterial>>,
 }
 
 pub struct UploadedImageWithSampler {
@@ -482,72 +330,6 @@ pub struct UploadedImage {
     #[allow(unused)]
     pub texture: Texture,
     pub view: TextureView,
-}
-
-pub struct Model {
-    pub meshes: Vec<Mesh>,
-}
-
-pub struct Mesh {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub primitives: Vec<Primitive>,
-}
-
-pub struct Primitive {
-    pub indices_start: u32,
-    pub indices_num: u32,
-    pub material: Option<GltfMaterial>,
-}
-
-impl Mesh {
-    pub fn upload(&self, world: &World) -> UploadedMesh {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let main_pipeline = world.resource::<MainPipeline>();
-        let layout = world.resource::<PBRMaterialBindGroupLayout>();
-        let white_tex = world.resource::<WhiteTexture>();
-        let normal_default = world.resource::<NormalDefaultTexture>();
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&self.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let primitives = self
-            .primitives
-            .iter()
-            .map(|it| UploadedPrimitive {
-                indices_start: it.indices_start,
-                indices_num: it.indices_num,
-                uploaded_material: {
-                    it.material.as_ref().map(|gltf_mat| {
-                        Arc::new(UploadedPBRMaterial::from_gltf(
-                            device,
-                            layout,
-                            &white_tex.0,
-                            &normal_default.0,
-                            Arc::clone(&main_pipeline.pipeline),
-                            gltf_mat,
-                        ))
-                    })
-                },
-                material: it.material.as_ref().map(|it| Arc::new(it.clone())),
-            })
-            .collect::<Vec<_>>();
-
-        UploadedMesh {
-            vertex_buffer,
-            index_buffer,
-            primitives,
-        }
-    }
 }
 
 impl UploadedImageWithSampler {

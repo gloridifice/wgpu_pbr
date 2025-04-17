@@ -11,6 +11,7 @@ use crate::{
         UploadedImage,
     },
 };
+use bevy_ecs::prelude::*;
 
 use super::GlobalBindGroup;
 

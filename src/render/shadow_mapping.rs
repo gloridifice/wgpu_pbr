@@ -1,20 +1,7 @@
-use std::sync::Arc;
+use crate::{asset::AssetPath, macro_utils::BGLEntry, render::prelude::*};
+use bevy_ecs::prelude::*;
 
-use bevy_ecs::{
-    component::Component,
-    system::Resource,
-    world::{self, FromWorld, Mut},
-};
-use wgpu::{BindGroup, BindGroupLayout, PipelineLayout, RenderPipeline, ShaderStages};
-
-use crate::{
-    asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
-};
-
-use super::{
-    light::LightUnifromBuffer, shader_loader::ShaderLoader, ObjectBindGroupLayout,
-    UploadedImageWithSampler, Vertex,
-};
+use super::{light::LightUnifromBuffer, shader_loader::ShaderLoader};
 
 #[derive(Resource)]
 pub struct ShadowMap {
@@ -39,7 +26,7 @@ pub struct ShadowMappingPipeline {
 pub struct CastShadow;
 
 impl FromWorld for ShadowMapGlobalBindGroup {
-    fn from_world(world: &mut world::World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         world.resource_scope(|world, render_state: Mut<RenderState>| {
             let device = &render_state.device;
 
@@ -61,7 +48,7 @@ impl FromWorld for ShadowMapGlobalBindGroup {
 }
 
 impl FromWorld for ShadowMappingPipeline {
-    fn from_world(world: &mut world::World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         let shader_source = world
             .resource_mut::<ShaderLoader>()
             .load_source(AssetPath::new_shader_wgsl("light_depth_map"))
@@ -130,7 +117,7 @@ impl FromWorld for ShadowMappingPipeline {
 }
 
 impl FromWorld for ShadowMap {
-    fn from_world(world: &mut world::World) -> Self {
+    fn from_world(world: &mut World) -> Self {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
             let image = crate::render::create_depth_texture(
                 &render_state.device,

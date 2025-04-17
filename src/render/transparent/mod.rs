@@ -1,3 +1,4 @@
+use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
 use crate::{asset::AssetPath, render::prelude::*};
