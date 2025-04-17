@@ -4,8 +4,8 @@ use crate::{
     bg_descriptor, impl_pod_zeroable,
     macro_utils::BGLEntry,
     render::{
-        defered_rendering::MainPipeline, prelude::*, MeshRenderer, NormalDefaultTexture,
-        WhiteTexture,
+        defered_rendering::MainPipeline, prelude::*, transparent::TransparentPassObject, AlphaMode,
+        MeshRenderer, NormalDefaultTexture, WhiteTexture,
     },
 };
 use bevy_ecs::prelude::*;
@@ -41,6 +41,7 @@ pub struct GltfMaterial {
     pub roughness: f32,
     pub metallic: f32,
     pub reflectance: f32,
+    pub alpha_mode: AlphaMode,
 }
 
 impl Default for GltfMaterial {
@@ -52,6 +53,7 @@ impl Default for GltfMaterial {
             roughness: 1.0,
             metallic: 0.0,
             reflectance: 0.5,
+            alpha_mode: AlphaMode::Opaque,
         }
     }
 }
@@ -161,11 +163,16 @@ pub fn sys_update_override_pbr_material_bind_group(
     normal_default: Res<NormalDefaultTexture>,
     layout: Res<PBRMaterialBindGroupLayout>,
     mut pbr_mats: Query<
-        (&MeshRenderer, &PBRMaterial, &mut PBRMaterialOverride),
+        (
+            &MeshRenderer,
+            &PBRMaterial,
+            &mut PBRMaterialOverride,
+            Option<&TransparentPassObject>,
+        ),
         Changed<PBRMaterial>,
     >,
 ) {
-    for (mesh, ove_mat, mut ove) in pbr_mats.iter_mut() {
+    for (mesh, ove_mat, mut ove, transparent) in pbr_mats.iter_mut() {
         let raw_mat = mesh
             .mesh
             .as_ref()
@@ -176,6 +183,11 @@ pub fn sys_update_override_pbr_material_bind_group(
                     .map(|primitive| primitive.material.as_ref())
             })
             .flatten();
+        let alpha_mode = if transparent.is_none() {
+            AlphaMode::Opaque
+        } else {
+            AlphaMode::Blend
+        };
         let mat = GltfMaterial {
             base_color_texture: ove_mat.base_color_texture.clone().or(raw_mat
                 .as_ref()
@@ -196,6 +208,7 @@ pub fn sys_update_override_pbr_material_bind_group(
                     .unwrap_or(Default::default()),
             ),
             color: ove_mat.color.unwrap_or(Vec4::one()).into(),
+            alpha_mode,
         };
         ove.material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
             &rs.device,

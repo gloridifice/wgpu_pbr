@@ -14,6 +14,9 @@ pub enum AssetPath {
 }
 
 impl AssetPath {
+    pub fn new(s: &str) -> Self {
+        AssetPath::Assets(s.to_string())
+    }
     pub fn final_path(&self) -> String {
         match self {
             AssetPath::Assets(p) => format!("assets/{}", p),
@@ -82,8 +85,7 @@ impl<T> Assets<T> {
 
     pub fn remove_by_name(&mut self, name: &String) -> Option<Arc<T>> {
         let handle = self.name_map.remove(name);
-        handle
-            .and_then(|it| self.map.remove(&it).map(|(name, value)| value))
+        handle.and_then(|it| self.map.remove(&it).map(|(name, value)| value))
     }
 
     pub fn remove(&mut self, handle: &Handle<T>) -> Option<Arc<T>> {

@@ -419,6 +419,13 @@ impl MeshRenderer {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum AlphaMode {
+    Opaque,
+    Mask,
+    Blend,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Vertex {
@@ -638,6 +645,16 @@ impl UploadedImageWithSampler {
 
 #[derive(Resource, Clone)]
 pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
+
+impl From<gltf::material::AlphaMode> for AlphaMode {
+    fn from(value: gltf::material::AlphaMode) -> Self {
+        match value {
+            gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
+            gltf::material::AlphaMode::Mask => AlphaMode::Mask,
+            gltf::material::AlphaMode::Blend => AlphaMode::Blend,
+        }
+    }
+}
 
 impl FromWorld for ObjectBindGroupLayout {
     fn from_world(world: &mut World) -> Self {
