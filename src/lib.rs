@@ -27,6 +27,7 @@ lazy_static::lazy_static! {
 }
 
 pub async fn run() {
+    color_backtrace::install();
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);

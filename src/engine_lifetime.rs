@@ -506,15 +506,13 @@ fn sys_startup_scene(world: &mut World) {
     }
 
     let dragon_model = Arc::new(
-        render::Model::load(
-            AssetPath::Assets("models/DragonAttenuation.glb".to_string()),
-            world,
-        )
-        .unwrap(),
+        render::Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap(),
     );
-    let plane_model = Arc::new(
-        render::Model::load(AssetPath::Assets("models/plane.glb".to_string()), world).unwrap(),
-    );
+    let plane_model =
+        Arc::new(render::Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
+    // let after_the_rain_model = Arc::new(
+    //     render::Model::load(AssetPath::new("models/animated_ocean_scene.glb"), world).unwrap(),
+    // );
 
     let mut queue = CommandQueue::from_world(world);
 
@@ -543,6 +541,21 @@ fn sys_startup_scene(world: &mut World) {
             Transform::with_position(Vec3::new(0., 0., -1.)),
         ));
     }
+
+    // commands.queue(SpawnModelCmd {
+    //     model: Arc::clone(&after_the_rain_model),
+    //     parent_bundle: (
+    //         TransformBuilder::default()
+    //             .position(Vec3::new(0., 0., 0.))
+    //             .rotation(Quaternion::from_angle_x(Deg(90.0)))
+    //             .scale(Vec3::new_unit(0.3))
+    //             .build()
+    //             .unwrap(),
+    //         RotationObject { speed: 0.5 },
+    //         Name("场景模型".to_string()),
+    //     ),
+    //     child_bundle: (CastShadow, MainPassObject, PBRMaterial::default()),
+    // });
 
     let count = 5;
     for i in 0..count {

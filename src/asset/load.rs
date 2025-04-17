@@ -126,27 +126,35 @@ impl Loadable for Model {
                         vertices.push(v);
                     }
 
-                    let material_instance: Option<GltfMaterial> = {
+                    let material_instance: GltfMaterial = {
                         let mat = primitive.material();
-                        let pbr_mr = mat.pbr_metallic_roughness();
-                        let base_color = primitive
-                            .material()
-                            .pbr_metallic_roughness()
-                            .base_color_texture();
-                        base_color.map(|tex_info| {
-                            let uploaded_image = Arc::new(UploadedImageWithSampler::from_glb_data(
-                                images.get(tex_info.texture().index()).unwrap(),
-                                &tex_info.texture().sampler(),
-                                &render_state.device,
-                                &render_state.queue,
-                            ));
-                            GltfMaterial {
-                                base_color_texture: Some(uploaded_image),
-                                roughness: pbr_mr.roughness_factor(),
-                                metallic: pbr_mr.metallic_factor(),
-                                ..Default::default()
-                            }
-                        })
+
+                        let pbr = mat.pbr_metallic_roughness();
+                        let map_texture = |it: Option<gltf::Texture>| {
+                            it.map(|it| {
+                                Arc::new(UploadedImageWithSampler::from_glb_data(
+                                    images.get(it.index()).unwrap(),
+                                    &it.sampler(),
+                                    &render_state.device,
+                                    &render_state.queue,
+                                ))
+                            })
+                        };
+
+                        let base_color_texture =
+                            map_texture(pbr.base_color_texture().map(|it| it.texture()));
+                        let normal_texture =
+                            map_texture(mat.normal_texture().map(|it| it.texture()));
+
+                        GltfMaterial {
+                            base_color_texture,
+                            normal_texture,
+                            color: pbr.base_color_factor(),
+                            roughness: pbr.roughness_factor(),
+                            metallic: pbr.metallic_factor(),
+                            reflectance: 0.0,
+                            alpha_mode: mat.alpha_mode().into(),
+                        }
                     };
 
                     let indices_start = indices.len() as u32;
@@ -156,7 +164,7 @@ impl Loadable for Model {
                     primitives.push(Primitive {
                         indices_start,
                         indices_num,
-                        material: material_instance,
+                        material: Some(material_instance),
                     });
                 }
                 render::Mesh {
