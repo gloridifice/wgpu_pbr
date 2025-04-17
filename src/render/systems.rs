@@ -13,7 +13,7 @@ use super::{
     prelude::*,
     skybox::{Skybox, SkyboxPipeline},
     transform::Transform,
-    transparent::{TransparentPassObject, TransparentPipeline},
+    transparent::TransparentPipeline,
     utils::cube::CubeVerticesBuffer,
     MainPassObject, PingPongImages,
 };
@@ -94,11 +94,7 @@ pub fn sys_render_write_g_buffer_pass(
     default_material: Res<DefaultPBRMaterial>,
     mesh_renderers: Query<
         (&MeshRenderer, Option<&PBRMaterialOverride>),
-        (
-            With<Transform>,
-            With<MainPassObject>,
-            Without<TransparentPassObject>,
-        ),
+        (With<Transform>, With<MainPassObject>),
     >,
 ) {
     let Some(depth_image) = depth_target.0.as_ref() else {
@@ -126,11 +122,7 @@ pub fn sys_render_write_g_buffer_pass(
     render_pass.set_bind_group(0, Some(global_bind_group.get_bind_group().as_ref()), &[]);
 
     for (mesh_renderer, override_mat) in mesh_renderers.iter() {
-        mesh_renderer.draw_main(
-            &mut render_pass,
-            default_material.0.clone(),
-            override_mat.and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
-        );
+        mesh_renderer.draw_opaque(&mut render_pass, default_material.0.clone(), override_mat);
     }
 }
 
@@ -193,7 +185,7 @@ pub fn sys_render_transparent(
     q_camera: Query<&Camera>,
     q_objects: Query<
         (&MeshRenderer, &WorldTransform, Option<&PBRMaterialOverride>),
-        (With<TransparentPassObject>, Without<MainPassObject>),
+        With<MainPassObject>,
     >,
 ) {
     let PingPongImages {
@@ -231,7 +223,7 @@ pub fn sys_render_transparent(
         timestamp_writes: None,
     });
 
-    for (renderer, _trans, pbr) in q_objects.iter().sort_by::<&WorldTransform>(|a, b| {
+    for (renderer, _trans, pbr_override) in q_objects.iter().sort_by::<&WorldTransform>(|a, b| {
         let result_a = camera.view_proj * a.position.with_w(1.0);
         let result_b = camera.view_proj * b.position.with_w(1.0);
         if result_a.z > result_b.z {
@@ -247,11 +239,7 @@ pub fn sys_render_transparent(
             &[],
         );
         render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
-        renderer.draw_main(
-            &mut render_pass,
-            default_material.0.clone(),
-            pbr.and_then(|it| it.material.as_ref().map(|it| it.as_ref())),
-        );
+        renderer.draw_transparent(&mut render_pass, default_material.0.clone(), pbr_override);
     }
 }
 

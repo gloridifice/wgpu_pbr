@@ -17,9 +17,6 @@ pub struct TransparentPipeline {
     pub layout: Arc<PipelineLayout>,
 }
 
-#[derive(Component, Clone, Default)]
-pub struct TransparentPassObject;
-
 impl FromWorld for TransparentPipeline {
     fn from_world(world: &mut World) -> Self {
         let mut shader = world.resource_mut::<ShaderLoader>();

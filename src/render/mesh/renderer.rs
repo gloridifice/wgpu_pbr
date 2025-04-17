@@ -1,6 +1,10 @@
 use crate::render::{
-    material::{pbr::UploadedPBRMaterial, UploadedMaterial},
+    material::{
+        pbr::{PBRMaterialOverride, UploadedPBRMaterial},
+        UploadedMaterial,
+    },
     transform::TransformUniform,
+    AlphaMode,
 };
 
 use super::super::prelude::*;
@@ -55,11 +59,54 @@ impl MeshRenderer {
         }
     }
 
-    pub fn draw_main(
+    fn check_opaque(
+        primitive: &UploadedPrimitive,
+        override_material: Option<&PBRMaterialOverride>,
+    ) -> bool {
+        primitive.material.as_ref().is_some_and(|it| {
+            it.alpha_mode == AlphaMode::Opaque
+                && override_material.is_none_or(|it| {
+                    it.material
+                        .alpha_mode
+                        .is_none_or(|it| it == AlphaMode::Opaque)
+                })
+        })
+    }
+
+    pub fn draw_opaque(
         &self,
         render_pass: &mut RenderPass,
         default_material: Arc<UploadedPBRMaterial>,
-        override_material: Option<&UploadedPBRMaterial>,
+        override_material: Option<&PBRMaterialOverride>,
+    ) {
+        self.draw_filtered(
+            render_pass,
+            default_material,
+            override_material,
+            |primitive| MeshRenderer::check_opaque(primitive, override_material),
+        );
+    }
+
+    pub fn draw_transparent(
+        &self,
+        render_pass: &mut RenderPass,
+        default_material: Arc<UploadedPBRMaterial>,
+        override_material: Option<&PBRMaterialOverride>,
+    ) {
+        self.draw_filtered(
+            render_pass,
+            default_material,
+            override_material,
+            |primitive| !MeshRenderer::check_opaque(primitive, override_material),
+        );
+    }
+
+    fn draw_filtered(
+        &self,
+        render_pass: &mut RenderPass,
+        default_material: Arc<UploadedPBRMaterial>,
+        override_material: Option<&PBRMaterialOverride>,
+        is_valid: impl Fn(&UploadedPrimitive) -> bool,
     ) {
         let Some(mesh) = self.mesh.as_ref() else {
             return;
@@ -71,10 +118,15 @@ impl MeshRenderer {
 
         let mut last_material: Option<Arc<UploadedPBRMaterial>> = None;
 
-        if let Some(ove) = override_material {
+        if let Some(ove) = override_material.and_then(|it| it.uploaded_material.as_ref()) {
             render_pass.set_bind_group(1, ove.bind_group.as_ref(), &[]);
         }
         for primitive in mesh.primitives.iter() {
+            // Filter
+            if !is_valid(&primitive) {
+                continue;
+            }
+
             if override_material.is_none() {
                 let material_instance = match primitive.uploaded_material.as_ref() {
                     Some(a) => a,

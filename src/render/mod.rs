@@ -14,7 +14,6 @@ use material::{
     UploadedMaterial,
 };
 use shader_loader::ShaderLoader;
-use transform::TransformUniform;
 use wgpu::{
     BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Extent3d, RenderPass,
     Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor, TextureDimension,
@@ -108,6 +107,7 @@ impl From<&RenderTargetSize> for Extent3d {
 /// sampleable 是用于作为读取的可被采样的。
 pub struct PingPongImages<'a> {
     pub target: Option<&'a UploadedImageWithSampler>,
+    #[allow(unused)]
     pub sampleable: Option<&'a UploadedImageWithSampler>,
 }
 
@@ -310,7 +310,7 @@ impl FromWorld for DepthRenderTarget {
 #[derive(Component, Clone)]
 pub struct MainPassObject;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlphaMode {
     Opaque,
     Mask,

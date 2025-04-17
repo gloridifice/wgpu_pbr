@@ -4,8 +4,7 @@ use crate::{
     bg_descriptor, impl_pod_zeroable,
     macro_utils::BGLEntry,
     render::{
-        defered_rendering::MainPipeline, prelude::*, transparent::TransparentPassObject, AlphaMode,
-        NormalDefaultTexture, WhiteTexture,
+        defered_rendering::MainPipeline, prelude::*, AlphaMode, NormalDefaultTexture, WhiteTexture,
     },
 };
 use bevy_ecs::prelude::*;
@@ -119,7 +118,8 @@ impl UploadedMaterial for UploadedPBRMaterial {
 
 #[derive(Component, Clone, Default)]
 pub struct PBRMaterialOverride {
-    pub material: Option<Arc<UploadedPBRMaterial>>,
+    pub material: PBRMaterial,
+    pub uploaded_material: Option<Arc<UploadedPBRMaterial>>,
 }
 
 #[derive(Component, Clone, Default)]
@@ -131,6 +131,7 @@ pub struct PBRMaterial {
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,
     pub reflectance: Option<f32>,
+    pub alpha_mode: Option<AlphaMode>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -163,16 +164,11 @@ pub fn sys_update_override_pbr_material_bind_group(
     normal_default: Res<NormalDefaultTexture>,
     layout: Res<PBRMaterialBindGroupLayout>,
     mut pbr_mats: Query<
-        (
-            &MeshRenderer,
-            &PBRMaterial,
-            &mut PBRMaterialOverride,
-            Option<&TransparentPassObject>,
-        ),
+        (&MeshRenderer, &PBRMaterial, &mut PBRMaterialOverride),
         Changed<PBRMaterial>,
     >,
 ) {
-    for (mesh, ove_mat, mut ove, transparent) in pbr_mats.iter_mut() {
+    for (mesh, pbr_mat, mut override_pbr_mat) in pbr_mats.iter_mut() {
         let raw_mat = mesh
             .mesh
             .as_ref()
@@ -183,34 +179,31 @@ pub fn sys_update_override_pbr_material_bind_group(
                     .map(|primitive| primitive.material.as_ref())
             })
             .flatten();
-        let alpha_mode = if transparent.is_none() {
-            AlphaMode::Opaque
-        } else {
-            AlphaMode::Blend
-        };
+
         let mat = GltfMaterial {
-            base_color_texture: ove_mat.base_color_texture.clone().or(raw_mat
+            base_color_texture: pbr_mat.base_color_texture.clone().or(raw_mat
                 .as_ref()
                 .and_then(|it| it.base_color_texture.clone())),
-            normal_texture: ove_mat
+            normal_texture: pbr_mat
                 .normal_texture
                 .clone()
                 .or(raw_mat.as_ref().and_then(|it| it.normal_texture.clone())),
-            roughness: ove_mat
+            roughness: pbr_mat
                 .roughness
                 .unwrap_or(raw_mat.map(|it| it.roughness).unwrap_or(Default::default())),
-            metallic: ove_mat
+            metallic: pbr_mat
                 .metallic
                 .unwrap_or(raw_mat.map(|it| it.metallic).unwrap_or(Default::default())),
-            reflectance: ove_mat.reflectance.unwrap_or(
+            reflectance: pbr_mat.reflectance.unwrap_or(
                 raw_mat
                     .map(|it| it.reflectance)
                     .unwrap_or(Default::default()),
             ),
-            color: ove_mat.color.unwrap_or(Vec4::one()).into(),
-            alpha_mode,
+            color: pbr_mat.color.unwrap_or(Vec4::one()).into(),
+            alpha_mode: pbr_mat.alpha_mode.unwrap_or(AlphaMode::Opaque),
         };
-        ove.material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
+        override_pbr_mat.material = pbr_mat.clone();
+        override_pbr_mat.uploaded_material = Some(Arc::new(UploadedPBRMaterial::from_gltf(
             &rs.device,
             &layout,
             &white.0,

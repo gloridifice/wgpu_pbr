@@ -33,11 +33,11 @@ use crate::render::skybox::prefiltering::PrefilteringPipeline;
 use crate::render::skybox::{DefaultSkybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
-use crate::render::transparent::{TransparentPassObject, TransparentPipeline};
+use crate::render::transparent::TransparentPipeline;
 use crate::render::{
-    prelude::*, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
-    MainPassObject, MissingTexture, NormalDefaultTexture, ObjectBindGroupLayout, RenderTargetSize,
-    UploadedImageWithSampler, WhiteTexture,
+    prelude::*, AlphaMode, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,
+    FullScreenVertexShader, MainPassObject, MissingTexture, NormalDefaultTexture,
+    ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -507,9 +507,6 @@ fn sys_startup_scene(world: &mut World) {
     let dragon_model =
         Arc::new(Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap());
     let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
-    // let after_the_rain_model = Arc::new(
-    //     render::Model::load(AssetPath::new("models/animated_ocean_scene.glb"), world).unwrap(),
-    // );
 
     let mut queue = CommandQueue::from_world(world);
 
@@ -538,21 +535,6 @@ fn sys_startup_scene(world: &mut World) {
             Transform::with_position(Vec3::new(0., 0., -1.)),
         ));
     }
-
-    // commands.queue(SpawnModelCmd {
-    //     model: Arc::clone(&after_the_rain_model),
-    //     parent_bundle: (
-    //         TransformBuilder::default()
-    //             .position(Vec3::new(0., 0., 0.))
-    //             .rotation(Quaternion::from_angle_x(Deg(90.0)))
-    //             .scale(Vec3::new_unit(0.3))
-    //             .build()
-    //             .unwrap(),
-    //         RotationObject { speed: 0.5 },
-    //         Name("场景模型".to_string()),
-    //     ),
-    //     child_bundle: (CastShadow, MainPassObject, PBRMaterial::default()),
-    // });
 
     let count = 5;
     for i in 0..count {
@@ -593,11 +575,12 @@ fn sys_startup_scene(world: &mut World) {
                 Name(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
-                TransparentPassObject,
                 PBRMaterial {
                     color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
+                    alpha_mode: Some(AlphaMode::Blend),
                     ..Default::default()
                 },
+                MainPassObject,
             ),
         });
     }
