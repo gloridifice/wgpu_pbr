@@ -32,5 +32,5 @@ bevy_asset = "0.15.1"
 bevy_reflect = "0.15.1"
 
 [dependencies.gltf]
-version = "1.4"
+version = "1"
 features = ["extras", "names"]

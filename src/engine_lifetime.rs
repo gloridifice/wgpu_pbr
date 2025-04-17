@@ -197,68 +197,12 @@ impl State {
             egui.context().set_visuals(visual);
         }
 
-        let rs = &self.world.resource::<RenderState>().config;
-        let aspect = rs.width as f32 / rs.height as f32;
-
-        self.world.spawn((
-            Camera::new(aspect),
-            CameraController::default(),
-            Name("相机".to_string()),
-        ));
-
-        let light_arrow = Arc::new(
-            Model::load(
-                AssetPath::Assets("models/arrow.glb".to_string()),
-                &mut self.world,
-            )
-            .unwrap(),
-        );
-        SpawnModelCmd {
-            model: light_arrow.clone(),
-            parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new(0., 4., 5.))
-                    .rotation(Quaternion::from_angle_x(Deg(-45.)))
-                    .build()
-                    .unwrap(),
-                ParallelLight::default(),
-                Name("平行光源".to_string()),
-            ),
-            child_bundle: (MainPassObject,),
-        }
-        .apply(&mut self.world);
-
-        let hdri = UploadedImageWithSampler::load(
-            AssetPath::Assets("textures/hdr/qwantani_afternoon_2k.png".to_string()),
-            &mut self.world,
-        )
-        .unwrap();
-        let cubemap_texture = {
-            let converter = self.world.resource::<CubemapConverterRgba8unorm>();
-            converter.0.render_hdir_to_cube_map(
-                &self.render_state().device,
-                &self.render_state().queue,
-                &hdri.view,
-                &self
-                    .world
-                    .resource::<crate::render::utils::cube::CubeVerticesBuffer>()
-                    .vertices_buffer,
-                512,
-            )
-        };
-        let _cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
-            dimension: Some(wgpu::TextureViewDimension::Cube),
-            ..Default::default()
-        });
-
-        // self.world.spawn(Skybox {
-        //     texture: Some(render::UploadedImage {
-        //         texture: cubemap_texture,
-        //         view: cubemap_view,
-        //     }),
-        // });
-
-        self.world.run_system_once(sys_startup_scene).unwrap();
+        self.world
+            .run_system_once(sys_startup_light_and_environment)
+            .unwrap();
+        self.world
+            .run_system_once(sys_generate_bistro_scene)
+            .unwrap();
         self.world.run_system_cached(sys_control_state).unwrap();
     }
 
@@ -473,69 +417,35 @@ fn sys_update_transform_buffers(world: &mut World) {
     });
 }
 
-fn sys_startup_scene(world: &mut World) {
-    let arrow = Model::load(
-        AssetPath::Assets("models/gizmos_arrow.glb".to_string()),
-        world,
-    )
-    .unwrap();
-
-    {
-        let mut vec = Vec::with_capacity(20usize);
-        for _ in 0..10 {
-            let x = rand::random::<f32>() * 12.;
-            let y = rand::random::<f32>() * 2.;
-            let z = rand::random::<f32>() * 2.;
-            let r = rand::random::<f32>();
-            let a = rand::random::<f32>();
-            let g = (1. - r) * a;
-            let b = (1. - r) - g;
-            vec.push((
-                PointLight {
-                    color: Vec4::new(r, g, b, 1.),
-                    ..Default::default()
-                },
-                Transform::with_position(Vec3::new(x, y, z)),
-                Name("点光源".to_string()),
-            ))
-        }
-        vec.into_iter().for_each(|it| {
-            world.spawn(it);
-        });
+fn sys_generate_dragons_scene(world: &mut World) {
+    let mut vec = Vec::with_capacity(20usize);
+    for _ in 0..10 {
+        let x = rand::random::<f32>() * 12.;
+        let y = rand::random::<f32>() * 2.;
+        let z = rand::random::<f32>() * 2.;
+        let r = rand::random::<f32>();
+        let a = rand::random::<f32>();
+        let g = (1. - r) * a;
+        let b = (1. - r) - g;
+        vec.push((
+            PointLight {
+                color: Vec4::new(r, g, b, 1.),
+                ..Default::default()
+            },
+            Transform::with_position(Vec3::new(x, y, z)),
+            Name("点光源".to_string()),
+        ))
     }
+    vec.into_iter().for_each(|it| {
+        world.spawn(it);
+    });
 
     let dragon_model =
         Arc::new(Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap());
     let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
 
     let mut queue = CommandQueue::from_world(world);
-
-    let instance = Arc::new(world.resource_scope(|world, rs: Mut<RenderState>| {
-        world
-            .resource_mut::<BufferMaterialManager>()
-            .instantiate_material::<GizmosMaterial>(
-                GizmosMaterial::new(Vec4::new(0., 1., 0., 1.)),
-                &rs.device,
-            )
-            .unwrap()
-    }));
-
     let mut commands = Commands::new(&mut queue, world);
-
-    for mesh in arrow.meshes {
-        let uploaded = Arc::new(mesh.upload(world));
-
-        commands.spawn((
-            MeshRenderer::new(uploaded, world),
-            {
-                Gizmos {
-                    instance: Arc::clone(&instance),
-                }
-            },
-            Transform::with_position(Vec3::new(0., 0., -1.)),
-        ));
-    }
-
     let count = 5;
     for i in 0..count {
         commands.queue(SpawnModelCmd {
@@ -604,4 +514,91 @@ fn sys_startup_scene(world: &mut World) {
     });
 
     queue.apply(world);
+}
+
+fn sys_generate_bistro_scene(world: &mut World) {
+    let bistro_model =
+        Arc::new(Model::load(AssetPath::new("models/Bistro/Bistro.gltf"), world).unwrap());
+
+    let mut queue = CommandQueue::from_world(world);
+    let mut commands = Commands::new(&mut queue, world);
+
+    commands.queue(SpawnModelCmd {
+        model: bistro_model,
+        parent_bundle: (
+            TransformBuilder::default()
+                .scale(Vec3::one() * 0.03)
+                .build()
+                .unwrap(),
+            Name(format!("Bistro")),
+        ),
+        child_bundle: (CastShadow, MainPassObject),
+    });
+
+    queue.apply(world);
+}
+
+fn sys_startup_light_and_environment(world: &mut World) {
+    let light_arrow_model =
+        Arc::new(Model::load(AssetPath::new("models/arrow.glb"), world).unwrap());
+
+    let config = &world.resource::<RenderState>().config;
+    let aspect = config.width as f32 / config.height as f32;
+
+    world.spawn((
+        Camera::new(aspect),
+        CameraController::default(),
+        Name("相机".to_string()),
+    ));
+
+    SpawnModelCmd {
+        model: light_arrow_model.clone(),
+        parent_bundle: (
+            TransformBuilder::default()
+                .position(Vec3::new(0., 4., 5.))
+                .rotation(Quaternion::from_angle_x(Deg(-45.)))
+                .build()
+                .unwrap(),
+            ParallelLight::default(),
+            Name("平行光源".to_string()),
+        ),
+        child_bundle: (MainPassObject,),
+    }
+    .apply(world);
+
+    let hdri = UploadedImageWithSampler::load(
+        AssetPath::Assets("textures/hdr/qwantani_afternoon_2k.png".to_string()),
+        world,
+    )
+    .unwrap();
+
+    let &RenderState {
+        ref device,
+        ref queue,
+        ..
+    } = &world.resource::<RenderState>();
+
+    let cubemap_texture = {
+        let converter = world.resource::<CubemapConverterRgba8unorm>();
+        converter.0.render_hdir_to_cube_map(
+            &device,
+            &queue,
+            &hdri.view,
+            &world
+                .resource::<crate::render::utils::cube::CubeVerticesBuffer>()
+                .vertices_buffer,
+            512,
+        )
+    };
+    let _cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
+        dimension: Some(wgpu::TextureViewDimension::Cube),
+        ..Default::default()
+    });
+
+    // self.world.spawn(Skybox {
+    //     texture: Some(render::UploadedImage {
+    //         texture: cubemap_texture,
+    //         view: cubemap_view,
+    //     }),
+    // });
 }

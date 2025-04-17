@@ -360,7 +360,6 @@ impl UploadedImageWithSampler {
 
     pub fn from_glb_data(
         data: &gltf::image::Data,
-        #[allow(unused)] gltf_sampler: &gltf::texture::Sampler,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Self {
@@ -413,7 +412,6 @@ impl UploadedImageWithSampler {
 
         let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-        // todo
         let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
 
         Self {
