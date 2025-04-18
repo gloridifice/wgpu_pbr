@@ -33,7 +33,13 @@ pub struct CubemapVertexShader {
 }
 
 #[derive(Resource)]
-pub struct CubemapConverterRgba8unorm(pub CubemapConverter);
+pub struct CubemapConvertingShader(pub Arc<ShaderModule>);
+
+#[derive(Resource)]
+pub struct CubemapConverterRgba8Unorm(pub CubemapConverter);
+
+#[derive(Resource)]
+pub struct CubemapConverterRgba16Float(pub CubemapConverter);
 
 impl FromWorld for CubemapMatrixBindGroups {
     fn from_world(world: &mut World) -> Self {
@@ -82,7 +88,7 @@ impl FromWorld for CubemapMatrixBindGroups {
     }
 }
 
-impl FromWorld for CubemapConverterRgba8unorm {
+impl FromWorld for CubemapConvertingShader {
     fn from_world(world: &mut World) -> Self {
         let shader_source = world
             .resource_mut::<ShaderLoader>()
@@ -93,12 +99,36 @@ impl FromWorld for CubemapConverterRgba8unorm {
             label: Some("Env to Cubemap"),
             source: shader_source,
         });
+        Self(Arc::new(shader))
+    }
+}
+
+impl FromWorld for CubemapConverterRgba8Unorm {
+    fn from_world(world: &mut World) -> Self {
+        let device = &world.resource::<RenderState>().device;
+        let shader = &world.resource::<CubemapConvertingShader>().0;
         let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
         let vert_shader = world.resource::<CubemapVertexShader>();
         Self(CubemapConverter::new(
             device,
             TextureFormat::Rgba8Unorm,
-            &shader,
+            shader,
+            matrix_bind_groups,
+            vert_shader,
+        ))
+    }
+}
+
+impl FromWorld for CubemapConverterRgba16Float {
+    fn from_world(world: &mut World) -> Self {
+        let device = &world.resource::<RenderState>().device;
+        let shader = &world.resource::<CubemapConvertingShader>().0;
+        let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
+        let vert_shader = world.resource::<CubemapVertexShader>();
+        Self(CubemapConverter::new(
+            device,
+            TextureFormat::Rgba16Float,
+            shader,
             matrix_bind_groups,
             vert_shader,
         ))
@@ -194,6 +224,7 @@ impl CubemapConverter {
             format: self.format,
             usage: TextureUsages::COPY_DST
                 | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_SRC
                 | TextureUsages::RENDER_ATTACHMENT,
             view_formats: &[],
         });

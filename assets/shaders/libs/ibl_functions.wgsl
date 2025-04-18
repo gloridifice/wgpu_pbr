@@ -35,17 +35,22 @@ fn evaluate_ibl_spectular(reflect: vec3<f32>, perceptual_roughness: f32) -> vec3
 /// ## Diffuse = Diffuse Color * Indirect Diffuse
 /// - Diffuse Color: abldo
 /// - Indirect Diffuse: 通过 Spherical Harmonics 获得，只取决于法线
-fn evaluate_ibl(normal: vec3<f32>, world2camera: vec3<f32>, diffuse_color: vec3<f32>, f0: vec3<f32>, f90: vec3<f32>, perceptual_roughness: f32)
+fn evaluate_ibl(normal: vec3<f32>, world2camera: vec3<f32>, diffuse_color: vec3<f32>, f0: vec3<f32>, perceptual_roughness: f32)
     -> vec3<f32>
 {
-    let nDotV = max(dot(normal, world2camera), 0.0); // Check neg pos
+    let L = normal;
+    let half = normalize(L + world2camera);
+    let nDotV = max(dot(normal, world2camera), 0.0);
+    let lDotH = max(dot(L, half), 0.0);
+    let f90 = vec3f(0.5 + 0.2 * perceptual_roughness * perceptual_roughness * lDotH * lDotH);
     let reflect = reflect(-world2camera, normal);
 
     let indirect_specular: vec3<f32> = evaluate_ibl_spectular(reflect, perceptual_roughness);
     let dfg: vec2<f32> = prefiltered_dfg_lut(perceptual_roughness, nDotV);
     let specular_color: vec3<f32> = f0 * dfg.x + f90 * dfg.y;
 
-    let indirect_diffuse: vec3<f32> = max(irradiance_sh(normal), vec3<f32>(0.0)) / 3.1415926; //todo
+    let indirect_diffuse: vec3<f32> = max(irradiance_sh(normal), vec3<f32>(0.0)) / 3.1415926;
 
     return diffuse_color * indirect_diffuse + specular_color * indirect_specular;
+    // return specular_color * indirect_specular;
 }

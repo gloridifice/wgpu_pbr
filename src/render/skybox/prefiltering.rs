@@ -3,7 +3,8 @@ use std::sync::Arc;
 use bevy_ecs::prelude::*;
 use wgpu::{
     util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
-    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat, TextureUsages,
+    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderModule, ShaderStages, TextureFormat,
+    TextureUsages,
 };
 
 use crate::{
@@ -22,7 +23,6 @@ use crate::{
 
 const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
 
-#[derive(Resource)]
 pub struct PrefilteringPipeline {
     pub pipeline: Arc<RenderPipeline>,
     #[allow(unused)]
@@ -38,6 +38,76 @@ pub struct PrefilteringEnvironmentUniform {
 }
 
 impl_pod_zeroable!(PrefilteringEnvironmentUniform);
+
+impl PrefilteringPipeline {
+    pub fn new(world: &mut World, format: TextureFormat) -> Self {
+        let shader = ShaderLoader::load_module_by_world(
+            world,
+            AssetPath::new_shader_wgsl("prefiltering/prefiltering_env_map"),
+        )
+        .unwrap();
+
+        let rs = world.resource::<crate::RenderState>();
+        let device = &rs.device;
+
+        let bg_layout = device.create_bind_group_layout(&bg_layout_descriptor! {
+                ["Prefiltering Env Map"]
+                0: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
+                1: ShaderStages::FRAGMENT => BGLEntry::TexCube(false, wgpu::TextureSampleType::Float { filterable: true });
+                2: ShaderStages::FRAGMENT => BGLEntry::Sampler(SamplerBindingType::Filtering);
+            });
+
+        let matrix_bind_group_layout = world.resource::<CubemapMatrixBindGroups>();
+
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: LABEL,
+            bind_group_layouts: &[&matrix_bind_group_layout.layout, &bg_layout],
+            push_constant_ranges: &[],
+        });
+
+        let vert_shader = world.resource::<CubemapVertexShader>();
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: LABEL,
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &vert_shader.module,
+                entry_point: Some("vs_main"),
+                compilation_options: Default::default(),
+                buffers: &[render::utils::cube::cube_vertex_layout()],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Front),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: 0,
+                alpha_to_coverage_enabled: false,
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                compilation_options: Default::default(),
+                targets: &[Some(format.into())],
+            }),
+            multiview: None,
+            cache: None,
+        });
+
+        Self {
+            pipeline: Arc::new(pipeline),
+            layout: Arc::new(layout),
+            uniform_bind_group_layout: Arc::new(bg_layout),
+        }
+    }
+}
 
 impl FromWorld for PrefilteringPipeline {
     fn from_world(world: &mut World) -> Self {
@@ -108,34 +178,6 @@ impl FromWorld for PrefilteringPipeline {
         }
     }
 }
-
-// pub struct PrefilteringContext<'a> {
-//     pub label: Option<&'static str>,
-//     pub texture: &'a Texture,
-//     pub view: &'a TextureView,
-//     pub level_count: u32,
-//     pub sample_count: u32,
-// }
-
-// pub fn sys_prefilter_environment_map(
-//     input: In<&PrefilteringContext>,
-//     rs: Res<RenderState>,
-//     pipeline: Res<PrefilteringPipeline>,
-//     matrix_bind_groups: Res<CubemapMatrixBindGroups>,
-// ) -> anyhow::Result<UploadedImage> {
-//     let In(input) = input;
-//     prefilter(
-//         input.label,
-//         &rs.device,
-//         &rs.queue,
-//         input.texture,
-//         input.view,
-//         input.level_count,
-//         input.sample_count,
-//         &pipeline,
-//         &matrix_bind_groups,
-//     )
-// }
 
 /// 5 level is enough
 pub fn prefilter(

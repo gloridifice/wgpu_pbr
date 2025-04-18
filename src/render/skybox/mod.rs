@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 use bevy_ecs::world::FromWorld;
+use prefiltering::PrefilteringPipeline;
 use wgpu::util::DeviceExt;
 use wgpu::{Buffer, BufferUsages, PipelineLayout, RenderPipeline};
 
@@ -41,8 +42,9 @@ impl FromWorld for DefaultSkybox {
             .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
         let source_texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
 
+        let pipeline = PrefilteringPipeline::new(world, wgpu::TextureFormat::Rgba8UnormSrgb);
+
         let rs = world.resource::<RenderState>();
-        let pipeline = world.resource::<prefiltering::PrefilteringPipeline>();
         let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
         let cube_vertex = world.resource::<CubeVerticesBuffer>();
         let texture = prefiltering::prefilter(
@@ -53,7 +55,7 @@ impl FromWorld for DefaultSkybox {
             &source_texture.view,
             5,
             1145,
-            pipeline,
+            &pipeline,
             matrix_bind_groups,
             cube_vertex,
         )

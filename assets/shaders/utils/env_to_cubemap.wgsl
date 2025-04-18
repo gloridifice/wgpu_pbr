@@ -6,12 +6,9 @@
 const PI: f32 = 3.1415926;
 
 fn sample_spherical_map(dir: vec3<f32>) -> vec2<f32> {
-    var u = atan2(dir.x, dir.z);
-    var v = asin(-dir.y);
-    var uv = vec2f(u, v);
-
-    uv.x = (uv.x + PI) / (2.0 * PI);
-    uv.y = (uv.y + PI / 2.0) * PI;
+    let phi = atan2(dir.z, dir.x);
+    let theta = acos(clamp(dir.y, -1.0, 1.0));
+    let uv = vec2<f32>(phi / (2.0 * PI) + 0.5, theta / PI);
     return uv;
 }
 

@@ -36,7 +36,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let f0: vec3<f32> =
         vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
-    let f90 = vec3<f32>(1.0);
 
     var surface_color = vec3<f32>(0.0);
 
@@ -49,7 +48,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
         -light.direction,
         world2camera,
         f0,
-        f90,
     );
 
     // + Point Lighting
@@ -70,7 +68,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
             dir,
             world2camera,
             f0,
-            f90,
         );
     }
 
@@ -80,7 +77,6 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
                         world2camera,
                         base_color,
                         f0,
-                        f90,
                         surface.material.perceptual_roughness
                     );
 
@@ -91,8 +87,8 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let shadow = shadow::sample_directional_shadow(world_pos);
     surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
-    return vec4<f32>(surface_color, 1.0);
-    // return vec4<f32>(ibl, 1.0);
+    // return vec4<f32>(surface_color, 1.0);
+    return vec4<f32>(ibl, 1.0);
     // return vec4<f32>(surface.material.base_color.xyz, 1.0);
     // return vec4<f32>(world_pos, 1.0);
     // return vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);

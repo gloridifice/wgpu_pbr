@@ -75,7 +75,6 @@ fn fs_main(
     let f0: vec3<f32> =
         vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
-    let f90 = vec3<f32>(1.0);
 
     var diffuse_color = vec3f(0.0);
     var specular_color = vec3f(0.0);
@@ -90,7 +89,6 @@ fn fs_main(
         -light.direction,
         world2camera,
         f0,
-        f90,
     );
     diffuse_color += parallel_light_result.diffuse;
     specular_color += parallel_light_result.specular;

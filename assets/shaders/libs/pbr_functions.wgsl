@@ -56,7 +56,6 @@ fn calculate_light(
     world2light: vec3<f32>,
     world2camera: vec3<f32>,
     f0: vec3<f32>,
-    f90: vec3<f32>,
 ) -> vec3<f32> {
     let result = calculate_light_separately(
         light_color,
@@ -65,7 +64,6 @@ fn calculate_light(
         world2light,
         world2camera,
         f0,
-        f90,
     );
     return result.diffuse + result.specular;
 }
@@ -77,7 +75,6 @@ fn calculate_light_separately(
     world2light: vec3<f32>,
     world2camera: vec3<f32>,
     f0: vec3<f32>,
-    f90: vec3<f32>,
 ) -> LightCalculationResult {
     let reflectance: f32 = surface.material.reflectance;
     let roughness: f32 = clamp(surface.roughness, 0.089, 1.0);
@@ -90,6 +87,8 @@ fn calculate_light_separately(
     let nDotH = max(dot(normal, half), 0.0);
     let nDotV = max(dot(normal, world2camera), 0.0);
     let hDotV = max(dot(half, world2camera), 0.0);
+    let lDotH = max(dot(world2light, half), 0.0);
+    let f90 = vec3f(0.5 + 2.0 * roughness * lDotH * lDotH);
 
     let diffuse_brdf = diffuse_brdf(metallic, base_color);
     let specular_brdf = specular_brdf(f0, f90, roughness, nDotH, nDotL, nDotV, hDotV);

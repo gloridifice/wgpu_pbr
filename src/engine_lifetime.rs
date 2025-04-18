@@ -7,7 +7,10 @@ use crate::egui_tools::{EguiConfig, EguiRenderer};
 use crate::render::camera::{
     sys_update_camera_control, sys_update_camera_uniform, Camera, CameraController,
 };
-use crate::render::cubemap::{CubemapConverterRgba8unorm, CubemapMatrixBindGroups};
+use crate::render::cubemap::{
+    CubemapConverterRgba16Float, CubemapConverterRgba8Unorm, CubemapConvertingShader,
+    CubemapMatrixBindGroups,
+};
 use crate::render::defered_rendering::global_binding::GlobalUniformBuffer;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
@@ -29,15 +32,16 @@ use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
-use crate::render::skybox::prefiltering::PrefilteringPipeline;
-use crate::render::skybox::{DefaultSkybox, SkyboxPipeline, SkyboxSHBuffer};
+use crate::render::skybox::prefiltering::{self, PrefilteringPipeline};
+use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::transparent::TransparentPipeline;
+use crate::render::utils::cube::CubeVerticesBuffer;
 use crate::render::{
-    prelude::*, AlphaMode, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,
-    FullScreenVertexShader, MainPassObject, MissingTexture, NormalDefaultTexture,
-    ObjectBindGroupLayout, RenderTargetSize, UploadedImageWithSampler, WhiteTexture,
+    prelude::*, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
+    MainPassObject, MissingTexture, NormalDefaultTexture, ObjectBindGroupLayout, RenderTargetSize,
+    UploadedImage, UploadedImageWithSampler, WhiteTexture,
 };
 use crate::MainWindow;
 use crate::{
@@ -137,9 +141,10 @@ impl State {
         self.insert_resource::<RenderTargetEguiTexId>();
         self.insert_resource::<render::utils::cube::CubeVerticesBuffer>();
         self.insert_resource::<render::cubemap::CubemapVertexShader>();
+        self.insert_resource::<CubemapConvertingShader>();
         self.insert_resource::<CubemapMatrixBindGroups>();
-        self.insert_resource::<CubemapConverterRgba8unorm>();
-        self.insert_resource::<PrefilteringPipeline>();
+        self.insert_resource::<CubemapConverterRgba8Unorm>();
+        self.insert_resource::<CubemapConverterRgba16Float>();
         self.insert_resource::<DefaultSkybox>();
         self.insert_resource::<GlobalUniformBuffer>();
 
@@ -605,39 +610,58 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
     .apply(world);
 
-    let hdri = UploadedImageWithSampler::load(
-        AssetPath::Assets("textures/hdr/qwantani_afternoon_2k.png".to_string()),
-        world,
-    )
-    .unwrap();
+    let skybox_image = world
+        .run_system_once_with(
+            AssetPath::new("textures/hdr/qwantani_afternoon_2k.png"),
+            sys_load_hdir_and_prefiler,
+        )
+        .unwrap();
 
-    let &RenderState {
-        ref device,
-        ref queue,
-        ..
-    } = &world.resource::<RenderState>();
+    world.spawn(Skybox {
+        texture: Some(skybox_image),
+    });
+}
 
-    let cubemap_texture = {
-        let converter = world.resource::<CubemapConverterRgba8unorm>();
+pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> UploadedImage {
+    let pipeline = PrefilteringPipeline::new(world, wgpu::TextureFormat::Rgba16Float);
+
+    let rs = world.resource::<RenderState>();
+    let converter = world.resource::<CubemapConverterRgba16Float>();
+    let cube_vertices_buffer = world.resource::<CubeVerticesBuffer>();
+    let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
+
+    let device = &rs.device;
+    let queue = &rs.queue;
+    let In(path) = input;
+
+    let hdri = UploadedImageWithSampler::load_hdri_to_f16(path, device, queue).unwrap();
+
+    let source_texture = {
         converter.0.render_hdir_to_cube_map(
             &device,
             &queue,
             &hdri.view,
-            &world
-                .resource::<crate::render::utils::cube::CubeVerticesBuffer>()
-                .vertices_buffer,
+            &cube_vertices_buffer.vertices_buffer,
             512,
         )
     };
-    let _cubemap_view = cubemap_texture.create_view(&wgpu::TextureViewDescriptor {
+
+    let source_cubemap_view = source_texture.create_view(&wgpu::TextureViewDescriptor {
         dimension: Some(wgpu::TextureViewDimension::Cube),
         ..Default::default()
     });
 
-    // self.world.spawn(Skybox {
-    //     texture: Some(render::UploadedImage {
-    //         texture: cubemap_texture,
-    //         view: cubemap_view,
-    //     }),
-    // });
+    prefiltering::prefilter(
+        Some("Default Skybox"),
+        &rs.device,
+        &rs.queue,
+        &source_texture,
+        &source_cubemap_view,
+        5,
+        1145,
+        &pipeline,
+        &matrix_bind_groups,
+        &cube_vertices_buffer,
+    )
+    .unwrap()
 }

@@ -61,7 +61,7 @@ fn load_texture_from_memory(
             label: None,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         },
@@ -98,6 +98,65 @@ impl Loadable for UploadedImageWithSampler {
     fn load(path: AssetPath, world: &mut World) -> Result<Self> {
         let rs = world.resource::<RenderState>();
         load_texture_from_path(path.final_path(), &rs.device, &rs.queue).map(|it| it.0)
+    }
+}
+
+impl UploadedImageWithSampler {
+    pub fn load_hdri_to_f16(
+        path: AssetPath,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+    ) -> Result<Self> {
+        let path = path.final_path();
+        let mut file = File::open(&path)?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+
+        let dynamic_image = image::load_from_memory(&buffer)?;
+        let image = dynamic_image.to_rgba32f();
+
+        let (width, height) = image.dimensions();
+        let size = Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+
+        let mut image_data = Vec::with_capacity((width * height) as usize * 4 * 2);
+        for px in image.pixels() {
+            for &channel in px.0.iter() {
+                let h = half::f16::from_f32(channel);
+                image_data.extend_from_slice(&h.to_le_bytes());
+            }
+        }
+
+        let texture = device.create_texture_with_data(
+            queue,
+            &wgpu::TextureDescriptor {
+                size,
+                mip_level_count: 1,
+                label: None,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba16Float,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_DST,
+                view_formats: &[],
+            },
+            Default::default(),
+            &image_data,
+        );
+
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+        let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
+
+        Ok(UploadedImageWithSampler {
+            size,
+            texture,
+            view,
+            sampler,
+        })
     }
 }
 

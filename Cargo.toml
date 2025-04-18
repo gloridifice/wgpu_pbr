@@ -30,6 +30,7 @@ egui_dock = "0.16"
 egui_tiles = "0.12"
 bevy_asset = "0.15.1"
 bevy_reflect = "0.15.1"
+half = "2.6.0"
 
 [dependencies.gltf]
 version = "1"
