@@ -10,6 +10,7 @@ use crate::RenderState;
 use anyhow::*;
 use bevy_ecs::world::World;
 use image::{ColorType, DynamicImage};
+use log::{error, info};
 use wgpu::util::DeviceExt;
 use wgpu::ShaderModule;
 
@@ -154,7 +155,7 @@ fn load_by_gltf<'a>(
         .into_iter()
         .filter_map(|buffer| match buffer.source() {
             gltf::buffer::Source::Bin => {
-                println!("A Bin source here!");
+                error!("A Bin source here!");
                 None
             }
             gltf::buffer::Source::Uri(uri) => {
@@ -179,7 +180,7 @@ fn load_by_gltf<'a>(
         .into_iter()
         .filter_map(|img| match img.source() {
             gltf::image::Source::View { .. } => {
-                println!("A Bin texture here!");
+                error!("A Bin texture here!");
                 None
             }
             gltf::image::Source::Uri { uri, .. } => {
@@ -203,7 +204,7 @@ impl Loadable for Model {
         let device = &rs.device;
         let queue = &rs.queue;
         let path = path.final_path();
-        println!("= Start Loading <{}>", &path);
+        info!("= Start Loading <{}>", &path);
         let start_instant = Instant::now();
 
         let (document, buffers, images) = if path.ends_with(".gltf") {
@@ -214,7 +215,7 @@ impl Loadable for Model {
             return Err(anyhow!("<{}> is not a model file (.gltf or .glb)!", &path));
         };
 
-        println!(
+        info!(
             "  - imported from path, using {}s",
             start_instant.elapsed().as_secs_f64()
         );
@@ -321,9 +322,9 @@ impl Loadable for Model {
             })
             .collect::<Vec<render::mesh::Mesh>>();
 
-        let duration = Instant::now() - start_instant;
-        println!(
-            "   = End Loading <{}>, using {}s",
+        let duration = start_instant.elapsed();
+        info!(
+            "   ✅ End Loading <{}>, using {}s",
             &path,
             &duration.as_secs_f64()
         );

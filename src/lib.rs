@@ -2,6 +2,7 @@ use bevy_ecs::system::{Resource, RunSystemOnce};
 use bevy_ecs::world::World;
 use bevy_ecs::{change_detection::Mut, system::IntoSystem};
 use egui_tools::EguiRenderer;
+use log::info;
 use pollster::block_on;
 use std::sync::Arc;
 use wgpu::{Features, Instance, Surface};
@@ -28,7 +29,9 @@ lazy_static::lazy_static! {
 
 pub async fn run() {
     color_backtrace::install();
-    env_logger::init();
+    env_logger::Builder::from_default_env()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     let event_loop = EventLoop::new().unwrap();
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = App::new();
@@ -253,6 +256,8 @@ impl RenderState {
             .find(|f| f.is_srgb())
             .copied()
             .unwrap_or(surface_caps.formats[0]);
+
+        info!("Surface format is: '{:?}'.", surface_format);
 
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,

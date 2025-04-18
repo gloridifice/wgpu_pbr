@@ -1,5 +1,6 @@
 use bevy_ecs::prelude::*;
 use egui::load::SizedTexture;
+use log::info;
 
 use crate::{
     cgmath_ext::{Vec2, VectorExt},
@@ -88,7 +89,7 @@ pub fn sys_egui_tiles(world: &mut World) {
             let size = ui.available_size();
             if let Some(render_target_egui_tex_ids) = ids.0.as_ref() {
                 let main_view = ui.image(SizedTexture::new(
-                    render_target_egui_tex_ids[render::get_color_target_index()],
+                    render_target_egui_tex_ids[render::get_sampleable_target_index()],
                     size,
                 ));
                 let mut input = world.resource_mut::<Input>();

@@ -14,7 +14,7 @@ use crate::render::defered_rendering::write_g_buffer_pipeline::{
 };
 use crate::render::defered_rendering::{global_binding::GlobalBindGroup, MainPipeline};
 use crate::render::dfg::DFGTexture;
-use crate::render::gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosMaterial, GizmosPipeline};
+use crate::render::gizmos::{GizmosGlobalBindGroup, GizmosPipeline};
 use crate::render::light::parallel_light::ParallelLight;
 use crate::render::light::point_light::PointLight;
 use crate::render::light::{
@@ -201,7 +201,7 @@ impl State {
             .run_system_once(sys_startup_light_and_environment)
             .unwrap();
         self.world
-            .run_system_once(sys_generate_bistro_scene)
+            .run_system_once(sys_generate_dragons_scene)
             .unwrap();
         self.world.run_system_cached(sys_control_state).unwrap();
     }
@@ -417,10 +417,15 @@ fn sys_update_transform_buffers(world: &mut World) {
     });
 }
 
-fn sys_generate_dragons_scene(world: &mut World) {
+fn generate_point_lights(
+    world: &mut World,
+    x_size: f32,
+    light_intensity_offset: f32,
+    light_intensity_scale: f32,
+) {
     let mut vec = Vec::with_capacity(20usize);
     for _ in 0..10 {
-        let x = rand::random::<f32>() * 12.;
+        let x = rand::random::<f32>() * x_size;
         let y = rand::random::<f32>() * 2.;
         let z = rand::random::<f32>() * 2.;
         let r = rand::random::<f32>();
@@ -430,6 +435,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
         vec.push((
             PointLight {
                 color: Vec4::new(r, g, b, 1.),
+                intensity: rand::random::<f32>() * light_intensity_scale + light_intensity_offset,
                 ..Default::default()
             },
             Transform::with_position(Vec3::new(x, y, z)),
@@ -439,10 +445,15 @@ fn sys_generate_dragons_scene(world: &mut World) {
     vec.into_iter().for_each(|it| {
         world.spawn(it);
     });
+}
 
-    let dragon_model =
-        Arc::new(Model::load(AssetPath::new("models/DragonAttenuation.glb"), world).unwrap());
+fn sys_generate_dragons_scene(world: &mut World) {
+    let dragon_model = Arc::new(
+        Model::load(AssetPath::new("models/DragonAttenuation/scene.gltf"), world).unwrap(),
+    );
     let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
+
+    generate_point_lights(world, 12., 1., 1.);
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
@@ -472,53 +483,81 @@ fn sys_generate_dragons_scene(world: &mut World) {
     }
 
     for i in 0..count {
+        let value = (i as f32) / (count - 1) as f32;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
             parent_bundle: (
                 TransformBuilder::default()
-                    .position(Vec3::new(i as f32 * 2., 0., 6.))
+                    .position(Vec3::new(i as f32 * 2., 4., 0.))
                     .rotation(Quaternion::from_angle_x(Deg(90.0)))
                     .scale(Vec3::new_unit(0.3))
                     .build()
                     .unwrap(),
                 RotationObject { speed: 0.5 },
-                Name(format!("透明龙模型 No_{}", i)),
+                Name(format!("龙模型 No_{}", i)),
             ),
             child_bundle: (
+                CastShadow,
+                MainPassObject,
                 PBRMaterial {
-                    color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
-                    alpha_mode: Some(AlphaMode::Blend),
+                    reflectance: Some(value),
                     ..Default::default()
                 },
-                MainPassObject,
             ),
         });
     }
 
-    commands.queue(SpawnModelCmd {
-        model: plane_model.clone(),
-        parent_bundle: (
-            TransformBuilder::default()
-                .position(Vec3::new_y(-1.0))
-                .build()
-                .unwrap(),
-            Name("平面".to_string()),
-        ),
-        child_bundle: (
-            CastShadow,
-            MainPassObject,
-            PBRMaterial {
-                ..Default::default()
-            },
-        ),
-    });
+    // for i in 0..count {
+    //     commands.queue(SpawnModelCmd {
+    //         model: dragon_model.clone(),
+    //         parent_bundle: (
+    //             TransformBuilder::default()
+    //                 .position(Vec3::new(i as f32 * 2., 0., 6.))
+    //                 .rotation(Quaternion::from_angle_x(Deg(90.0)))
+    //                 .scale(Vec3::new_unit(0.3))
+    //                 .build()
+    //                 .unwrap(),
+    //             RotationObject { speed: 0.5 },
+    //             Name(format!("透明龙模型 No_{}", i)),
+    //         ),
+    //         child_bundle: (
+    //             PBRMaterial {
+    //                 color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
+    //                 alpha_mode: Some(AlphaMode::Blend),
+    //                 ..Default::default()
+    //             },
+    //             MainPassObject,
+    //         ),
+    //     });
+    // }
+
+    // commands.queue(SpawnModelCmd {
+    //     model: plane_model.clone(),
+    //     parent_bundle: (
+    //         TransformBuilder::default()
+    //             .position(Vec3::new_y(-1.0))
+    //             .build()
+    //             .unwrap(),
+    //         Name("平面".to_string()),
+    //     ),
+    //     child_bundle: (
+    //         CastShadow,
+    //         MainPassObject,
+    //         PBRMaterial {
+    //             ..Default::default()
+    //         },
+    //     ),
+    // });
 
     queue.apply(world);
 }
 
 fn sys_generate_bistro_scene(world: &mut World) {
-    let bistro_model =
-        Arc::new(Model::load(AssetPath::new("models/Bistro/Bistro.gltf"), world).unwrap());
+    generate_point_lights(world, 2., 3., 3.);
+
+    let bistro_model = Arc::new(
+        Model::load(AssetPath::new("models/unreal_vr_room_01/scene.gltf"), world).unwrap(),
+    );
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
@@ -527,7 +566,7 @@ fn sys_generate_bistro_scene(world: &mut World) {
         model: bistro_model,
         parent_bundle: (
             TransformBuilder::default()
-                .scale(Vec3::one() * 0.03)
+                .scale(Vec3::one() * 2.0)
                 .build()
                 .unwrap(),
             Name(format!("Bistro")),

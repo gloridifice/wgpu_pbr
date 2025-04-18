@@ -19,13 +19,14 @@ use super::{
 };
 use bevy_ecs::prelude::*;
 use egui_wgpu::ScreenDescriptor;
+use log::info;
 use wgpu::{CommandEncoder, TextureView};
 use wgpu_init::copy_texture;
 use winit::window::Window;
 
 use crate::{
     egui_tools::{EguiConfig, EguiRenderer},
-    RenderState,
+    render, RenderState,
 };
 
 use super::{

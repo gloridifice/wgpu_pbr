@@ -9,20 +9,16 @@ use bevy_ecs::{
     world::{FromWorld, World},
 };
 use defered_rendering::MainPipeline;
-use material::{
-    pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial},
-    UploadedMaterial,
-};
+use material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial};
 use shader_loader::ShaderLoader;
 use wgpu::{
-    BindGroup, BindGroupLayout, Buffer, BufferDescriptor, BufferUsages, Extent3d, RenderPass,
-    Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor, TextureDimension,
-    TextureUsages, TextureView, TextureViewDescriptor,
+    BindGroupLayout, Extent3d, Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor,
+    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 use crate::{
     asset::{load::Loadable, AssetPath},
-    bg_descriptor, bg_layout_descriptor,
+    bg_layout_descriptor,
     macro_utils::BGLEntry,
     wgpu_init, RenderState,
 };
@@ -60,6 +56,12 @@ pub fn get_color_target_index() -> usize {
 }
 pub fn get_sampleable_target_index() -> usize {
     (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2
+}
+pub fn switch_ping_pong() {
+    COLOR_TARGET_INDEX.store(
+        (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2,
+        Ordering::Relaxed,
+    );
 }
 
 #[derive(Resource)]
@@ -144,10 +146,8 @@ impl ColorRenderTarget {
 
     /// 更新序号，然后获取当前的 Target 和采样贴图。
     pub fn switch_and_get_images(&mut self) -> PingPongImages {
-        COLOR_TARGET_INDEX.store(
-            (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2,
-            Ordering::Relaxed,
-        );
+        switch_ping_pong();
+
         PingPongImages {
             target: self
                 .ping_pong
