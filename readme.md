@@ -8,6 +8,7 @@ Powered by
 - [winit](https://github.com/rust-windowing/winit): Cross-platform window creation and management in Rust.
 - [cgmath](https://github.com/rustgd/cgmath): Mathmatic library.
 - [bevy_ecs](https://docs.rs/bevy_ecs/latest/bevy_ecs/): Entity Component System architecture in Rust by bevy engine.
+- [egui](https://github.com/emilk/egui): An easy-to-use GUI in pure Rust.
 
 ## Roadmap
 - [x] Transform & Camera & Phong pipeline
@@ -15,17 +16,24 @@ Powered by
 - [x] Normal mapping
 - [x] Deferred rendering pipeline
 - [x] Microfact directional lighting & point lighting
-- [ ] Color management
-- [ ] Microfact image based lighting
+- [x] Color management
+- [x] Microfact image based lighting
   - [x] Environment map prefiltering (GGX distribution)
-  - [ ] Diffuse irradiance spherical harmonics pre-calculation
-  - [ ] HDRI to cubemap converting
+  - [x] Diffuse irradiance spherical harmonics pre-calculation
+  - [x] HDRI to cubemap converting
+- [x] Transparent pipeline
+  - [x] Transparent pass (separate specular and diffuse)
+  - [x] Screenspace refraction effect
+- [ ] Forward+ pipeline
+  - [ ] Material pattern
+  - [ ] Light filtering
 - [ ] Clear coat model
-- [ ] Transparent pipeline
-- [ ] Better user interface
 - [ ] Cascade shadow mapping
 
 ## Screenshot
 
-![metallic](readme/metallic.png)
-![shadow mapping](readme/shadow_mapping.png)
+![reflectance_metallic](readme/reflectance_metallic.jpg)
+- row 0: Solid | reflectance: 0.0 -> 1.0
+- row 1: Solid | metallic: 0.0 -> 1.0
+- row 2: Transparent | metaliic: 0.0 -> 1.0
+- row 3: Transparent | reflectance: 0.0 -> 1.0
