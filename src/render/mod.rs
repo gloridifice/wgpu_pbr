@@ -152,29 +152,25 @@ impl ColorRenderTarget {
             target: self
                 .ping_pong
                 .get(get_color_target_index())
-                .map(|it| it.as_ref())
-                .flatten(),
+                .and_then(|it| it.as_ref()),
             sampleable: self
                 .ping_pong
                 .get(get_sampleable_target_index())
-                .map(|it| it.as_ref())
-                .flatten(),
+                .and_then(|it| it.as_ref()),
         }
     }
 
     pub fn get_target(&self) -> Option<&UploadedImageWithSampler> {
         self.ping_pong
             .get(get_color_target_index())
-            .map(|it| it.as_ref())
-            .flatten()
+            .and_then(|it| it.as_ref())
     }
 
     #[allow(unused)]
     pub fn get_sampleable(&self) -> Option<&UploadedImageWithSampler> {
         self.ping_pong
             .get(get_sampleable_target_index())
-            .map(|it| it.as_ref())
-            .flatten()
+            .and_then(|it| it.as_ref())
     }
 }
 

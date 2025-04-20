@@ -1,6 +1,5 @@
 use bevy_ecs::prelude::*;
 use egui::load::SizedTexture;
-use log::info;
 
 use crate::{
     cgmath_ext::{Vec2, VectorExt},

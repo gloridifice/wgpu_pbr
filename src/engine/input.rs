@@ -72,8 +72,7 @@ impl Input {
     }
 
     pub fn window_input(&mut self, event: &WindowEvent) {
-        match event {
-            WindowEvent::KeyboardInput {
+        if let WindowEvent::KeyboardInput {
                 event:
                     KeyEvent {
                         state,
@@ -81,32 +80,27 @@ impl Input {
                         ..
                     },
                 ..
-            } => {
-                match *state {
-                    ElementState::Pressed => {
-                        if !self.is_key_hold(*key) {
-                            self.down_keys.insert(*key);
-                        }
-                        self.hold_keys.insert(*key);
+            } = event {
+            match *state {
+                ElementState::Pressed => {
+                    if !self.is_key_hold(*key) {
+                        self.down_keys.insert(*key);
                     }
-                    ElementState::Released => {
-                        if self.is_key_hold(*key) {
-                            self.up_keys.insert(*key);
-                        }
-                        self.hold_keys.remove(key);
+                    self.hold_keys.insert(*key);
+                }
+                ElementState::Released => {
+                    if self.is_key_hold(*key) {
+                        self.up_keys.insert(*key);
                     }
-                };
-            }
-            _ => {}
+                    self.hold_keys.remove(key);
+                }
+            };
         };
     }
 
     pub fn device_input(&mut self, event: &DeviceEvent) {
-        match event {
-            DeviceEvent::MouseMotion { delta } => {
-                self.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
-            }
-            _ => {}
+        if let DeviceEvent::MouseMotion { delta } = event {
+            self.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
         }
     }
 

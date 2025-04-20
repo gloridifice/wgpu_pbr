@@ -577,7 +577,7 @@ fn sys_generate_bistro_scene(world: &mut World) {
                 .scale(Vec3::one() * 2.0)
                 .build()
                 .unwrap(),
-            Name(format!("Bistro")),
+            Name("Bistro".to_string()),
         ),
         child_bundle: (CastShadow, MainPassObject),
     });
@@ -645,8 +645,8 @@ pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> Up
 
     let source_texture = {
         converter.0.render_hdir_to_cube_map(
-            &device,
-            &queue,
+            device,
+            queue,
             &hdri.view,
             &cube_vertices_buffer.vertices_buffer,
             512,
@@ -667,8 +667,8 @@ pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> Up
         5,
         1145,
         &pipeline,
-        &matrix_bind_groups,
-        &cube_vertices_buffer,
+        matrix_bind_groups,
+        cube_vertices_buffer,
     )
     .unwrap()
 }

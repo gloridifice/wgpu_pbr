@@ -3,7 +3,7 @@ use std::sync::Arc;
 use bevy_ecs::prelude::*;
 use wgpu::{
     util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
-    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderModule, ShaderStages, TextureFormat,
+    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat,
     TextureUsages,
 };
 

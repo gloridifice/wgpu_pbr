@@ -243,7 +243,7 @@ fn load_by_gltf<'a>(
                 None
             }
             gltf::image::Source::Uri { uri, .. } => {
-                let path = parent_dir.join(&uri);
+                let path = parent_dir.join(uri);
                 Some(scope.spawn(move || {
                     let loaded = load_texture_from_path(path, device, queue).unwrap();
                     (Arc::new(loaded.0), loaded.1)

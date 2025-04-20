@@ -123,7 +123,7 @@ impl MeshRenderer {
         }
         for primitive in mesh.primitives.iter() {
             // Filter
-            if !is_valid(&primitive) {
+            if !is_valid(primitive) {
                 continue;
             }
 
