@@ -425,14 +425,17 @@ fn sys_update_transform_buffers(world: &mut World) {
 fn generate_point_lights(
     world: &mut World,
     x_size: f32,
+    y_size: f32,
+    z_size: f32,
+    count: u32,
     light_intensity_offset: f32,
     light_intensity_scale: f32,
 ) {
     let mut vec = Vec::with_capacity(20usize);
-    for _ in 0..10 {
+    for _ in 0..count {
         let x = rand::random::<f32>() * x_size;
-        let y = rand::random::<f32>() * 2.;
-        let z = rand::random::<f32>() * 2.;
+        let y = rand::random::<f32>() * y_size;
+        let z = rand::random::<f32>() * z_size;
         let r = rand::random::<f32>();
         let a = rand::random::<f32>();
         let g = (1. - r) * a;
@@ -458,7 +461,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
     );
     let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
 
-    generate_point_lights(world, 12., 1., 1.);
+    generate_point_lights(world, 12., 8., 2., 20, 1., 1.);
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
@@ -512,29 +515,29 @@ fn sys_generate_dragons_scene(world: &mut World) {
         });
     }
 
-    // for i in 0..count {
-    //     commands.queue(SpawnModelCmd {
-    //         model: dragon_model.clone(),
-    //         parent_bundle: (
-    //             TransformBuilder::default()
-    //                 .position(Vec3::new(i as f32 * 2., 0., 6.))
-    //                 .rotation(Quaternion::from_angle_x(Deg(90.0)))
-    //                 .scale(Vec3::new_unit(0.3))
-    //                 .build()
-    //                 .unwrap(),
-    //             RotationObject { speed: 0.5 },
-    //             Name(format!("透明龙模型 No_{}", i)),
-    //         ),
-    //         child_bundle: (
-    //             PBRMaterial {
-    //                 color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
-    //                 alpha_mode: Some(AlphaMode::Blend),
-    //                 ..Default::default()
-    //             },
-    //             MainPassObject,
-    //         ),
-    //     });
-    // }
+    for i in 0..count {
+        commands.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                TransformBuilder::default()
+                    .position(Vec3::new(i as f32 * 2., 0., 6.))
+                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                    .scale(Vec3::new_unit(0.3))
+                    .build()
+                    .unwrap(),
+                RotationObject { speed: 0.5 },
+                Name(format!("透明龙模型 No_{}", i)),
+            ),
+            child_bundle: (
+                PBRMaterial {
+                    color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
+                    alpha_mode: Some(render::AlphaMode::Blend),
+                    ..Default::default()
+                },
+                MainPassObject,
+            ),
+        });
+    }
 
     // commands.queue(SpawnModelCmd {
     //     model: plane_model.clone(),
@@ -558,7 +561,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
 }
 
 fn sys_generate_bistro_scene(world: &mut World) {
-    generate_point_lights(world, 2., 3., 3.);
+    // generate_point_lights(world, 2., 3., 3.);
 
     let bistro_model = Arc::new(
         Model::load(AssetPath::new("models/unreal_vr_room_01/scene.gltf"), world).unwrap(),
@@ -610,10 +613,14 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
     .apply(world);
 
+    let skybox_image_path = AssetPath::new("textures/hdr/qwantani_afternoon_2k.png");
     let skybox_image = world
+        .run_system_once_with(skybox_image_path.clone(), sys_load_hdir_and_prefiler)
+        .unwrap();
+    world
         .run_system_once_with(
-            AssetPath::new("textures/hdr/qwantani_afternoon_2k.png"),
-            sys_load_hdir_and_prefiler,
+            skybox_image_path,
+            render::skybox::sys_update_skybox_sh_from_path,
         )
         .unwrap();
 

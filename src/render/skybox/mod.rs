@@ -1,3 +1,5 @@
+use std::fs;
+use std::io::Read;
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
@@ -16,6 +18,7 @@ use super::utils::cube::CubeVerticesBuffer;
 use super::{shader_loader::ShaderLoader, UploadedImage};
 
 pub mod prefiltering;
+pub mod sh_coefficients;
 
 #[derive(Resource)]
 pub struct SkyboxPipeline {
@@ -161,11 +164,40 @@ impl FromWorld for SkyboxSHBuffer {
                     ]
                     .map(|it| [it[0], it[1], it[2], 0.0]),
                 }]),
-                usage: BufferUsages::UNIFORM,
+                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
             });
 
         Self {
             buffer: Arc::new(buffer),
         }
+    }
+}
+
+pub fn sys_update_skybox_sh_from_path(
+    input: In<AssetPath>,
+    skybox_sh_buffer: Res<SkyboxSHBuffer>,
+    rs: Res<RenderState>,
+) {
+    match ComputedSH::compute_from_path(input.0) {
+        Ok(raw) => {
+            rs.queue
+                .write_buffer(&skybox_sh_buffer.buffer, 0, bytemuck::cast_slice(&[raw]));
+        }
+        Err(err) => {
+            log::error!("Failed to update skybox SH from path. Err: \n {}", err);
+        }
+    }
+}
+
+impl ComputedSH {
+    pub fn compute_from_path(path: AssetPath) -> anyhow::Result<ComputedSH> {
+        let path = path.final_path();
+        let mut file = fs::File::open(&path)?;
+        let mut buffer = vec![];
+        file.read_to_end(&mut buffer)?;
+        let image = image::load_from_memory(&buffer)?;
+        let result = sh_coefficients::compute_sh_coefficients(&image);
+
+        Ok(ComputedSH { array: result })
     }
 }

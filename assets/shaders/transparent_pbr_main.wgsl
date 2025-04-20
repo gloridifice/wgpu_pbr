@@ -115,18 +115,17 @@ fn fs_main(
     //     );
     // }
 
-    /// + Image based Lighting
-    // let ibl = ibl_functions::evaluate_ibl(
-    //                     surface.normal,
-    //                     world2camera,
-    //                     base_color,
-    //                     f0,
-    //                     f90,
-    //                     surface.material.perceptual_roughness
-    //                 );
+    // + Image based Lighting
+    let ibl_result = ibl_functions::evaluate_ibl_separately(
+                        surface.normal,
+                        world2camera,
+                        base_color,
+                        f0,
+                        surface.material.perceptual_roughness
+                    );
 
-    // surface_color += ibl;
-    // surface_color += vec3<f32>(0.1);
+    diffuse_color += ibl_result.diffuse;
+    specular_color += ibl_result.specular;
 
     /// -- Shadowing --
     let shadow = shadow::sample_directional_shadow(world_pos);
