@@ -467,15 +467,18 @@ fn sys_generate_dragons_scene(world: &mut World) {
     let mut commands = Commands::new(&mut queue, world);
     let count = 5;
     for i in 0..count {
+        let value = (i as f32) / (count - 1) as f32;
+        let mut transform = TransformBuilder::default()
+            .position(Vec3::new(i as f32 * 2.5, 0., 0.))
+            .rotation(Quaternion::from_angle_x(Deg(90.0)))
+            .scale(Vec3::new_unit(0.3))
+            .build()
+            .unwrap();
+
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
             parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new(i as f32 * 2., 0., 0.))
-                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                    .scale(Vec3::new_unit(0.3))
-                    .build()
-                    .unwrap(),
+                transform.clone(),
                 RotationObject { speed: 0.5 },
                 Name(format!("龙模型 No_{}", i)),
             ),
@@ -483,24 +486,17 @@ fn sys_generate_dragons_scene(world: &mut World) {
                 CastShadow,
                 MainPassObject,
                 PBRMaterial {
-                    metallic: Some((i as f32) / (count - 1) as f32),
+                    metallic: Some(value),
                     ..Default::default()
                 },
             ),
         });
-    }
 
-    for i in 0..count {
-        let value = (i as f32) / (count - 1) as f32;
+        transform.position.y += 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
             parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new(i as f32 * 2., 4., 0.))
-                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                    .scale(Vec3::new_unit(0.3))
-                    .build()
-                    .unwrap(),
+                transform,
                 RotationObject { speed: 0.5 },
                 Name(format!("龙模型 No_{}", i)),
             ),
@@ -516,21 +512,44 @@ fn sys_generate_dragons_scene(world: &mut World) {
     }
 
     for i in 0..count {
+        let value = (i as f32) / (count - 1) as f32;
+        let mut transform = TransformBuilder::default()
+            .position(Vec3::new(i as f32 * 2.5, -4., 0.))
+            .rotation(Quaternion::from_angle_x(Deg(90.0)))
+            .scale(Vec3::new_unit(0.3))
+            .build()
+            .unwrap();
+
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
             parent_bundle: (
-                TransformBuilder::default()
-                    .position(Vec3::new(i as f32 * 2., 0., 6.))
-                    .rotation(Quaternion::from_angle_x(Deg(90.0)))
-                    .scale(Vec3::new_unit(0.3))
-                    .build()
-                    .unwrap(),
+                transform.clone(),
                 RotationObject { speed: 0.5 },
                 Name(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
                 PBRMaterial {
-                    color: Some(Vec4::new(1.0, 1.0, 1.0, i as f32 / count as f32)),
+                    color: Some(Vec4::new(1.0, 1.0, 1.0, 0.0)),
+                    metallic: Some(value),
+                    alpha_mode: Some(render::AlphaMode::Blend),
+                    ..Default::default()
+                },
+                MainPassObject,
+            ),
+        });
+
+        transform.position.y -= 3.0;
+        commands.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                transform,
+                RotationObject { speed: 0.5 },
+                Name(format!("透明龙模型 No_{}", i)),
+            ),
+            child_bundle: (
+                PBRMaterial {
+                    color: Some(Vec4::new(1.0, 1.0, 1.0, 0.0)),
+                    reflectance: Some(value),
                     alpha_mode: Some(render::AlphaMode::Blend),
                     ..Default::default()
                 },
