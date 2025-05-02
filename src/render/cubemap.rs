@@ -36,9 +36,6 @@ pub struct CubemapVertexShader {
 pub struct CubemapConvertingShader(pub Arc<ShaderModule>);
 
 #[derive(Resource)]
-pub struct CubemapConverterRgba8Unorm(pub CubemapConverter);
-
-#[derive(Resource)]
 pub struct CubemapConverterRgba16Float(pub CubemapConverter);
 
 impl FromWorld for CubemapMatrixBindGroups {
@@ -100,22 +97,6 @@ impl FromWorld for CubemapConvertingShader {
             source: shader_source,
         });
         Self(Arc::new(shader))
-    }
-}
-
-impl FromWorld for CubemapConverterRgba8Unorm {
-    fn from_world(world: &mut World) -> Self {
-        let device = &world.resource::<RenderState>().device;
-        let shader = &world.resource::<CubemapConvertingShader>().0;
-        let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
-        let vert_shader = world.resource::<CubemapVertexShader>();
-        Self(CubemapConverter::new(
-            device,
-            TextureFormat::Rgba8Unorm,
-            shader,
-            matrix_bind_groups,
-            vert_shader,
-        ))
     }
 }
 

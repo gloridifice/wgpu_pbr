@@ -1,7 +1,3 @@
 target
 .DS_Store
-assets/models/Bistro
-assets/models/Bistro.glb
-assets/models/Bistro.blend
-assets/models/Bistro.blend1
-assets/models/unreal_vr_room_01
+assets/models

@@ -74,14 +74,13 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     /// + Image based Lighting
     let ibl = ibl_functions::evaluate_ibl(
                         surface.normal,
-                        world2camera,
+                        surface.normal,
                         base_color,
                         f0,
                         surface.material.perceptual_roughness
                     );
 
     surface_color += ibl;
-    surface_color += vec3<f32>(0.1);
 
     /// -- Shadowing --
     let shadow = shadow::sample_directional_shadow(world_pos);
@@ -90,7 +89,7 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     return vec4<f32>(surface_color, 1.0);
     // return vec4<f32>(ibl, 1.0);
     // return vec4<f32>(surface.material.base_color.xyz, 1.0);
-    // return vec4<f32>(world_pos, 1.0);
+    // return vec4<f32>(world_pos / 2.0, 1.0);
     // return vec4<f32>(surface.normal * 0.5 + vec3<f32>(0.5), 1.0);
     // a.z = 1.0;
     // return a;

@@ -31,6 +31,7 @@ egui_tiles = "0.12"
 bevy_asset = "0.15.1"
 bevy_reflect = "0.15.1"
 half = "2.6.0"
+png = "0.17.16"
 
 [dependencies.gltf]
 version = "1"

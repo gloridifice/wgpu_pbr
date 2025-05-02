@@ -13,14 +13,11 @@ use material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMateria
 use shader_loader::ShaderLoader;
 use wgpu::{
     BindGroupLayout, Extent3d, Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor,
-    TextureDimension, TextureUsages, TextureView, TextureViewDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 use crate::{
-    asset::{load::Loadable, AssetPath},
-    bg_layout_descriptor,
-    macro_utils::BGLEntry,
-    wgpu_init, RenderState,
+    asset::AssetPath, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init, RenderState,
 };
 
 pub mod camera;
@@ -309,7 +306,6 @@ pub struct MainPassObject;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AlphaMode {
     Opaque,
-    Mask,
     Blend,
 }
 
@@ -353,70 +349,6 @@ impl UploadedImageWithSampler {
             ..Default::default()
         }
     }
-
-    pub fn from_glb_data(
-        data: &gltf::image::Data,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> Self {
-        let size = wgpu::Extent3d {
-            width: data.width,
-            height: data.height,
-            depth_or_array_layers: 1,
-        };
-
-        let texture = device.create_texture(&wgpu::TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        });
-
-        let pixels = match data.format {
-            gltf::image::Format::R8G8B8 => {
-                let new_len = data.pixels.len() / 3 * 4;
-                let mut ret = vec![0u8; new_len];
-                for i in 0..new_len {
-                    let divide = i / 4;
-                    let modulo = i % 4;
-                    ret[i] = if modulo != 3 {
-                        *data.pixels.get(divide * 3 + modulo).unwrap()
-                    } else {
-                        0u8
-                    };
-                }
-                ret
-            }
-            _ => data.pixels.clone(),
-        };
-
-        queue.write_texture(
-            wgpu::TexelCopyTextureInfoBase {
-                texture: &texture,
-                mip_level: 0,
-                origin: wgpu::Origin3d::ZERO,
-                aspect: wgpu::TextureAspect::All,
-            },
-            &pixels,
-            UploadedImageWithSampler::image_data_layout(data.width, data.height, 4, 0),
-            size,
-        );
-
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-        let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
-
-        Self {
-            size,
-            texture,
-            view,
-            sampler,
-        }
-    }
 }
 
 #[derive(Resource, Clone)]
@@ -426,7 +358,7 @@ impl From<gltf::material::AlphaMode> for AlphaMode {
     fn from(value: gltf::material::AlphaMode) -> Self {
         match value {
             gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
-            gltf::material::AlphaMode::Mask => AlphaMode::Mask,
+            gltf::material::AlphaMode::Mask => AlphaMode::Blend,
             gltf::material::AlphaMode::Blend => AlphaMode::Blend,
         }
     }
@@ -459,10 +391,13 @@ pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 
 impl FromWorld for WhiteTexture {
     fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load(
+            UploadedImageWithSampler::load_from_path(
                 AssetPath::Assets("textures/white.png".to_string()),
-                world,
+                &rs.device,
+                &rs.queue,
+                TextureFormat::Rgba8UnormSrgb,
             )
             .unwrap(),
         ))
@@ -471,10 +406,13 @@ impl FromWorld for WhiteTexture {
 
 impl FromWorld for NormalDefaultTexture {
     fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load(
+            UploadedImageWithSampler::load_from_path(
                 AssetPath::Assets("textures/normal_default.png".to_string()),
-                world,
+                &rs.device,
+                &rs.queue,
+                TextureFormat::Rgba8UnormSrgb,
             )
             .unwrap(),
         ))
@@ -483,10 +421,13 @@ impl FromWorld for NormalDefaultTexture {
 
 impl FromWorld for MissingTexture {
     fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load(
+            UploadedImageWithSampler::load_from_path(
                 AssetPath::Assets("textures/missing.png".to_string()),
-                world,
+                &rs.device,
+                &rs.queue,
+                TextureFormat::Rgba8UnormSrgb,
             )
             .unwrap(),
         ))

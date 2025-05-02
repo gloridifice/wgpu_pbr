@@ -14,7 +14,7 @@ fn sample_directional_shadow(world_pos: vec3<f32>) -> f32{
             sample += textureSampleCompare(
                 directional_shadow_map,
                 directional_shadow_map_comparison_sampler,
-                coords + vec2f(vec2(i, j)) / 2048.0,
+                coords + vec2f(vec2(i, j)) / 4096.0,
                 current_depth
             );
         }

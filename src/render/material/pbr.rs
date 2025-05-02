@@ -49,9 +49,9 @@ impl Default for GltfMaterial {
             base_color_texture: None,
             normal_texture: None,
             color: [1.0; 4],
-            roughness: 1.0,
+            roughness: 0.5,
             metallic: 0.0,
-            reflectance: 0.5,
+            reflectance: 0.0,
             alpha_mode: AlphaMode::Opaque,
         }
     }

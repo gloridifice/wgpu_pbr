@@ -1,3 +1,5 @@
+use std::io::Cursor;
+
 use std::path::Path;
 use std::thread::{scope, Scope};
 use std::time::Instant;
@@ -7,12 +9,15 @@ use std::{fs::File, io::Read, sync::Arc};
 use crate::render::{self, UploadedImageWithSampler};
 use crate::render::{prelude::*, AlphaMode};
 use crate::RenderState;
-use anyhow::*;
+use anyhow::anyhow;
+use anyhow::Result;
 use bevy_ecs::world::World;
-use image::{ColorType, DynamicImage};
+use gltf::image::{Data, Format};
+use image::{ColorType, DynamicImage, Pixel};
 use log::{error, info};
-use wgpu::util::DeviceExt;
-use wgpu::ShaderModule;
+use png::Decoder;
+use wgpu::util::{DeviceExt, TextureDataOrder};
+use wgpu::{AddressMode, FilterMode, ShaderModule, TextureDescriptor};
 
 use super::AssetPath;
 
@@ -36,72 +41,144 @@ fn is_any_pixel_transparent(img: &DynamicImage) -> bool {
     rgba.pixels().any(|p| p[3] < 255)
 }
 
-/// Return (texture, is_transparent)
-fn load_texture_from_memory(
-    data: &[u8],
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> Result<(UploadedImageWithSampler, bool)> {
-    let dynamic_image = image::load_from_memory(data)?;
-    let is_transparent = has_alpha(&dynamic_image) && is_any_pixel_transparent(&dynamic_image);
-    let image = dynamic_image.to_rgba8();
-
-    let (width, height) = image.dimensions();
-    let size = Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
+fn is_png_srgb_from_memory(data: &[u8]) -> bool {
+    let cursor = Cursor::new(data);
+    let decoder = Decoder::new(cursor);
+    let Ok(reader) = decoder.read_info() else {
+        return false;
     };
 
-    let texture = device.create_texture_with_data(
-        queue,
-        &wgpu::TextureDescriptor {
-            size,
-            mip_level_count: 1,
-            label: None,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8Unorm,
-            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-            view_formats: &[],
-        },
-        Default::default(),
-        &image,
-    );
+    return reader.info().srgb.is_some();
+}
 
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
+macro_rules! match_image_format {
+    (
+        $img:expr,
+        $($color:pat => {
+            $convert:expr,
+            $format:expr
+        }),+ $(,)?
+    ) => {{
+        match $img.color() {
+            $(
+                $color => {
+                    let image = $convert;
+                    let data = image
+                        .pixels()
+                        .flat_map(|it| it.0.map(|it| it.to_be_bytes()))
+                        .flat_map(|c| c)
+                        .collect::<Vec<u8>>();
+                    let (width, height) = image.dimensions();
+                    Data {
+                        pixels: data,
+                        format: $format,
+                        width,
+                        height,
+                    }
+                }
+            )+
+            other => panic!("{:?} is an unsupported texture format!", other),
+        }
+    }};
+}
 
-    Ok((
-        UploadedImageWithSampler {
+/// Return (texture, is_transparent)
+fn load_gltf_image_data_from_memory(data: &[u8]) -> Result<gltf::image::Data> {
+    let dynamic_image = image::load_from_memory(data)?;
+    Ok(match_image_format!(&dynamic_image,
+        ColorType::Rgb8 => { dynamic_image.into_rgb8(), Format::R8G8B8 },
+        ColorType::Rgba8 => { dynamic_image.into_rgba8(), Format::R8G8B8A8 },
+        ColorType::Rgb16 => { dynamic_image.into_rgb16(), Format::R16G16B16 },
+        ColorType::Rgba16 => { dynamic_image.into_rgba16(), Format::R16G16B16A16 },
+    ))
+}
+
+fn load_gltf_image_data_from_path(path: impl AsRef<Path>) -> Result<gltf::image::Data> {
+    let mut file = File::open(path)?;
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)?;
+    load_gltf_image_data_from_memory(&buffer)
+}
+
+impl UploadedImageWithSampler {
+    pub fn load_from_data(
+        data: &gltf::image::Data,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Result<Self> {
+        let size = Extent3d {
+            width: data.width,
+            height: data.height,
+            depth_or_array_layers: 1,
+        };
+        let mut pixels = &data.pixels;
+        let mut rgba = Vec::with_capacity(data.pixels.len() / 3 * 4);
+        match data.format {
+            Format::R8G8B8 => {
+                for chunk in data.pixels.chunks(3) {
+                    rgba.extend_from_slice(chunk);
+                    rgba.push(255);
+                }
+                pixels = &rgba;
+            }
+            Format::R16G16B16 => {
+                for chunk in data.pixels.chunks(6) {
+                    rgba.extend_from_slice(chunk);
+                    rgba.push(255);
+                    rgba.push(255);
+                }
+                pixels = &rgba;
+            }
+            _ => {
+                drop(rgba);
+            }
+        }
+
+        let texture = device.create_texture_with_data(
+            queue,
+            &TextureDescriptor {
+                label: None,
+                size,
+                mip_level_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: TextureUsages::COPY_DST
+                    | TextureUsages::COPY_SRC
+                    | TextureUsages::RENDER_ATTACHMENT
+                    | TextureUsages::TEXTURE_BINDING,
+                sample_count: 1,
+                view_formats: &[],
+            },
+            TextureDataOrder::MipMajor,
+            pixels,
+        );
+
+        let view = texture.create_view(&Default::default());
+        let sampler = device.create_sampler(&wgpu_init::sampler_desc(
+            None,
+            AddressMode::MirrorRepeat,
+            FilterMode::Linear,
+        ));
+
+        Ok(UploadedImageWithSampler {
             size,
             texture,
             view,
             sampler,
-        },
-        is_transparent,
-    ))
-}
-
-fn load_texture_from_path(
-    path: impl AsRef<Path>,
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-) -> Result<(UploadedImageWithSampler, bool)> {
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    load_texture_from_memory(&buffer, device, queue)
-}
-
-impl Loadable for UploadedImageWithSampler {
-    fn load(path: AssetPath, world: &mut World) -> Result<Self> {
-        let rs = world.resource::<RenderState>();
-        load_texture_from_path(path.final_path(), &rs.device, &rs.queue).map(|it| it.0)
+        })
     }
-}
 
-impl UploadedImageWithSampler {
+    pub fn load_from_path(
+        path: AssetPath,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
+    ) -> Result<Self> {
+        let data = load_gltf_image_data_from_path(path.final_path())?;
+        Self::load_from_data(&data, device, queue, format)
+    }
+
     pub fn load_hdri_to_f16(
         path: AssetPath,
         device: &wgpu::Device,
@@ -163,43 +240,14 @@ impl UploadedImageWithSampler {
 type Loaded = (
     gltf::Document,
     Vec<gltf::buffer::Data>,
-    // (texture, is_tranparent)
-    Vec<(Arc<UploadedImageWithSampler>, bool)>,
+    Vec<gltf::image::Data>,
 );
 
-fn load_by_glb<'a>(
-    path: impl AsRef<Path>,
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    scope: &'a Scope<'a, '_>,
-) -> Result<Loaded> {
-    let (document, buffers, images) = gltf::import(&path)?;
-
-    let handles = images
-        .into_iter()
-        .map(|data| {
-            scope.spawn(move || {
-                Arc::new(UploadedImageWithSampler::from_glb_data(
-                    &data, device, queue,
-                ))
-            })
-        })
-        .collect::<Vec<_>>();
-
-    let images = handles
-        .into_iter()
-        .map(|handle| (handle.join().unwrap(), false))
-        .collect();
-
-    Ok((document, buffers, images))
+fn load_by_glb<'a>(path: impl AsRef<Path>) -> Result<Loaded> {
+    Ok(gltf::import(&path)?)
 }
 
-fn load_by_gltf<'a>(
-    path: impl AsRef<Path>,
-    device: &'a wgpu::Device,
-    queue: &'a wgpu::Queue,
-    scope: &'a Scope<'a, '_>,
-) -> Result<Loaded> {
+fn load_by_gltf<'a>(path: impl AsRef<Path>, scope: &'a Scope<'a, '_>) -> Result<Loaded> {
     let file = fs::File::open(&path)?;
     let buf = io::BufReader::new(file);
     let gltf = gltf::Gltf::from_reader(buf)?;
@@ -245,8 +293,8 @@ fn load_by_gltf<'a>(
             gltf::image::Source::Uri { uri, .. } => {
                 let path = parent_dir.join(uri);
                 Some(scope.spawn(move || {
-                    let loaded = load_texture_from_path(path, device, queue).unwrap();
-                    (Arc::new(loaded.0), loaded.1)
+                    let loaded = load_gltf_image_data_from_path(path).unwrap();
+                    loaded
                 }))
             }
         })
@@ -267,9 +315,9 @@ impl Loadable for Model {
         let start_instant = Instant::now();
 
         let (document, buffers, images) = if path.ends_with(".gltf") {
-            scope(|scope| load_by_gltf(&path, device, queue, scope))?
+            scope(|scope| load_by_gltf(&path, scope))?
         } else if path.ends_with(".glb") {
-            scope(|scope| load_by_glb(&path, device, queue, scope))?
+            load_by_glb(&path)?
         } else {
             return Err(anyhow!("<{}> is not a model file (.gltf or .glb)!", &path));
         };
@@ -331,26 +379,34 @@ impl Loadable for Model {
                         let mat = primitive.material();
 
                         let pbr = mat.pbr_metallic_roughness();
-                        let map_texture = |it: Option<gltf::Texture>| {
-                            it.map(|it| Arc::clone(&images.get(it.index()).unwrap().0))
-                        };
 
                         // Check is transparent and get decide alpha mode
-                        let alpha_mode = pbr
-                            .base_color_texture()
-                            .map(|it| {
-                                if images.get(it.texture().index()).unwrap().1 {
-                                    AlphaMode::Blend
-                                } else {
-                                    AlphaMode::Opaque
-                                }
-                            })
-                            .unwrap_or(AlphaMode::Opaque);
-
-                        let base_color_texture =
-                            map_texture(pbr.base_color_texture().map(|it| it.texture()));
-                        let normal_texture =
-                            map_texture(mat.normal_texture().map(|it| it.texture()));
+                        let mut alpha_mode = AlphaMode::Opaque;
+                        let base_color_texture = pbr.base_color_texture().map(|info| {
+                            let index = info.texture().index();
+                            let data = &images[index];
+                            Arc::new(
+                                UploadedImageWithSampler::load_from_data(
+                                    data,
+                                    device,
+                                    queue,
+                                    wgpu::TextureFormat::Rgba8UnormSrgb,
+                                )
+                                .unwrap(),
+                            )
+                        });
+                        let normal_texture = mat.normal_texture().map(|info| {
+                            let index = info.texture().index();
+                            Arc::new(
+                                UploadedImageWithSampler::load_from_data(
+                                    &images[index],
+                                    device,
+                                    queue,
+                                    wgpu::TextureFormat::Rgba8Unorm,
+                                )
+                                .unwrap(),
+                            )
+                        });
 
                         GltfMaterial {
                             base_color_texture,

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
 
-use crate::asset::load::Loadable;
+use crate::RenderState;
 
 use super::UploadedImageWithSampler;
 
@@ -12,10 +12,13 @@ pub struct DFGTexture {
 }
 impl FromWorld for DFGTexture {
     fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
         let texture = Arc::new(
-            UploadedImageWithSampler::load(
+            UploadedImageWithSampler::load_from_path(
                 crate::asset::AssetPath::Assets("textures/ibl_brdf_lut.png".to_string()),
-                world,
+                &rs.device,
+                &rs.queue,
+                wgpu::TextureFormat::Rgba8Unorm,
             )
             .unwrap(),
         );

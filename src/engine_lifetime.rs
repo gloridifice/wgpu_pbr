@@ -8,8 +8,7 @@ use crate::render::camera::{
     sys_update_camera_control, sys_update_camera_uniform, Camera, CameraController,
 };
 use crate::render::cubemap::{
-    CubemapConverterRgba16Float, CubemapConverterRgba8Unorm, CubemapConvertingShader,
-    CubemapMatrixBindGroups,
+    CubemapConverterRgba16Float, CubemapConvertingShader, CubemapMatrixBindGroups,
 };
 use crate::render::defered_rendering::global_binding::GlobalUniformBuffer;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
@@ -64,7 +63,7 @@ use bevy_ecs::{
     component::Component,
     system::{Query, Res, RunSystemOnce},
 };
-use cgmath::{Deg, Quaternion, Rad, Rotation3};
+use cgmath::{Deg, Euler, Quaternion, Rad, Rotation3};
 use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
 use winit::event::DeviceEvent;
@@ -143,7 +142,6 @@ impl State {
         self.insert_resource::<render::cubemap::CubemapVertexShader>();
         self.insert_resource::<CubemapConvertingShader>();
         self.insert_resource::<CubemapMatrixBindGroups>();
-        self.insert_resource::<CubemapConverterRgba8Unorm>();
         self.insert_resource::<CubemapConverterRgba16Float>();
         self.insert_resource::<DefaultSkybox>();
         self.insert_resource::<GlobalUniformBuffer>();
@@ -208,6 +206,13 @@ impl State {
         self.world
             .run_system_once(sys_generate_dragons_scene)
             .unwrap();
+        // self.world
+        //     .run_system_once_with(
+        //         (AssetPath::new("models/ship.glb"), "船模型".to_string(), 1.0),
+        //         sys_generate_single_model,
+        //     )
+        //     .unwrap();
+
         self.world.run_system_cached(sys_control_state).unwrap();
     }
 
@@ -422,6 +427,14 @@ fn sys_update_transform_buffers(world: &mut World) {
     });
 }
 
+fn random_color_vec3() -> Vec3 {
+    let r = rand::random::<f32>();
+    let a = rand::random::<f32>();
+    let g = (1. - r) * a;
+    let b = (1. - r) - g;
+    return Vec3::new(r, g, b);
+}
+
 fn generate_point_lights(
     world: &mut World,
     x_size: f32,
@@ -436,13 +449,9 @@ fn generate_point_lights(
         let x = rand::random::<f32>() * x_size;
         let y = rand::random::<f32>() * y_size;
         let z = rand::random::<f32>() * z_size;
-        let r = rand::random::<f32>();
-        let a = rand::random::<f32>();
-        let g = (1. - r) * a;
-        let b = (1. - r) - g;
         vec.push((
             PointLight {
-                color: Vec4::new(r, g, b, 1.),
+                color: random_color_vec3().extend(1.0),
                 intensity: rand::random::<f32>() * light_intensity_scale + light_intensity_offset,
                 ..Default::default()
             },
@@ -470,18 +479,14 @@ fn sys_generate_dragons_scene(world: &mut World) {
         let value = (i as f32) / (count - 1) as f32;
         let mut transform = TransformBuilder::default()
             .position(Vec3::new(i as f32 * 2.5, 0., 0.))
-            .rotation(Quaternion::from_angle_x(Deg(90.0)))
+            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
             .scale(Vec3::new_unit(0.3))
             .build()
             .unwrap();
 
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (
-                transform.clone(),
-                RotationObject { speed: 0.5 },
-                Name(format!("龙模型 No_{}", i)),
-            ),
+            parent_bundle: (transform.clone(), Name(format!("龙模型 No_{}", i))),
             child_bundle: (
                 CastShadow,
                 MainPassObject,
@@ -495,11 +500,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
         transform.position.y += 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (
-                transform,
-                RotationObject { speed: 0.5 },
-                Name(format!("龙模型 No_{}", i)),
-            ),
+            parent_bundle: (transform, Name(format!("龙模型 No_{}", i))),
             child_bundle: (
                 CastShadow,
                 MainPassObject,
@@ -515,7 +516,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
         let value = (i as f32) / (count - 1) as f32;
         let mut transform = TransformBuilder::default()
             .position(Vec3::new(i as f32 * 2.5, -4., 0.))
-            .rotation(Quaternion::from_angle_x(Deg(90.0)))
+            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
             .scale(Vec3::new_unit(0.3))
             .build()
             .unwrap();
@@ -524,7 +525,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform.clone(),
-                RotationObject { speed: 0.5 },
+                // RotationObject { speed: 0.5 },
                 Name(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
@@ -541,11 +542,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
         transform.position.y -= 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (
-                transform,
-                RotationObject { speed: 0.5 },
-                Name(format!("透明龙模型 No_{}", i)),
-            ),
+            parent_bundle: (transform, Name(format!("透明龙模型 No_{}", i))),
             child_bundle: (
                 PBRMaterial {
                     color: Some(Vec4::new(1.0, 1.0, 1.0, 0.0)),
@@ -558,32 +555,106 @@ fn sys_generate_dragons_scene(world: &mut World) {
         });
     }
 
-    // commands.queue(SpawnModelCmd {
-    //     model: plane_model.clone(),
-    //     parent_bundle: (
-    //         TransformBuilder::default()
-    //             .position(Vec3::new_y(-1.0))
-    //             .build()
-    //             .unwrap(),
-    //         Name("平面".to_string()),
-    //     ),
-    //     child_bundle: (
-    //         CastShadow,
-    //         MainPassObject,
-    //         PBRMaterial {
-    //             ..Default::default()
-    //         },
-    //     ),
-    // });
+    // Colored transparent
+    for i in 0..count {
+        let value = (i as f32) / (count - 1) as f32;
+        let mut transform = TransformBuilder::default()
+            .position(Vec3::new(i as f32 * 2.5, -10., 0.))
+            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
+            .scale(Vec3::new_unit(0.3))
+            .build()
+            .unwrap();
+
+        commands.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (
+                transform.clone(),
+                // RotationObject { speed: 0.5 },
+                Name(format!("透明龙模型 No_{}", i)),
+            ),
+            child_bundle: (
+                PBRMaterial {
+                    color: Some(random_color_vec3().extend(value)),
+                    metallic: Some(value),
+                    alpha_mode: Some(render::AlphaMode::Blend),
+                    ..Default::default()
+                },
+                MainPassObject,
+            ),
+        });
+
+        transform.position.y -= 3.0;
+        commands.queue(SpawnModelCmd {
+            model: dragon_model.clone(),
+            parent_bundle: (transform, Name(format!("透明龙模型 No_{}", i))),
+            child_bundle: (
+                PBRMaterial {
+                    color: Some(random_color_vec3().extend(value)),
+                    reflectance: Some(value),
+                    alpha_mode: Some(render::AlphaMode::Blend),
+                    ..Default::default()
+                },
+                MainPassObject,
+            ),
+        });
+    }
+
+    commands.queue(SpawnModelCmd {
+        model: plane_model.clone(),
+        parent_bundle: (
+            TransformBuilder::default()
+                .position(Vec3::new_y(-1.0))
+                .build()
+                .unwrap(),
+            Name("平面".to_string()),
+        ),
+        child_bundle: (
+            CastShadow,
+            MainPassObject,
+            PBRMaterial {
+                ..Default::default()
+            },
+        ),
+    });
 
     queue.apply(world);
 }
 
-fn sys_generate_bistro_scene(world: &mut World) {
-    // generate_point_lights(world, 2., 3., 3.);
+fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut World) {
+    let In((model_asset_path, name, scale)) = input;
+
+    generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
+
+    let model = Arc::new(Model::load(model_asset_path, world).unwrap());
+
+    let mut queue = CommandQueue::from_world(world);
+    let mut commands = Commands::new(&mut queue, world);
+
+    commands.queue(SpawnModelCmd {
+        model,
+        parent_bundle: (
+            TransformBuilder::default()
+                .scale(Vec3::one() * scale)
+                .rotation(Quaternion::from_angle_x(Deg(90.0)))
+                .build()
+                .unwrap(),
+            Name(name),
+        ),
+        child_bundle: (CastShadow, MainPassObject),
+    });
+
+    queue.apply(world);
+}
+
+fn sys_generate_unreal_vr_room_scene(world: &mut World) {
+    generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
 
     let bistro_model = Arc::new(
-        Model::load(AssetPath::new("models/unreal_vr_room_01/scene.gltf"), world).unwrap(),
+        Model::load(
+            AssetPath::new("models/sony_tc-510-2_tape_recorder/scene.gltf"),
+            world,
+        )
+        .unwrap(),
     );
 
     let mut queue = CommandQueue::from_world(world);
@@ -593,10 +664,10 @@ fn sys_generate_bistro_scene(world: &mut World) {
         model: bistro_model,
         parent_bundle: (
             TransformBuilder::default()
-                .scale(Vec3::one() * 2.0)
+                .scale(Vec3::one() * 0.1)
                 .build()
                 .unwrap(),
-            Name("Bistro".to_string()),
+            Name("Room".to_string()),
         ),
         child_bundle: (CastShadow, MainPassObject),
     });
@@ -612,8 +683,20 @@ fn sys_startup_light_and_environment(world: &mut World) {
     let aspect = config.width as f32 / config.height as f32;
 
     world.spawn((
-        Camera::new(aspect),
-        CameraController::default(),
+        Camera {
+            aspect,
+            fovy: 17.1,
+            ..Camera::new(aspect)
+        },
+        CameraController {
+            row: -4.8,
+            yaw: 0.0,
+        },
+        TransformBuilder::default()
+            .position(Vec3::new(2.5, 0.6, 31.1))
+            .rotation(Euler::new(Deg(0.0), Deg(-4.0), Deg(0.0)).into())
+            .build()
+            .unwrap(),
         Name("相机".to_string()),
     ));
 
@@ -632,7 +715,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
     .apply(world);
 
-    let skybox_image_path = AssetPath::new("textures/hdr/qwantani_afternoon_2k.png");
+    let skybox_image_path = AssetPath::new("textures/hdr/golden_gate_hills_4k.hdr");
     let skybox_image = world
         .run_system_once_with(skybox_image_path.clone(), sys_load_hdir_and_prefiler)
         .unwrap();
