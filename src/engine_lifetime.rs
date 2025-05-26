@@ -486,7 +486,11 @@ fn sys_generate_dragons_scene(world: &mut World) {
 
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (transform.clone(), Name(format!("龙模型 No_{}", i))),
+            parent_bundle: (
+                transform.clone(),
+                Name(format!("龙模型 No_{}", i)),
+                RotationObject { speed: 0.5 },
+            ),
             child_bundle: (
                 CastShadow,
                 MainPassObject,
@@ -500,7 +504,11 @@ fn sys_generate_dragons_scene(world: &mut World) {
         transform.position.y += 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (transform, Name(format!("龙模型 No_{}", i))),
+            parent_bundle: (
+                transform,
+                Name(format!("龙模型 No_{}", i)),
+                RotationObject { speed: 0.5 },
+            ),
             child_bundle: (
                 CastShadow,
                 MainPassObject,
@@ -525,7 +533,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform.clone(),
-                // RotationObject { speed: 0.5 },
+                RotationObject { speed: 0.5 },
                 Name(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
@@ -569,7 +577,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform.clone(),
-                // RotationObject { speed: 0.5 },
+                RotationObject { speed: 0.5 },
                 Name(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
@@ -586,7 +594,11 @@ fn sys_generate_dragons_scene(world: &mut World) {
         transform.position.y -= 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (transform, Name(format!("透明龙模型 No_{}", i))),
+            parent_bundle: (
+                transform,
+                Name(format!("透明龙模型 No_{}", i)),
+                RotationObject { speed: 0.5 },
+            ),
             child_bundle: (
                 PBRMaterial {
                     color: Some(random_color_vec3().extend(value)),
@@ -599,23 +611,23 @@ fn sys_generate_dragons_scene(world: &mut World) {
         });
     }
 
-    commands.queue(SpawnModelCmd {
-        model: plane_model.clone(),
-        parent_bundle: (
-            TransformBuilder::default()
-                .position(Vec3::new_y(-1.0))
-                .build()
-                .unwrap(),
-            Name("平面".to_string()),
-        ),
-        child_bundle: (
-            CastShadow,
-            MainPassObject,
-            PBRMaterial {
-                ..Default::default()
-            },
-        ),
-    });
+    // commands.queue(SpawnModelCmd {
+    //     model: plane_model.clone(),
+    //     parent_bundle: (
+    //         TransformBuilder::default()
+    //             .position(Vec3::new_y(-1.0))
+    //             .build()
+    //             .unwrap(),
+    //         Name("平面".to_string()),
+    //     ),
+    //     child_bundle: (
+    //         CastShadow,
+    //         MainPassObject,
+    //         PBRMaterial {
+    //             ..Default::default()
+    //         },
+    //     ),
+    // });
 
     queue.apply(world);
 }
@@ -715,7 +727,8 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
     .apply(world);
 
-    let skybox_image_path = AssetPath::new("textures/hdr/golden_gate_hills_4k.hdr");
+    let skybox_image_path = AssetPath::new("textures/hdr/warm_restaurant_night_4k.hdr");
+    // let skybox_image_path = AssetPath::new("textures/hdr/golden_gate_hills_4k.hdr");
     let skybox_image = world
         .run_system_once_with(skybox_image_path.clone(), sys_load_hdir_and_prefiler)
         .unwrap();
