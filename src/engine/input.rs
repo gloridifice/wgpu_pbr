@@ -1,12 +1,28 @@
 use std::collections::HashSet;
 
+use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::prelude::*;
 use winit::{
     event::{DeviceEvent, ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
-use crate::cgmath_ext::{Vec2, VectorExt};
+use crate::{
+    cgmath_ext::{Vec2, VectorExt},
+    window::{WinitDeviceEvent, WinitWindowEvent},
+};
+
+pub struct InputPlugin;
+
+impl Plugin for InputPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_resource::<Input>()
+            .add_systems(PreUpdate, Input::sys_pre_update)
+            .add_systems(PostUpdate, Input::sys_post_update)
+            .add_observer(Input::sys_on_device_input)
+            .add_observer(Input::sys_on_window_input);
+    }
+}
 
 #[derive(Resource)]
 pub struct Input {
@@ -68,12 +84,13 @@ impl Input {
         self.down_cursor_buttons.contains(&button)
     }
 
-    pub fn window_input(&mut self, event: &WindowEvent) {
+    fn sys_on_window_input(event: Trigger<WinitWindowEvent>, mut input: ResMut<Input>) {
+        let event = &event.window_event;
         if let WindowEvent::KeyboardInput {
             event:
                 KeyEvent {
-                    state,
-                    physical_key: PhysicalKey::Code(key),
+                    ref state,
+                    physical_key: PhysicalKey::Code(ref key),
                     ..
                 },
             ..
@@ -81,33 +98,33 @@ impl Input {
         {
             match *state {
                 ElementState::Pressed => {
-                    if !self.is_key_hold(*key) {
-                        self.down_keys.insert(*key);
+                    if !input.is_key_hold(*key) {
+                        input.down_keys.insert(*key);
                     }
-                    self.hold_keys.insert(*key);
+                    input.hold_keys.insert(*key);
                 }
                 ElementState::Released => {
-                    if self.is_key_hold(*key) {
-                        self.up_keys.insert(*key);
+                    if input.is_key_hold(*key) {
+                        input.up_keys.insert(*key);
                     }
-                    self.hold_keys.remove(key);
+                    input.hold_keys.remove(&key);
                 }
             };
         };
     }
 
-    pub fn device_input(&mut self, event: &DeviceEvent) {
-        if let DeviceEvent::MouseMotion { delta } = event {
-            self.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
+    fn sys_on_device_input(event: Trigger<WinitDeviceEvent>, mut input: ResMut<Input>) {
+        if let DeviceEvent::MouseMotion { ref delta } = event.device_event {
+            input.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
         }
     }
 
-    pub fn sys_pre_update(mut input: ResMut<Input>) {
+    fn sys_pre_update(mut input: ResMut<Input>) {
         input.cursor_offset = input.cursor_position - input.last_cursor_position;
         input.last_cursor_position = input.cursor_position;
     }
 
-    pub fn sys_post_update(mut input: ResMut<Input>) {
+    fn sys_post_update(mut input: ResMut<Input>) {
         input.down_keys.clear();
         input.up_keys.clear();
         input.down_cursor_buttons.clear();

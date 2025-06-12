@@ -38,7 +38,6 @@ egui_tiles = "0.12"
 
 # bevy
 bevy_ecs = "0.16"
-bevy_asset = "0.16"
 bevy_reflect = "0.16"
 bevy_app = "0.16"
 

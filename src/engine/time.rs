@@ -1,6 +1,20 @@
 use std::time::{Duration, Instant};
 
-use bevy_ecs::prelude::Resource;
+use bevy_app::{Plugin, PreUpdate};
+use bevy_ecs::{prelude::Resource, system::ResMut};
+
+pub struct TimePlugin;
+
+impl Plugin for TimePlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_resource::<Time>()
+            .add_systems(PreUpdate, sys_update_time);
+    }
+}
+
+fn sys_update_time(mut time: ResMut<Time>) {
+    time.update();
+}
 
 #[derive(Default, Resource, Clone)]
 pub struct Time {

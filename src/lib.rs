@@ -1,23 +1,22 @@
-use bevy_ecs::{prelude::*, system::RunSystemOnce};
-use egui_tools::EguiRenderer;
+use bevy_app::App;
+use bevy_ecs::prelude::*;
 use log::info;
-use pollster::block_on;
 use std::sync::Arc;
 use wgpu::{Features, Instance, Surface};
-use winit::{
-    application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
-    window::Window,
-};
+use winit::{dpi::PhysicalSize, window::Window};
 
+use crate::window::{ResizeEvent, WindowAndRenderStatePlugin};
+
+mod app;
 mod asset;
 mod cgmath_ext;
 mod editor;
 mod egui_tools;
 mod engine;
-mod engine_lifetime;
 mod macro_utils;
 mod render;
 pub mod wgpu_init;
+mod window;
 
 lazy_static::lazy_static! {
     pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![
@@ -25,45 +24,11 @@ lazy_static::lazy_static! {
     ]);
 }
 
-pub async fn run() {
-    color_backtrace::install();
-    env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
-        .init();
-    let event_loop = EventLoop::new().unwrap();
-    event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
-    let mut app = App::new();
-    event_loop.run_app(&mut app).expect("Failed to run app.");
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum EngineStage {
-    PreInit,
-    Init,
-    PostInit,
-    PreStartup,
-    Startup,
-    PostStartup,
-    PreUpdate,
-    Update,
-    PostUpdate,
-    Render,
-}
-
-struct App {
-    instance: wgpu::Instance,
-    state: Option<State>,
-    window: Option<Arc<Window>>,
-    plugins: Vec<Box<dyn AppPlugin>>,
-}
-
-pub trait AppPlugin {
-    fn add(&mut self, app: &mut App);
-}
-
-struct State {
-    window: Arc<Window>,
-    world: World,
+pub fn run() {
+    App::new()
+        .add_plugins(WindowAndRenderStatePlugin)
+        .add_observer(sys_on_resize)
+        .run();
 }
 
 #[derive(Resource)]
@@ -79,157 +44,13 @@ pub enum InsertResourceStage {
     GlobalBindGroupLayot,
 }
 
-impl App {
-    pub fn new() -> App {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
-            ..Default::default()
-        });
-
-        Self {
-            state: None,
-            window: None,
-            instance,
-            plugins: vec![],
-        }
-    }
-
-    pub async fn set_window_and_init(&mut self, window: Window) {
-        let window = Arc::new(window);
-        let i_width = 1600;
-        let i_height = 900;
-        let _ = window.request_inner_size(PhysicalSize::new(i_width, i_height));
-        let surface = self
-            .instance
-            .create_surface(window.clone())
-            .expect("Failed to create surface!");
-        let mut state =
-            State::new(&self.instance, surface, window.clone(), i_width, i_height).await;
-
-        state.world.insert_resource(MainWindow(Arc::clone(&window)));
-        state.init();
-
-        window.request_redraw();
-
-        self.window.get_or_insert(window);
-        self.state.get_or_insert(state);
-    }
-
-    pub fn add_plugin<T0: AppPlugin + 'static>(&mut self, p0: T0) {
-        self.plugins.push(Box::new(p0));
-    }
-}
-
-impl ApplicationHandler for App {
-    fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = event_loop
-            .create_window(Window::default_attributes())
-            .unwrap();
-
-        block_on(self.set_window_and_init(window));
-    }
-
-    fn device_event(
-        &mut self,
-        _event_loop: &winit::event_loop::ActiveEventLoop,
-        _device_id: winit::event::DeviceId,
-        event: winit::event::DeviceEvent,
-    ) {
-        let state = self.state.as_mut().unwrap();
-        state.device_input(&event);
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
-        event: WindowEvent,
-    ) {
-        let state = self.state.as_mut().unwrap();
-        let window = self.window.as_ref().unwrap();
-        state.egui_renderer_mut().handle_input(window, &event);
-        if !state.window_input(&event) {
-            match event {
-                //Update and Render
-                WindowEvent::RedrawRequested => {
-                    state.handle_redraw(event_loop);
-                    window.request_redraw();
-                }
-
-                // Close / Exit
-                WindowEvent::CloseRequested => {
-                    event_loop.exit();
-                }
-
-                // Reszie
-                WindowEvent::Resized(physical_size) => {
-                    state.resize(physical_size);
-                }
-                _ => {}
-            }
-        }
-    }
-}
-
-impl State {
-    pub async fn new(
-        instance: &wgpu::Instance,
-        surface: wgpu::Surface<'static>,
-        window: Arc<Window>,
-        width: u32,
-        height: u32,
-    ) -> State {
-        let render_state = RenderState::new(instance, surface, width, height).await;
-        let egui_renderer = EguiRenderer::new(
-            &render_state.device,
-            render_state.config.format,
-            None,
-            1,
-            &window,
-        );
-        let mut world = World::new();
-        world.insert_resource(render_state);
-        world.insert_resource(egui_renderer);
-
-        Self {
-            window: Arc::clone(&window),
-            world,
-        }
-    }
-
-    fn run_system_cached<T, Out: 'static, Marker>(&mut self, system: T)
-    where
-        T: IntoSystem<(), Out, Marker> + 'static,
-    {
-        self.world.run_system_cached(system).unwrap();
-    }
-
-    fn run_system_once<T, Out: 'static, Marker>(&mut self, system: T)
-    where
-        T: IntoSystem<(), Out, Marker> + 'static,
-    {
-        self.world.run_system_once(system).unwrap();
-    }
-
-    pub fn render_state(&self) -> &RenderState {
-        self.world.resource::<RenderState>()
-    }
-
-    pub fn egui_renderer_mut(&mut self) -> Mut<'_, EguiRenderer> {
-        self.world.resource_mut::<EguiRenderer>()
-    }
-
-    pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        let mut rs = self.world.resource_mut::<RenderState>();
-        if new_size.width > 0 && new_size.height > 0 {
-            rs.size = new_size;
-            rs.config.width = new_size.width;
-            rs.config.height = new_size.height;
-            rs.surface.configure(&rs.device, &rs.config);
-        }
+fn sys_on_resize(event: Trigger<ResizeEvent>, mut rs: ResMut<RenderState>) {
+    let new_size = event.physical_size;
+    if new_size.width > 0 && new_size.height > 0 {
+        rs.size = new_size;
+        rs.config.width = new_size.width;
+        rs.config.height = new_size.height;
+        rs.surface.configure(&rs.device, &rs.config);
     }
 }
 
@@ -320,40 +141,3 @@ impl RenderState {
 
 #[derive(Resource, Clone)]
 pub struct MainWindow(pub Arc<Window>);
-
-macro_rules! impl_app_plugin_for_tuples {
-    ($($n:tt => $($t:ident $idx:tt),+);*) => {
-        $(
-            impl<$($t: AppPlugin),+> AppPlugin for ($($t,)+) {
-                fn add(&mut self, app: &mut App) {
-                    $(self.$idx.add(app);)+
-                }
-            }
-        )*
-    };
-}
-
-macro_rules! impl_tuples_for_macro {
-    ($inner_macro:ident) => {
-        $inner_macro! {
-            1 => T1 0;
-            2 => T1 0, T2 1;
-            3 => T1 0, T2 1, T3 2;
-            4 => T1 0, T2 1, T3 2, T4 3;
-            5 => T1 0, T2 1, T3 2, T4 3, T5 4;
-            6 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5;
-            7 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6;
-            8 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7;
-            9 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8;
-            10 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9;
-            11 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10;
-            12 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11;
-            13 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12;
-            14 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13;
-            15 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13, T15 14;
-            16 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13, T15 14, T16 15
-        }
-    };
-}
-
-impl_tuples_for_macro!(impl_app_plugin_for_tuples);

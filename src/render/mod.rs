@@ -3,10 +3,11 @@ use std::sync::{
     Arc, LazyLock,
 };
 
+use bevy_app::{Last, Plugin};
 use bevy_ecs::{
     component::Component,
     prelude::Resource,
-    world::{FromWorld, World},
+    world::{FromWorld, Mut, World},
 };
 use defered_rendering::MainPipeline;
 use material::pbr::{GltfMaterial, UploadedPBRMaterial};
@@ -17,9 +18,14 @@ use wgpu::{
 };
 
 use crate::{
-    asset::AssetPath, macro_utils::BGLEntry, render::prelude::PBRMaterialBindGroupLayout,
-    wgpu_init, RenderState,
+    asset::AssetPath,
+    egui_tools::EguiRenderer,
+    macro_utils::BGLEntry,
+    render::{post_processing::RenderStage, prelude::PBRMaterialBindGroupLayout},
+    wgpu_init, MainWindow, RenderState,
 };
+
+use systems::*;
 
 pub mod bindings;
 pub mod camera;
@@ -47,6 +53,94 @@ pub mod transform;
 /// 同时物体不能持有 `MainPassObject`
 pub mod transparent;
 pub mod utils;
+
+pub struct RenderPlugin;
+
+impl Plugin for RenderPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.add_systems(Last, sys_render);
+    }
+}
+
+fn sys_render(world: &mut World) {
+    let window = Arc::clone(&world.resource::<MainWindow>().0);
+
+    world.resource_mut::<EguiRenderer>().begin_frame(&window);
+
+    let mut ctx = world.resource_scope(|_world, render_state: Mut<RenderState>| {
+        let output = render_state.surface.get_current_texture().unwrap();
+        let output_view = output.texture.create_view(&Default::default());
+        let encoder = render_state
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+
+        PassRenderContext {
+            encoder,
+            output_view,
+            output_texture: output,
+            window: Arc::clone(&window),
+            stage: RenderStage::BeforeOpaque,
+        }
+    });
+
+    // PASS: Shadow Mapping -----
+    world
+        .run_system_cached_with(sys_render_shadow_mapping_pass, &mut ctx)
+        .unwrap();
+    // --------------------------
+
+    ctx.stage = RenderStage::BeforeOpaque;
+    world
+        .run_system_cached_with(sys_render_post_processing, &mut ctx)
+        .unwrap();
+
+    // PASS: Main ---------------
+    world
+        .run_system_cached_with(sys_render_write_g_buffer_pass, &mut ctx)
+        .unwrap();
+    world
+        .run_system_cached_with(sys_render_main_pass, &mut ctx)
+        .unwrap();
+    // -------------------------
+
+    ctx.stage = RenderStage::AfterOpaque;
+    world
+        .run_system_cached_with(sys_render_post_processing, &mut ctx)
+        .unwrap();
+
+    ctx.stage = RenderStage::BeforeTransparent;
+    world
+        .run_system_cached_with(sys_render_post_processing, &mut ctx)
+        .unwrap();
+
+    world
+        .run_system_cached_with(sys_render_transparent, &mut ctx)
+        .unwrap();
+
+    ctx.stage = RenderStage::AfterTransparent;
+    world
+        .run_system_cached_with(sys_render_post_processing, &mut ctx)
+        .unwrap();
+
+    // Gizmos ---------------------
+    world
+        .run_system_cached_with(sys_render_gizmos, &mut ctx)
+        .unwrap();
+
+    // PASS: Render Egui ----------
+    world
+        .run_system_cached_with(sys_render_egui, &mut ctx)
+        .unwrap();
+
+    // End Draw Objects ------------
+    world
+        .resource::<RenderState>()
+        .queue
+        .submit(std::iter::once(ctx.encoder.finish()));
+    ctx.output_texture.present();
+}
 
 pub static COLOR_TARGET_INDEX: LazyLock<AtomicUsize> = LazyLock::new(|| AtomicUsize::new(0));
 

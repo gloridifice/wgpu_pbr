@@ -12,7 +12,6 @@ use winit::event::WindowEvent;
 use winit::window::Window;
 
 use crate::cgmath_ext::{Vec3, Vec4, Vector4Ext, VectorExt};
-use crate::engine_lifetime::Name;
 use crate::render::camera::{Camera, CameraController};
 use crate::render::light::parallel_light::ParallelLight;
 use crate::render::light::point_light::PointLight;

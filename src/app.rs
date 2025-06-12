@@ -1,21 +1,30 @@
 use std::fs;
+
+use crate::{
+    asset::AssetPath,
+    editor,
+    egui_tools::EguiRenderer,
+    engine::{
+        input::{Input, InputPlugin},
+        time::TimePlugin,
+    },
+    render::{self, prelude::*, systems::sys_refersh_global_bind_group},
+};
+use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
+use egui::{epaint::text::InsertFontFamily, Visuals};
+
 use std::sync::Arc;
 
 use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
-use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
-use crate::egui_tools::{EguiConfig, EguiRenderer};
+use crate::egui_tools::EguiConfig;
 use crate::render::bindings::global_binding::{GlobalBindGroup, GlobalUniformBuffer};
-use crate::render::camera::{
-    sys_update_camera_control, sys_update_camera_uniform, Camera, CameraController,
-};
-use crate::render::cubemap::{
-    CubemapConverterRgba16Float, CubemapConvertingShader, CubemapMatrixBindGroups,
-};
+use crate::render::camera::{sys_update_camera_uniform, Camera, CameraController};
+use crate::render::cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups};
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
 use crate::render::defered_rendering::MainPipeline;
-use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{GizmosGlobalBindGroup, GizmosPipeline};
 use crate::render::light::parallel_light::ParallelLight;
 use crate::render::light::point_light::PointLight;
@@ -23,41 +32,132 @@ use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
     DynamicLights,
 };
-use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::material::pbr::{sys_update_override_pbr_material_bind_group, PBRMaterial};
-use crate::render::mipmap::DefaultMipmapGenShader;
-use crate::render::post_processing::{PostProcessingManager, RenderStage};
-use crate::render::prelude::*;
+use crate::render::post_processing::PostProcessingManager;
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::skybox::prefiltering::{self, PrefilteringPipeline};
-use crate::render::skybox::{DefaultSkybox, Skybox, SkyboxPipeline, SkyboxSHBuffer};
-use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
+use crate::render::skybox::{Skybox, SkyboxPipeline, SkyboxSHBuffer};
 use crate::render::transform::WorldTransform;
 use crate::render::transparent::TransparentPipeline;
 use crate::render::utils::cube::CubeVerticesBuffer;
 use crate::MainWindow;
 use crate::{
-    asset::{load::Loadable, AssetPath},
-    engine::input::Input,
+    asset::load::Loadable,
     engine::time::Time,
     render::{
-        self,
         camera::{CameraBuffer, CameraConfig},
-        light::LightUnifromBuffer,
         shadow_mapping::ShadowMap,
         transform::{Transform, TransformBuilder},
     },
-    RenderState, State,
+    RenderState,
 };
-use bevy_ecs::prelude::*;
 use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::world::CommandQueue;
 use cgmath::{Deg, Euler, Quaternion, Rad, Rotation3};
-use egui::epaint::text::InsertFontFamily;
-use egui::Visuals;
-use winit::event::DeviceEvent;
-use winit::{event::WindowEvent, keyboard::KeyCode};
+use winit::keyboard::KeyCode;
+
+pub struct AppPlugin;
+
+impl Plugin for AppPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins((InputPlugin, TimePlugin));
+        app.init_resource::<ShaderLoader>()
+            .init_resource::<WhiteTexture>()
+            .init_resource::<NormalDefaultTexture>()
+            .init_resource::<crate::render::dfg::DFGTexture>()
+            .init_resource::<crate::render::mipmap::DefaultMipmapGenShader>()
+            .init_resource::<MissingTexture>()
+            .init_resource::<crate::render::material::buffer_material::BufferMaterialManager>()
+            .init_resource::<RenderTargetSize>()
+            .init_resource::<ColorRenderTarget>()
+            .init_resource::<DepthRenderTarget>()
+            .init_resource::<crate::editor::RenderTargetEguiTexId>()
+            .init_resource::<super::render::utils::cube::CubeVerticesBuffer>()
+            .init_resource::<super::render::cubemap::CubemapVertexShader>()
+            .init_resource::<crate::render::cubemap::CubemapConvertingShader>()
+            .init_resource::<crate::render::cubemap::CubemapMatrixBindGroups>()
+            .init_resource::<crate::render::cubemap::CubemapConverterRgba16Float>()
+            .init_resource::<crate::render::skybox::DefaultSkybox>()
+            .init_resource::<GlobalUniformBuffer>()
+            // --- Render resource ---
+            .init_resource::<CameraBuffer>()
+            .init_resource::<SkyboxSHBuffer>()
+            .init_resource::<LightUniformBuffer>()
+            .init_resource::<ShadowMap>()
+            // .insert_resource::<ShadowMapEguiTextureId>()
+            .init_resource::<FullScreenVertexShader>()
+            // 0. Layouts
+            .init_resource::<ObjectBindGroupLayout>()
+            .init_resource::<GizmosGlobalBindGroup>()
+            .init_resource::<PBRMaterialBindGroupLayout>()
+            // 1. Globals
+            .init_resource::<ShadowMapGlobalBindGroup>()
+            .init_resource::<DynamicLightBindGroup>()
+            // 1.5
+            .init_resource::<GBufferTexturesBindGroup>()
+            .init_resource::<GlobalBindGroup>()
+            // 2. Pipelines
+            .init_resource::<WriteGBufferPipeline>()
+            .init_resource::<SkyboxPipeline>()
+            .init_resource::<MainPipeline>()
+            .init_resource::<TransparentPipeline>()
+            .init_resource::<ShadowMappingPipeline>()
+            .init_resource::<GizmosPipeline>()
+            // Post Processing
+            .init_resource::<PostProcessingManager>()
+            // --- Other resources ---
+            .init_resource::<ControlState>()
+            .init_resource::<DynamicLights>()
+            .insert_resource(EguiConfig::default())
+            .insert_resource(CameraConfig::default())
+            .init_resource::<DefaultPBRMaterial>();
+
+        app.add_observer(event_on_remove_point_light)
+            .add_systems(
+                Startup,
+                (
+                    sys_setup_egui_visual,
+                    sys_startup_light_and_environment,
+                    sys_generate_dragons_scene,
+                ),
+            )
+            .add_systems(
+                PreUpdate,
+                (
+                    // self.world.resource_mut::<Time>().update();
+                    editor::sys_on_resize_render_target,
+                    editor::sys_egui_tiles,
+                ),
+            )
+            .add_systems(
+                Update,
+                (
+                    sys_input,
+                    render::camera::sys_update_camera_control,
+                    sys_update_rotation,
+                    sys_refersh_global_bind_group,
+                ),
+            )
+            .add_systems(
+                PostUpdate,
+                (
+                    render::transform::sys_update_world_transform,
+                    render::transform::sys_update_children,
+                    sys_update_transform_buffers,
+                    // Update camera uniform
+                    sys_update_camera_uniform,
+                    // Update light uniform
+                    render::light::sys_update_light_uniform,
+                    // Dynamic Lights
+                    sys_update_dynamic_lights,
+                    sys_update_dynamic_lights_bind_group,
+                    // Override Material
+                    sys_update_override_pbr_material_bind_group,
+                ),
+            );
+    }
+}
 
 #[derive(Debug, Component, Clone)]
 pub struct Name(pub String);
@@ -90,282 +190,23 @@ impl<PB: Bundle, CB: Bundle + Clone> Command for SpawnModelCmd<PB, CB> {
     }
 }
 
-impl State {
-    pub fn init_resource<R>(&mut self)
-    where
-        R: Resource + FromWorld,
-    {
-        let r = R::from_world(&mut self.world);
-        self.world.insert_resource(r);
-    }
+fn sys_setup_egui_visual(mut egui: ResMut<EguiRenderer>) {
+    let mut visual = Visuals::dark();
+    let ctx = egui.context();
 
-    fn init_egui(&mut self) {
-        let renderer = self.world.resource_mut::<EguiRenderer>();
-        let ctx = renderer.context();
-        let font_data =
-            fs::read(AssetPath::Assets("fonts/MiSans-Normal.ttf".to_string()).final_path())
-                .unwrap();
-        ctx.add_font(egui::epaint::text::FontInsert::new(
-            "MiSans",
-            egui::FontData::from_owned(font_data),
-            vec![InsertFontFamily {
-                family: egui::FontFamily::Proportional,
-                priority: egui::epaint::text::FontPriority::Highest,
-            }],
-        ));
-    }
+    visual.widgets.noninteractive.bg_stroke.width = 0.0;
+    ctx.set_visuals(visual);
 
-    pub fn init(&mut self) {
-        self.init_egui();
-        self.init_resource::<ShaderLoader>();
-        self.init_resource::<WhiteTexture>();
-        self.init_resource::<NormalDefaultTexture>();
-        self.init_resource::<DFGTexture>();
-        self.init_resource::<DefaultMipmapGenShader>();
-        self.init_resource::<MissingTexture>();
-        self.init_resource::<BufferMaterialManager>();
-        self.init_resource::<RenderTargetSize>();
-        self.init_resource::<ColorRenderTarget>();
-        self.init_resource::<DepthRenderTarget>();
-        self.init_resource::<RenderTargetEguiTexId>();
-        self.init_resource::<render::utils::cube::CubeVerticesBuffer>();
-        self.init_resource::<render::cubemap::CubemapVertexShader>();
-        self.init_resource::<CubemapConvertingShader>();
-        self.init_resource::<CubemapMatrixBindGroups>();
-        self.init_resource::<CubemapConverterRgba16Float>();
-        self.init_resource::<DefaultSkybox>();
-        self.init_resource::<GlobalUniformBuffer>();
-
-        // --- Render resource ---
-        self.init_resource::<CameraBuffer>();
-        self.init_resource::<SkyboxSHBuffer>();
-        self.world
-            .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
-        self.init_resource::<ShadowMap>();
-        // self.insert_resource::<ShadowMapEguiTextureId>();
-
-        self.init_resource::<FullScreenVertexShader>();
-
-        // 0. Layouts
-        self.init_resource::<ObjectBindGroupLayout>();
-        self.init_resource::<GizmosGlobalBindGroup>();
-        self.init_resource::<PBRMaterialBindGroupLayout>();
-
-        // 1. Globals
-        self.init_resource::<ShadowMapGlobalBindGroup>();
-        self.init_resource::<DynamicLightBindGroup>();
-
-        // 1.5
-        self.init_resource::<GBufferTexturesBindGroup>();
-        self.init_resource::<GlobalBindGroup>();
-
-        // 2. Pipelines
-        self.init_resource::<WriteGBufferPipeline>();
-        self.init_resource::<SkyboxPipeline>();
-        self.init_resource::<MainPipeline>();
-        self.init_resource::<TransparentPipeline>();
-        self.init_resource::<ShadowMappingPipeline>();
-        self.init_resource::<GizmosPipeline>();
-
-        // Post Processing
-        self.init_resource::<PostProcessingManager>();
-
-        // --- Other resources ---
-        self.init_resource::<Input>();
-        self.init_resource::<ControlState>();
-        self.init_resource::<DynamicLights>();
-        self.world.insert_resource(Time::default());
-        self.world.insert_resource(EguiConfig::default());
-        self.world.insert_resource(CameraConfig::default());
-        self.init_resource::<DefaultPBRMaterial>();
-
-        // Add Events'Observers
-        self.world.add_observer(event_on_remove_point_light);
-
-        {
-            // Set egui visual / style / theme
-            let egui = self.world.resource_mut::<EguiRenderer>();
-            let mut visual = Visuals::dark();
-            visual.widgets.noninteractive.bg_stroke.width = 0.0;
-            egui.context().set_visuals(visual);
-        }
-
-        self.world
-            .run_system_once(sys_startup_light_and_environment)
-            .unwrap();
-        self.world
-            .run_system_once(sys_generate_dragons_scene)
-            .unwrap();
-        // self.world
-        //     .run_system_once_with(
-        //         (AssetPath::new("models/ship.glb"), "船模型".to_string(), 1.0),
-        //         sys_generate_single_model,
-        //     )
-        //     .unwrap();
-
-        self.world.run_system_cached(sys_control_state).unwrap();
-    }
-
-    pub fn window_input(&mut self, event: &WindowEvent) -> bool {
-        self.world.resource_mut::<Input>().window_input(event);
-        false
-    }
-    pub fn device_input(&mut self, event: &DeviceEvent) {
-        self.world.resource_mut::<Input>().device_input(event);
-    }
-
-    pub fn handle_redraw(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = self.window.clone();
-        self.egui_renderer_mut().begin_frame(&window);
-        self.pre_update();
-        self.update();
-        self.post_update();
-
-        match self.render() {
-            Ok(_) => {}
-            Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                self.resize(self.render_state().size)
-            }
-            Err(wgpu::SurfaceError::OutOfMemory) => {
-                log::error!("OutOfMemory");
-                event_loop.exit();
-            }
-            // This happaens when a frame takes too long to present
-            Err(wgpu::SurfaceError::Timeout) => {
-                log::warn!("Surface timeout")
-            }
-            Err(wgpu::SurfaceError::Other) => {
-                log::warn!("Other Error of wgpu surface occeur!")
-            }
-        }
-    }
-
-    pub fn pre_update(&mut self) {
-        self.world.resource_mut::<Time>().update();
-        self.world.run_system_cached(Input::sys_pre_update).unwrap();
-        self.world
-            .run_system_cached(editor::sys_on_resize_render_target)
-            .unwrap();
-        self.world.run_system_cached(sys_egui_tiles).unwrap();
-    }
-
-    pub fn update(&mut self) {
-        self.world.run_system_once(sys_input).unwrap();
-        self.world
-            .run_system_once(sys_update_camera_control)
-            .unwrap();
-        self.world.run_system_once(sys_update_rotation).unwrap();
-        self.world
-            .run_system_once(sys_refersh_global_bind_group)
-            .unwrap();
-    }
-
-    pub fn post_update(&mut self) {
-        // Update transform unifrom
-        self.run_system_once(render::transform::sys_update_world_transform);
-        self.run_system_once(render::transform::sys_update_children);
-
-        self.run_system_once(sys_update_transform_buffers);
-
-        // Update camera uniform
-        self.run_system_cached(sys_update_camera_uniform);
-
-        // Update light uniform
-        self.run_system_cached(render::light::sys_update_light_uniform);
-
-        // Clear Down an Up maps
-        self.run_system_cached(Input::sys_post_update);
-
-        // Dynamic Lights
-        self.run_system_cached(sys_update_dynamic_lights);
-        self.run_system_cached(sys_update_dynamic_lights_bind_group);
-
-        // Override Material
-        self.run_system_cached(sys_update_override_pbr_material_bind_group);
-    }
-
-    pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        let window = self.window.clone();
-        let world = &mut self.world;
-
-        let mut ctx = world.resource_scope(|_world, render_state: Mut<RenderState>| {
-            let output = render_state.surface.get_current_texture()?;
-            let output_view = output.texture.create_view(&Default::default());
-            let encoder =
-                render_state
-                    .device
-                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Render Encoder"),
-                    });
-
-            let ctx = PassRenderContext {
-                encoder,
-                output_view,
-                output_texture: output,
-                window: Arc::clone(&window),
-                stage: RenderStage::BeforeOpaque,
-            };
-            Ok(ctx)
-        })?;
-
-        // PASS: Shadow Mapping -----
-        world
-            .run_system_cached_with(render::systems::sys_render_shadow_mapping_pass, &mut ctx)
-            .unwrap();
-        // --------------------------
-
-        ctx.stage = RenderStage::BeforeOpaque;
-        world
-            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
-            .unwrap();
-
-        // PASS: Main ---------------
-        world
-            .run_system_cached_with(render::systems::sys_render_write_g_buffer_pass, &mut ctx)
-            .unwrap();
-        world
-            .run_system_cached_with(render::systems::sys_render_main_pass, &mut ctx)
-            .unwrap();
-        // -------------------------
-
-        ctx.stage = RenderStage::AfterOpaque;
-        world
-            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
-            .unwrap();
-
-        ctx.stage = RenderStage::BeforeTransparent;
-        world
-            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
-            .unwrap();
-
-        world
-            .run_system_cached_with(render::systems::sys_render_transparent, &mut ctx)
-            .unwrap();
-
-        ctx.stage = RenderStage::AfterTransparent;
-        world
-            .run_system_cached_with(render::systems::sys_render_post_processing, &mut ctx)
-            .unwrap();
-
-        // Gizmos ---------------------
-        world
-            .run_system_cached_with(render::systems::sys_render_gizmos, &mut ctx)
-            .unwrap();
-
-        // PASS: Render Egui ----------
-        world
-            .run_system_cached_with(render::systems::sys_render_egui, &mut ctx)
-            .unwrap();
-
-        // End Draw Objects ------------
-        world
-            .resource::<RenderState>()
-            .queue
-            .submit(std::iter::once(ctx.encoder.finish()));
-        ctx.output_texture.present();
-
-        Ok(())
-    }
+    let font_data =
+        fs::read(AssetPath::Assets("fonts/MiSans-Normal.ttf".to_string()).final_path()).unwrap();
+    ctx.add_font(egui::epaint::text::FontInsert::new(
+        "MiSans",
+        egui::FontData::from_owned(font_data),
+        vec![InsertFontFamily {
+            family: egui::FontFamily::Proportional,
+            priority: egui::epaint::text::FontPriority::Highest,
+        }],
+    ));
 }
 
 #[derive(Resource)]
