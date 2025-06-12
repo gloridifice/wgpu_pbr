@@ -1,9 +1,10 @@
-use bevy_ecs::system::{Resource, RunSystemOnce};
+use bevy_ecs::system::{Resource, RunSystemOnce, System};
 use bevy_ecs::world::World;
 use bevy_ecs::{change_detection::Mut, system::IntoSystem};
 use egui_tools::EguiRenderer;
 use log::info;
 use pollster::block_on;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use wgpu::{Features, Instance, Surface};
 use winit::{
@@ -36,6 +37,20 @@ pub async fn run() {
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
     let mut app = App::new();
     event_loop.run_app(&mut app).expect("Failed to run app.");
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum EngineStage {
+    PreInit,
+    Init,
+    PostInit,
+    PreStartup,
+    Startup,
+    PostStartup,
+    PreUpdate,
+    Update,
+    PostUpdate,
+    Render,
 }
 
 struct App {
