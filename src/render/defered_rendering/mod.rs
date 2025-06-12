@@ -1,16 +1,12 @@
 use std::sync::Arc;
 
-use crate::render::prelude::*;
+use crate::render::{bindings::material_binding::PBRMaterialBindGroupLayout, prelude::*};
 use bevy_ecs::prelude::*;
 use wgpu::{BindGroupLayout, PipelineLayout, RenderPipeline};
 use write_g_buffer_pipeline::GBufferTexturesBindGroup;
 
 use crate::{
     asset::AssetPath, render::bindings::global_binding::GlobalBindGroup, wgpu_init, RenderState,
-};
-
-use super::{
-    material::pbr::PBRMaterialBindGroupLayout, shader_loader::ShaderLoader, FullScreenVertexShader,
 };
 
 pub mod write_g_buffer_pipeline;

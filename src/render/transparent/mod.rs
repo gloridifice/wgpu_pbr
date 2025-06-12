@@ -6,7 +6,7 @@ use crate::{
     render::{bindings::global_binding::GlobalBindGroup, prelude::*},
 };
 
-use super::{material::pbr::PBRMaterialBindGroupLayout, shader_loader::ShaderLoader};
+use super::shader_loader::ShaderLoader;
 
 /// Transparent 是一个不进行深度写入，但是使用 Opaque 阶段的深度图进行深度测试的 Pipeline
 /// Transparent Pipeline 不在延迟渲染管线内，会进行单独地按顺序地渲染。

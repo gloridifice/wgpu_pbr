@@ -7,8 +7,8 @@ use crate::{
     bg_descriptor, bg_layout_descriptor,
     macro_utils::BGLEntry,
     render::{
-        material::pbr::PBRMaterialBindGroupLayout, prelude::*, shader_loader::ShaderLoader,
-        UploadedImage,
+        bindings::material_binding::PBRMaterialBindGroupLayout, prelude::*,
+        shader_loader::ShaderLoader, UploadedImage,
     },
 };
 use bevy_ecs::prelude::*;

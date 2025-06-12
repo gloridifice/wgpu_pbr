@@ -9,14 +9,17 @@ use bevy_ecs::{
     world::{FromWorld, World},
 };
 use defered_rendering::MainPipeline;
-use material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial};
+use material::pbr::{GltfMaterial, UploadedPBRMaterial};
 use shader_loader::ShaderLoader;
 use wgpu::{
     Extent3d, Sampler, ShaderModule, Texture, TextureDescriptor, TextureDimension, TextureFormat,
     TextureUsages, TextureView, TextureViewDescriptor,
 };
 
-use crate::{asset::AssetPath, macro_utils::BGLEntry, wgpu_init, RenderState};
+use crate::{
+    asset::AssetPath, macro_utils::BGLEntry, render::prelude::PBRMaterialBindGroupLayout,
+    wgpu_init, RenderState,
+};
 
 pub mod bindings;
 pub mod camera;

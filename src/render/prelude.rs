@@ -6,12 +6,14 @@ pub use crate::{
     render::{
         bindings::{
             global_binding::GlobalBindGroup, global_binding::GlobalUniformBuffer,
-            light_binding::DynamicLightBindGroup, object_binding::ObjectBindGroupLayout,
+            light_binding::DynamicLightBindGroup, material_binding::PBRMaterialBindGroupLayout,
+            object_binding::ObjectBindGroupLayout,
         },
         material::pbr::GltfMaterial,
         mesh::{
             renderer::MeshRenderer, Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex,
         },
+        shader_loader::ShaderLoader,
         transform::Transform,
         transform::WorldTransform,
         AlphaMode, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,

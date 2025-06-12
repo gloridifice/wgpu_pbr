@@ -24,9 +24,7 @@ use crate::render::light::{
     DynamicLights,
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
-use crate::render::material::pbr::{
-    sys_update_override_pbr_material_bind_group, PBRMaterial, PBRMaterialBindGroupLayout,
-};
+use crate::render::material::pbr::{sys_update_override_pbr_material_bind_group, PBRMaterial};
 use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
 use crate::render::prelude::*;
