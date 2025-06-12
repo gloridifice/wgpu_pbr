@@ -1,10 +1,7 @@
-use bevy_ecs::system::{Resource, RunSystemOnce, System};
-use bevy_ecs::world::World;
-use bevy_ecs::{change_detection::Mut, system::IntoSystem};
+use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use egui_tools::EguiRenderer;
 use log::info;
 use pollster::block_on;
-use std::collections::BTreeMap;
 use std::sync::Arc;
 use wgpu::{Features, Instance, Surface};
 use winit::{

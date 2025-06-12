@@ -51,12 +51,8 @@ use crate::{
     RenderState, State,
 };
 use bevy_ecs::prelude::*;
-use bevy_ecs::system::{Commands, ResMut, Resource};
-use bevy_ecs::world::{Command, CommandQueue, FromWorld, Mut, World};
-use bevy_ecs::{
-    component::Component,
-    system::{Query, Res, RunSystemOnce},
-};
+use bevy_ecs::system::RunSystemOnce;
+use bevy_ecs::world::CommandQueue;
 use cgmath::{Deg, Euler, Quaternion, Rad, Rotation3};
 use egui::epaint::text::InsertFontFamily;
 use egui::Visuals;
@@ -724,12 +720,12 @@ fn sys_startup_light_and_environment(world: &mut World) {
     let skybox_image_path = AssetPath::new("textures/hdr/warm_restaurant_night_4k.hdr");
     // let skybox_image_path = AssetPath::new("textures/hdr/golden_gate_hills_4k.hdr");
     let skybox_image = world
-        .run_system_once_with(skybox_image_path.clone(), sys_load_hdir_and_prefiler)
+        .run_system_once_with(sys_load_hdir_and_prefiler, skybox_image_path.clone())
         .unwrap();
     world
         .run_system_once_with(
-            skybox_image_path,
             render::skybox::sys_update_skybox_sh_from_path,
+            skybox_image_path,
         )
         .unwrap();
 

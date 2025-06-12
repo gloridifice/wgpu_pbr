@@ -4,7 +4,7 @@ use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::Single;
-use bevy_ecs::{system::Resource, world::FromWorld};
+use bevy_ecs::{prelude::Resource, world::FromWorld};
 use cgmath::{
     perspective, vec2, Deg, InnerSpace, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3,
 };

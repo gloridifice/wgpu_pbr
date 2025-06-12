@@ -93,7 +93,7 @@ pub fn event_on_remove_point_light(
     trigger: Trigger<OnRemove, PointLight>,
     mut dynamic_lights: ResMut<DynamicLights>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.observer();
     dynamic_lights.point_lights.remove(&entity);
 }
 

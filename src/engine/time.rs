@@ -1,6 +1,6 @@
 use std::time::{Duration, Instant};
 
-use bevy_ecs::system::Resource;
+use bevy_ecs::prelude::Resource;
 
 #[derive(Default, Resource, Clone)]
 pub struct Time {

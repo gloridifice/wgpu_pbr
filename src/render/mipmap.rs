@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bevy_ecs::{system::Resource, world::FromWorld};
+use bevy_ecs::{prelude::Resource, world::FromWorld};
 use wgpu::{ShaderModule, TextureFormat};
 
 use crate::asset::load::Loadable;

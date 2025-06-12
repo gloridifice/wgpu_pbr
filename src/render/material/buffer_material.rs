@@ -1,4 +1,4 @@
-use anyhow::*;
+use anyhow::{anyhow, Result};
 use std::{
     any::{type_name, TypeId},
     sync::Arc,

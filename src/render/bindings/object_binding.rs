@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::{
-    system::Resource,
+    prelude::Resource,
     world::{FromWorld, World},
 };
 use wgpu::{BindGroupLayout, ShaderStages};

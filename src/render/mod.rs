@@ -5,7 +5,7 @@ use std::sync::{
 
 use bevy_ecs::{
     component::Component,
-    system::Resource,
+    prelude::Resource,
     world::{FromWorld, World},
 };
 use defered_rendering::MainPipeline;

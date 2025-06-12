@@ -1,9 +1,6 @@
 use std::collections::HashSet;
 
-use bevy_ecs::{
-    system::{ResMut, Resource},
-    world::FromWorld,
-};
+use bevy_ecs::prelude::*;
 use winit::{
     event::{DeviceEvent, ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
@@ -73,14 +70,15 @@ impl Input {
 
     pub fn window_input(&mut self, event: &WindowEvent) {
         if let WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state,
-                        physical_key: PhysicalKey::Code(key),
-                        ..
-                    },
-                ..
-            } = event {
+            event:
+                KeyEvent {
+                    state,
+                    physical_key: PhysicalKey::Code(key),
+                    ..
+                },
+            ..
+        } = event
+        {
             match *state {
                 ElementState::Pressed => {
                     if !self.is_key_hold(*key) {
