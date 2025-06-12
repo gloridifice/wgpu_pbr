@@ -12,14 +12,13 @@ use defered_rendering::MainPipeline;
 use material::pbr::{GltfMaterial, PBRMaterialBindGroupLayout, UploadedPBRMaterial};
 use shader_loader::ShaderLoader;
 use wgpu::{
-    BindGroupLayout, Extent3d, Sampler, ShaderModule, ShaderStages, Texture, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    Extent3d, Sampler, ShaderModule, Texture, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureView, TextureViewDescriptor,
 };
 
-use crate::{
-    asset::AssetPath, bg_layout_descriptor, macro_utils::BGLEntry, wgpu_init, RenderState,
-};
+use crate::{asset::AssetPath, macro_utils::BGLEntry, wgpu_init, RenderState};
 
+pub mod bindings;
 pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
@@ -348,32 +347,6 @@ impl UploadedImageWithSampler {
             mipmap_filter: wgpu::FilterMode::Nearest,
             ..Default::default()
         }
-    }
-}
-
-#[derive(Resource, Clone)]
-pub struct ObjectBindGroupLayout(Arc<BindGroupLayout>);
-
-impl From<gltf::material::AlphaMode> for AlphaMode {
-    fn from(value: gltf::material::AlphaMode) -> Self {
-        match value {
-            gltf::material::AlphaMode::Opaque => AlphaMode::Opaque,
-            gltf::material::AlphaMode::Mask => AlphaMode::Blend,
-            gltf::material::AlphaMode::Blend => AlphaMode::Blend,
-        }
-    }
-}
-
-impl FromWorld for ObjectBindGroupLayout {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let object_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
-                ["Object Bind Group Layout"]
-                0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Transform
-            )));
-        Self(object_bind_group_layout)
     }
 }
 

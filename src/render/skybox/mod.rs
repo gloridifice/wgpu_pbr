@@ -10,10 +10,10 @@ use wgpu::{Buffer, BufferUsages, PipelineLayout, RenderPipeline};
 
 use crate::asset::cubemap::load_cubemap_sliced;
 use crate::impl_pod_zeroable;
+use crate::render::bindings::global_binding::GlobalBindGroup;
 use crate::{asset::AssetPath, RenderState};
 
 use super::cubemap::CubemapMatrixBindGroups;
-use super::defered_rendering::global_binding::GlobalBindGroup;
 use super::utils::cube::CubeVerticesBuffer;
 use super::{shader_loader::ShaderLoader, UploadedImage};
 

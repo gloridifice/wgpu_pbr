@@ -4,24 +4,24 @@ use std::sync::Arc;
 use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::editor::{self, sys_egui_tiles, RenderTargetEguiTexId};
 use crate::egui_tools::{EguiConfig, EguiRenderer};
+use crate::render::bindings::global_binding::{GlobalBindGroup, GlobalUniformBuffer};
 use crate::render::camera::{
     sys_update_camera_control, sys_update_camera_uniform, Camera, CameraController,
 };
 use crate::render::cubemap::{
     CubemapConverterRgba16Float, CubemapConvertingShader, CubemapMatrixBindGroups,
 };
-use crate::render::defered_rendering::global_binding::GlobalUniformBuffer;
 use crate::render::defered_rendering::write_g_buffer_pipeline::{
     GBufferTexturesBindGroup, WriteGBufferPipeline,
 };
-use crate::render::defered_rendering::{global_binding::GlobalBindGroup, MainPipeline};
+use crate::render::defered_rendering::MainPipeline;
 use crate::render::dfg::DFGTexture;
 use crate::render::gizmos::{GizmosGlobalBindGroup, GizmosPipeline};
 use crate::render::light::parallel_light::ParallelLight;
 use crate::render::light::point_light::PointLight;
 use crate::render::light::{
     event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
-    DynamicLightBindGroup, DynamicLights,
+    DynamicLights,
 };
 use crate::render::material::buffer_material::BufferMaterialManager;
 use crate::render::material::pbr::{
@@ -29,6 +29,7 @@ use crate::render::material::pbr::{
 };
 use crate::render::mipmap::DefaultMipmapGenShader;
 use crate::render::post_processing::{PostProcessingManager, RenderStage};
+use crate::render::prelude::*;
 use crate::render::shader_loader::ShaderLoader;
 use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
 use crate::render::skybox::prefiltering::{self, PrefilteringPipeline};
@@ -37,11 +38,6 @@ use crate::render::systems::{sys_refersh_global_bind_group, PassRenderContext};
 use crate::render::transform::WorldTransform;
 use crate::render::transparent::TransparentPipeline;
 use crate::render::utils::cube::CubeVerticesBuffer;
-use crate::render::{
-    prelude::*, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
-    MainPassObject, MissingTexture, NormalDefaultTexture, ObjectBindGroupLayout, RenderTargetSize,
-    UploadedImage, UploadedImageWithSampler, WhiteTexture,
-};
 use crate::MainWindow;
 use crate::{
     asset::{load::Loadable, AssetPath},
@@ -101,7 +97,7 @@ impl<PB: Bundle, CB: Bundle + Clone> Command for SpawnModelCmd<PB, CB> {
 }
 
 impl State {
-    pub fn insert_resource<R>(&mut self)
+    pub fn init_resource<R>(&mut self)
     where
         R: Resource + FromWorld,
     {
@@ -127,67 +123,67 @@ impl State {
 
     pub fn init(&mut self) {
         self.init_egui();
-        self.insert_resource::<ShaderLoader>();
-        self.insert_resource::<WhiteTexture>();
-        self.insert_resource::<NormalDefaultTexture>();
-        self.insert_resource::<DFGTexture>();
-        self.insert_resource::<DefaultMipmapGenShader>();
-        self.insert_resource::<MissingTexture>();
-        self.insert_resource::<BufferMaterialManager>();
-        self.insert_resource::<RenderTargetSize>();
-        self.insert_resource::<ColorRenderTarget>();
-        self.insert_resource::<DepthRenderTarget>();
-        self.insert_resource::<RenderTargetEguiTexId>();
-        self.insert_resource::<render::utils::cube::CubeVerticesBuffer>();
-        self.insert_resource::<render::cubemap::CubemapVertexShader>();
-        self.insert_resource::<CubemapConvertingShader>();
-        self.insert_resource::<CubemapMatrixBindGroups>();
-        self.insert_resource::<CubemapConverterRgba16Float>();
-        self.insert_resource::<DefaultSkybox>();
-        self.insert_resource::<GlobalUniformBuffer>();
+        self.init_resource::<ShaderLoader>();
+        self.init_resource::<WhiteTexture>();
+        self.init_resource::<NormalDefaultTexture>();
+        self.init_resource::<DFGTexture>();
+        self.init_resource::<DefaultMipmapGenShader>();
+        self.init_resource::<MissingTexture>();
+        self.init_resource::<BufferMaterialManager>();
+        self.init_resource::<RenderTargetSize>();
+        self.init_resource::<ColorRenderTarget>();
+        self.init_resource::<DepthRenderTarget>();
+        self.init_resource::<RenderTargetEguiTexId>();
+        self.init_resource::<render::utils::cube::CubeVerticesBuffer>();
+        self.init_resource::<render::cubemap::CubemapVertexShader>();
+        self.init_resource::<CubemapConvertingShader>();
+        self.init_resource::<CubemapMatrixBindGroups>();
+        self.init_resource::<CubemapConverterRgba16Float>();
+        self.init_resource::<DefaultSkybox>();
+        self.init_resource::<GlobalUniformBuffer>();
 
         // --- Render resource ---
-        self.insert_resource::<CameraBuffer>();
-        self.insert_resource::<SkyboxSHBuffer>();
+        self.init_resource::<CameraBuffer>();
+        self.init_resource::<SkyboxSHBuffer>();
         self.world
             .insert_resource(LightUnifromBuffer::new(&self.render_state().device));
-        self.insert_resource::<ShadowMap>();
+        self.init_resource::<ShadowMap>();
         // self.insert_resource::<ShadowMapEguiTextureId>();
 
-        self.insert_resource::<FullScreenVertexShader>();
+        self.init_resource::<FullScreenVertexShader>();
 
         // 0. Layouts
-        self.insert_resource::<ObjectBindGroupLayout>();
-        self.insert_resource::<GizmosGlobalBindGroup>();
-        self.insert_resource::<PBRMaterialBindGroupLayout>();
+        self.init_resource::<ObjectBindGroupLayout>();
+        self.init_resource::<GizmosGlobalBindGroup>();
+        self.init_resource::<PBRMaterialBindGroupLayout>();
 
         // 1. Globals
-        self.insert_resource::<ShadowMapGlobalBindGroup>();
-        self.insert_resource::<DynamicLightBindGroup>();
+        self.init_resource::<ShadowMapGlobalBindGroup>();
+        self.init_resource::<DynamicLightBindGroup>();
 
         // 1.5
-        self.insert_resource::<GBufferTexturesBindGroup>();
-        self.insert_resource::<GlobalBindGroup>();
+        self.init_resource::<GBufferTexturesBindGroup>();
+        self.init_resource::<GlobalBindGroup>();
 
         // 2. Pipelines
-        self.insert_resource::<WriteGBufferPipeline>();
-        self.insert_resource::<SkyboxPipeline>();
-        self.insert_resource::<MainPipeline>();
-        self.insert_resource::<TransparentPipeline>();
-        self.insert_resource::<ShadowMappingPipeline>();
-        self.insert_resource::<GizmosPipeline>();
+        self.init_resource::<WriteGBufferPipeline>();
+        self.init_resource::<SkyboxPipeline>();
+        self.init_resource::<MainPipeline>();
+        self.init_resource::<TransparentPipeline>();
+        self.init_resource::<ShadowMappingPipeline>();
+        self.init_resource::<GizmosPipeline>();
 
         // Post Processing
-        self.insert_resource::<PostProcessingManager>();
+        self.init_resource::<PostProcessingManager>();
 
         // --- Other resources ---
-        self.insert_resource::<Input>();
-        self.insert_resource::<ControlState>();
-        self.insert_resource::<DynamicLights>();
+        self.init_resource::<Input>();
+        self.init_resource::<ControlState>();
+        self.init_resource::<DynamicLights>();
         self.world.insert_resource(Time::default());
         self.world.insert_resource(EguiConfig::default());
         self.world.insert_resource(CameraConfig::default());
-        self.insert_resource::<DefaultPBRMaterial>();
+        self.init_resource::<DefaultPBRMaterial>();
 
         // Add Events'Observers
         self.world.add_observer(event_on_remove_point_light);

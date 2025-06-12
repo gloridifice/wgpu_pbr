@@ -6,15 +6,9 @@ use crate::{
     egui_tools::{world_tree, EguiRenderer},
     engine::input::{CursorButton, Input},
     render::{
-        self,
-        camera::Camera,
-        defered_rendering::{
-            global_binding::RefreshGlobalBindGroupCmd,
-            write_g_buffer_pipeline::GBufferTexturesBindGroup,
-        },
-        gizmos::GizmosPipeline,
-        post_processing::PostProcessingManager,
-        transform::Transform,
+        self, bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
+        defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
+        gizmos::GizmosPipeline, post_processing::PostProcessingManager, transform::Transform,
         ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
     },
     RenderState,

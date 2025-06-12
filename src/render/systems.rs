@@ -1,18 +1,15 @@
 use std::cmp::Ordering;
 
-use super::{
+use crate::render::{
     camera::Camera,
     defered_rendering::{
-        global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd},
         write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
         MainPipeline,
     },
     gizmos::{Gizmos, GizmosGlobalBindGroup, GizmosPipeline},
-    light::DynamicLightBindGroup,
     material::pbr::PBRMaterialOverride,
     prelude::*,
     skybox::{Skybox, SkyboxPipeline},
-    transform::Transform,
     transparent::TransparentPipeline,
     utils::cube::CubeVerticesBuffer,
     MainPassObject, PingPongImages,
@@ -24,7 +21,9 @@ use wgpu_init::copy_texture;
 use winit::window::Window;
 
 use crate::{
-    egui_tools::{EguiConfig, EguiRenderer}, RenderState,
+    egui_tools::{EguiConfig, EguiRenderer},
+    render::bindings::global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd},
+    RenderState,
 };
 
 use super::{

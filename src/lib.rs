@@ -42,6 +42,11 @@ struct App {
     instance: wgpu::Instance,
     state: Option<State>,
     window: Option<Arc<Window>>,
+    plugins: Vec<Box<dyn AppPlugin>>,
+}
+
+pub trait AppPlugin {
+    fn add(&mut self, app: &mut App);
 }
 
 struct State {
@@ -58,6 +63,10 @@ pub struct RenderState {
     size: winit::dpi::PhysicalSize<u32>,
 }
 
+pub enum InsertResourceStage {
+    GlobalBindGroupLayot,
+}
+
 impl App {
     pub fn new() -> App {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -72,6 +81,7 @@ impl App {
             state: None,
             window: None,
             instance,
+            plugins: vec![],
         }
     }
 
@@ -94,6 +104,10 @@ impl App {
 
         self.window.get_or_insert(window);
         self.state.get_or_insert(state);
+    }
+
+    pub fn add_plugin<T0: AppPlugin + 'static>(&mut self, p0: T0) {
+        self.plugins.push(Box::new(p0));
     }
 }
 
@@ -294,3 +308,40 @@ impl RenderState {
 
 #[derive(Resource, Clone)]
 pub struct MainWindow(pub Arc<Window>);
+
+macro_rules! impl_app_plugin_for_tuples {
+    ($($n:tt => $($t:ident $idx:tt),+);*) => {
+        $(
+            impl<$($t: AppPlugin),+> AppPlugin for ($($t,)+) {
+                fn add(&mut self, app: &mut App) {
+                    $(self.$idx.add(app);)+
+                }
+            }
+        )*
+    };
+}
+
+macro_rules! impl_tuples_for_macro {
+    ($inner_macro:ident) => {
+        $inner_macro! {
+            1 => T1 0;
+            2 => T1 0, T2 1;
+            3 => T1 0, T2 1, T3 2;
+            4 => T1 0, T2 1, T3 2, T4 3;
+            5 => T1 0, T2 1, T3 2, T4 3, T5 4;
+            6 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5;
+            7 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6;
+            8 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7;
+            9 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8;
+            10 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9;
+            11 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10;
+            12 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11;
+            13 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12;
+            14 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13;
+            15 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13, T15 14;
+            16 => T1 0, T2 1, T3 2, T4 3, T5 4, T6 5, T7 6, T8 7, T9 8, T10 9, T11 10, T12 11, T13 12, T14 13, T15 14, T16 15
+        }
+    };
+}
+
+impl_tuples_for_macro!(impl_app_plugin_for_tuples);
