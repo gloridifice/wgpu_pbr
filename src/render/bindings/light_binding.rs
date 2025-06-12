@@ -1,4 +1,4 @@
-use crate::render::prelude::*;
+use crate::render::{light::point_light::RawPointLight, prelude::*};
 use bevy_ecs::prelude::*;
 
 /// It manages lights' bind group and buffers that will change.
