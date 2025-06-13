@@ -4,7 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["crates/*"]
+members = [
+    "crates/lentille_render",
+    "crates/lentille_core",
+    "crates/lentille_asset",
+]
 
 [workspace.dependencies]
 rand = "0.8.5"
@@ -44,3 +48,4 @@ egui_tiles = "0.12"
 # Workspace
 lentille_render = { path = "crates/lentille_render" }
 lentille_core = { path = "crates/lentille_core" }
+lentille_asset = { path = "crates/lentille_asset" }

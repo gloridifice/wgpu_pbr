@@ -1,0 +1,14 @@
+[package]
+name = "lentille_asset"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# image related
+png = "0.17.16"
+image = "0.25.4"
+
+
+[dependencies.gltf]
+version = "1"
+features = ["extras", "names"]
