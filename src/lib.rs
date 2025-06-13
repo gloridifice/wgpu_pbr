@@ -8,15 +8,11 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::window::{ResizeEvent, WindowAndRenderStatePlugin};
 
 mod app;
-mod asset;
 mod cgmath_ext;
 mod editor;
 mod egui_tools;
-mod engine;
 mod macro_utils;
-mod render;
 pub mod wgpu_init;
-mod window;
 
 lazy_static::lazy_static! {
     pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![

@@ -3,21 +3,13 @@ name = "wgpu_pbr"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[workspace]
+members = ["crates/*"]
 
-[dependencies]
-color-backtrace = { version = "0.7" }
-log = "0.4"
-env_logger = "0.11"
-pollster = "0.4.0"
-bytemuck = { version = "1.19.0", features = ["derive"] }
-uuid = { version = "1.11.0", features = ["v4"] }
-anyhow = "1.0.92"
-lazy_static = "1.5.0"
-derive_builder = "0.20.2"
-tiny_bail = "0.4.3"
+[workspace.dependencies]
 rand = "0.8.5"
 half = "2.6.0"
+bytemuck = { version = "1.19.0", features = ["derive"] }
 
 # graphics
 winit = { version = "0.30", features = ["rwh_05"] }
@@ -25,9 +17,22 @@ wgpu = { version = "24", features = ["naga-ir"] }
 naga_oil = "0.17.0"
 cgmath = "0.18.0"
 
-# image related
-png = "0.17.16"
-image = "0.25.4"
+# bevy
+bevy_ecs = "0.16"
+bevy_app = "0.16"
+bevy_log = "0.16"
+
+
+[dependencies]
+color-backtrace = { version = "0.7" }
+env_logger = "0.11"
+pollster = "0.4.0"
+uuid = { version = "1.11.0", features = ["v4"] }
+anyhow = "1.0.92"
+lazy_static = "1.5.0"
+derive_builder = "0.20.2"
+tiny_bail = "0.4.3"
+bevy_reflect = "0.16"
 
 # egui
 egui = "0.31"
@@ -36,11 +41,6 @@ egui-winit = "0.31"
 egui_dock = "0.16"
 egui_tiles = "0.12"
 
-# bevy
-bevy_ecs = "0.16"
-bevy_reflect = "0.16"
-bevy_app = "0.16"
-
-[dependencies.gltf]
-version = "1"
-features = ["extras", "names"]
+# Workspace
+lentille_render = { path = "crates/lentille_render" }
+lentille_core = { path = "crates/lentille_core" }

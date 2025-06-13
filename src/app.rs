@@ -18,33 +18,11 @@ use std::sync::Arc;
 
 use crate::cgmath_ext::{Vec3, Vec4, VectorExt};
 use crate::egui_tools::EguiConfig;
-use crate::render::bindings::global_binding::{GlobalBindGroup, GlobalUniformBuffer};
-use crate::render::camera::{sys_update_camera_uniform, Camera, CameraController};
-use crate::render::cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups};
-use crate::render::defered_rendering::write_g_buffer_pipeline::{
-    GBufferTexturesBindGroup, WriteGBufferPipeline,
-};
-use crate::render::defered_rendering::MainPipeline;
-use crate::render::gizmos::{GizmosGlobalBindGroup, GizmosPipeline};
-use crate::render::light::parallel_light::ParallelLight;
-use crate::render::light::point_light::PointLight;
-use crate::render::light::{
-    event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
-    DynamicLights,
-};
-use crate::render::material::pbr::{sys_update_override_pbr_material_bind_group, PBRMaterial};
-use crate::render::post_processing::PostProcessingManager;
-use crate::render::shader_loader::ShaderLoader;
-use crate::render::shadow_mapping::{CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline};
-use crate::render::skybox::prefiltering::{self, PrefilteringPipeline};
-use crate::render::skybox::{Skybox, SkyboxPipeline, SkyboxSHBuffer};
-use crate::render::transform::WorldTransform;
-use crate::render::transparent::TransparentPipeline;
-use crate::render::utils::cube::CubeVerticesBuffer;
 use crate::MainWindow;
 use crate::{
     asset::load::Loadable,
     engine::time::Time,
+    engine::Name,
     render::{
         camera::{CameraBuffer, CameraConfig},
         shadow_mapping::ShadowMap,
@@ -55,6 +33,31 @@ use crate::{
 use bevy_ecs::system::RunSystemOnce;
 use bevy_ecs::world::CommandQueue;
 use cgmath::{Deg, Euler, Quaternion, Rad, Rotation3};
+use lentille_render::bindings::global_binding::{GlobalBindGroup, GlobalUniformBuffer};
+use lentille_render::camera::{sys_update_camera_uniform, Camera, CameraController};
+use lentille_render::cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups};
+use lentille_render::defered_rendering::write_g_buffer_pipeline::{
+    GBufferTexturesBindGroup, WriteGBufferPipeline,
+};
+use lentille_render::defered_rendering::MainPipeline;
+use lentille_render::gizmos::{GizmosGlobalBindGroup, GizmosPipeline};
+use lentille_render::light::parallel_light::ParallelLight;
+use lentille_render::light::point_light::PointLight;
+use lentille_render::light::{
+    event_on_remove_point_light, sys_update_dynamic_lights, sys_update_dynamic_lights_bind_group,
+    DynamicLights,
+};
+use lentille_render::material::pbr::{sys_update_override_pbr_material_bind_group, PBRMaterial};
+use lentille_render::post_processing::PostProcessingManager;
+use lentille_render::shader_loader::ShaderLoader;
+use lentille_render::shadow_mapping::{
+    CastShadow, ShadowMapGlobalBindGroup, ShadowMappingPipeline,
+};
+use lentille_render::skybox::prefiltering::{self, PrefilteringPipeline};
+use lentille_render::skybox::{Skybox, SkyboxPipeline, SkyboxSHBuffer};
+use lentille_render::transform::WorldTransform;
+use lentille_render::transparent::TransparentPipeline;
+use lentille_render::utils::cube::CubeVerticesBuffer;
 use winit::keyboard::KeyCode;
 
 pub struct AppPlugin;
@@ -65,20 +68,20 @@ impl Plugin for AppPlugin {
         app.init_resource::<ShaderLoader>()
             .init_resource::<WhiteTexture>()
             .init_resource::<NormalDefaultTexture>()
-            .init_resource::<crate::render::dfg::DFGTexture>()
-            .init_resource::<crate::render::mipmap::DefaultMipmapGenShader>()
+            .init_resource::<lentille_render::dfg::DFGTexture>()
+            .init_resource::<lentille_render::mipmap::DefaultMipmapGenShader>()
             .init_resource::<MissingTexture>()
-            .init_resource::<crate::render::material::buffer_material::BufferMaterialManager>()
+            .init_resource::<lentille_render::material::buffer_material::BufferMaterialManager>()
             .init_resource::<RenderTargetSize>()
             .init_resource::<ColorRenderTarget>()
             .init_resource::<DepthRenderTarget>()
             .init_resource::<crate::editor::RenderTargetEguiTexId>()
             .init_resource::<super::render::utils::cube::CubeVerticesBuffer>()
             .init_resource::<super::render::cubemap::CubemapVertexShader>()
-            .init_resource::<crate::render::cubemap::CubemapConvertingShader>()
-            .init_resource::<crate::render::cubemap::CubemapMatrixBindGroups>()
-            .init_resource::<crate::render::cubemap::CubemapConverterRgba16Float>()
-            .init_resource::<crate::render::skybox::DefaultSkybox>()
+            .init_resource::<lentille_render::cubemap::CubemapConvertingShader>()
+            .init_resource::<lentille_render::cubemap::CubemapMatrixBindGroups>()
+            .init_resource::<lentille_render::cubemap::CubemapConverterRgba16Float>()
+            .init_resource::<lentille_render::skybox::DefaultSkybox>()
             .init_resource::<GlobalUniformBuffer>()
             // --- Render resource ---
             .init_resource::<CameraBuffer>()
@@ -158,9 +161,6 @@ impl Plugin for AppPlugin {
             );
     }
 }
-
-#[derive(Debug, Component, Clone)]
-pub struct Name(pub String);
 
 #[derive(Debug, Component)]
 pub struct RotationObject {

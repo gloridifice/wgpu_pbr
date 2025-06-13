@@ -12,11 +12,12 @@ use winit::event::WindowEvent;
 use winit::window::Window;
 
 use crate::cgmath_ext::{Vec3, Vec4, Vector4Ext, VectorExt};
-use crate::render::camera::{Camera, CameraController};
-use crate::render::light::parallel_light::ParallelLight;
-use crate::render::light::point_light::PointLight;
-use crate::render::material::pbr::PBRMaterial;
-use crate::render::transform::Transform;
+use crate::engine::Name;
+use lentille_render::camera::{Camera, CameraController};
+use lentille_render::light::parallel_light::ParallelLight;
+use lentille_render::light::point_light::PointLight;
+use lentille_render::material::pbr::PBRMaterial;
+use lentille_render::transform::Transform;
 
 #[derive(Resource)]
 pub struct EguiConfig {
