@@ -1,50 +1,12 @@
 use wgpu::{
-    util::{DeviceExt, TextureDataOrder},
     BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, Origin3d,
     PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
     RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
     TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
+    util::{DeviceExt, TextureDataOrder},
 };
 
-use crate::{cgmath_ext::Vec4, render::UploadedImageWithSampler};
-
-// pub struct DynamicBuffer<'a> {
-//     pub size: u64,
-//     pub buffer: Arc<wgpu::Buffer>,
-//     pub desc: BufferDescriptor<'a>,
-// }
-
-// impl<'a> DynamicBuffer<'a> {
-//     pub fn new(device: &wgpu::Device, desc: BufferDescriptor<'a>) -> Self {
-//         let size = desc.size;
-//         let buffer = Arc::new(device.create_buffer(&desc));
-//         Self { size, buffer, desc }
-//     }
-
-//     pub fn write_buffer(
-//         &self,
-//         queue: wgpu::Queue,
-//         device: wgpu::Device,
-//         offset: u64,
-//         data: &[u8],
-//     ) -> Option<Arc<Buffer>> {
-//         let required_size = size_of_val(data) as u64 + offset;
-//         let is_oversize = required_size > self.size;
-//         if is_oversize {
-//             let buffer = device.create_buffer(&self.desc);
-//             let desc = self.desc.clone();
-//             desc.size = queue.write_buffer(buffer, offset, data)
-//         } else {
-//             queue.write_buffer(&self.buffer, offset, data);
-//         };
-//         None
-//     }
-
-//     pub fn calculate_new_size(&self, target_size: u64) {
-//         let mut size = self.size;
-//         while size < target_size {}
-//     }
-// }
+pub mod bind_group_macro;
 
 pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
     BindGroupLayoutEntry {
@@ -242,50 +204,50 @@ pub fn primitive_triangle_list_default() -> wgpu::PrimitiveState {
     }
 }
 
-pub fn create_pure_color_texture(
-    device: &wgpu::Device,
-    queue: &wgpu::Queue,
-    color: Vec4,
-) -> UploadedImageWithSampler {
-    let size = Extent3d {
-        width: 1,
-        height: 1,
-        depth_or_array_layers: 1,
-    };
-    let texture = device.create_texture_with_data(
-        queue,
-        &TextureDescriptor {
-            label: None,
-            size,
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: TextureFormat::Rgba8Unorm,
-            usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        },
-        TextureDataOrder::LayerMajor,
-        &[
-            (color.x * 255.) as u8,
-            (color.y * 255.) as u8,
-            (color.z * 255.) as u8,
-            (color.w * 255.) as u8,
-        ],
-    );
-    let sampler = device.create_sampler(&sampler_desc(
-        None,
-        wgpu::AddressMode::Repeat,
-        wgpu::FilterMode::Linear,
-    ));
-    let view = texture.create_view(&Default::default());
+// pub fn create_pure_color_texture(
+//     device: &wgpu::Device,
+//     queue: &wgpu::Queue,
+//     color: Vec4,
+// ) -> UploadedImageWithSampler {
+//     let size = Extent3d {
+//         width: 1,
+//         height: 1,
+//         depth_or_array_layers: 1,
+//     };
+//     let texture = device.create_texture_with_data(
+//         queue,
+//         &TextureDescriptor {
+//             label: None,
+//             size,
+//             mip_level_count: 1,
+//             sample_count: 1,
+//             dimension: wgpu::TextureDimension::D2,
+//             format: TextureFormat::Rgba8Unorm,
+//             usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
+//             view_formats: &[],
+//         },
+//         TextureDataOrder::LayerMajor,
+//         &[
+//             (color.x * 255.) as u8,
+//             (color.y * 255.) as u8,
+//             (color.z * 255.) as u8,
+//             (color.w * 255.) as u8,
+//         ],
+//     );
+//     let sampler = device.create_sampler(&sampler_desc(
+//         None,
+//         wgpu::AddressMode::Repeat,
+//         wgpu::FilterMode::Linear,
+//     ));
+//     let view = texture.create_view(&Default::default());
 
-    UploadedImageWithSampler {
-        texture,
-        view,
-        size,
-        sampler,
-    }
-}
+//     UploadedImageWithSampler {
+//         texture,
+//         view,
+//         size,
+//         sampler,
+//     }
+// }
 
 pub fn copy_texture(
     encoder: &mut wgpu::CommandEncoder,

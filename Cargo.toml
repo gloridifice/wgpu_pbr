@@ -8,12 +8,18 @@ members = [
     "crates/lentille_render",
     "crates/lentille_core",
     "crates/lentille_asset",
+    "crates/lentille_wgpu_utils",
+    "crates/lentille_math",
 ]
 
 [workspace.dependencies]
 rand = "0.8.5"
 half = "2.6.0"
 bytemuck = { version = "1.19.0", features = ["derive"] }
+uuid = { version = "1.11.0", features = ["v4"] }
+anyhow = "1.0.92"
+env_logger = "0.11"
+pollster = "0.4.0"
 
 # graphics
 winit = { version = "0.30", features = ["rwh_05"] }
@@ -26,13 +32,8 @@ bevy_ecs = "0.16"
 bevy_app = "0.16"
 bevy_log = "0.16"
 
-
 [dependencies]
 color-backtrace = { version = "0.7" }
-env_logger = "0.11"
-pollster = "0.4.0"
-uuid = { version = "1.11.0", features = ["v4"] }
-anyhow = "1.0.92"
 lazy_static = "1.5.0"
 derive_builder = "0.20.2"
 tiny_bail = "0.4.3"
@@ -49,3 +50,4 @@ egui_tiles = "0.12"
 lentille_render = { path = "crates/lentille_render" }
 lentille_core = { path = "crates/lentille_core" }
 lentille_asset = { path = "crates/lentille_asset" }
+lentille_math = { path = "crates/lentille_math" }

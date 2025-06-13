@@ -4,3 +4,11 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+winit = { workspace = true }
+wgpu = { workspace = true }
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_log = { workspace = true }
+anyhow = { workspace = true }
+lentille_math = { path = "../lentille_math/" }
+pollster = { workspace = true }

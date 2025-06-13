@@ -134,6 +134,3 @@ impl RenderState {
         }
     }
 }
-
-#[derive(Resource, Clone)]
-pub struct MainWindow(pub Arc<Window>);

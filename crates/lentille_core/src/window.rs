@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
 use bevy_app::{App, AppExit, Plugin};
-use bevy_ecs::event::Event;
+use bevy_ecs::prelude::*;
 use pollster::block_on;
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
 };
 
-use crate::{egui_tools::EguiRenderer, MainWindow, RenderState};
-
 pub struct WindowAndRenderStatePlugin;
+
+#[derive(Resource, Clone)]
+pub struct MainWindow(pub Arc<Window>);
 
 impl Plugin for WindowAndRenderStatePlugin {
     fn build(&self, app: &mut App) {
@@ -19,10 +20,6 @@ impl Plugin for WindowAndRenderStatePlugin {
 }
 
 pub fn my_runner(app: App) -> AppExit {
-    color_backtrace::install();
-    env_logger::Builder::from_default_env()
-        .filter_level(log::LevelFilter::Info)
-        .init();
     let event_loop = EventLoop::new().unwrap();
 
     event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
@@ -63,16 +60,8 @@ impl ApplicationHandler for MyApplicationHandler {
             .expect("Failed to create surface!");
 
         let render_state = block_on(RenderState::new(&instance, surface, i_width, i_height));
-        let egui_renderer = EguiRenderer::new(
-            &render_state.device,
-            render_state.config.format,
-            None,
-            1,
-            &window,
-        );
 
         self.app.insert_resource(render_state);
-        self.app.insert_resource(egui_renderer);
         self.app.insert_resource(MainWindow(Arc::clone(&window)));
 
         window.request_redraw();

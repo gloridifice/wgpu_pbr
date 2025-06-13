@@ -7,6 +7,11 @@ edition = "2024"
 # image related
 png = "0.17.16"
 image = "0.25.4"
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_log = { workspace = true }
+anyhow = { workspace = true }
+wgpu = { workspace = true }
 
 
 [dependencies.gltf]

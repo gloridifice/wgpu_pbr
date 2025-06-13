@@ -1,6 +1,6 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
     Arc, LazyLock,
+    atomic::{AtomicUsize, Ordering},
 };
 
 use bevy_app::{Last, Plugin};
@@ -18,11 +18,12 @@ use wgpu::{
 };
 
 use crate::{
+    MainWindow, RenderState,
     asset::AssetPath,
     egui_tools::EguiRenderer,
     macro_utils::BGLEntry,
     render::{post_processing::RenderStage, prelude::PBRMaterialBindGroupLayout},
-    wgpu_init, MainWindow, RenderState,
+    wgpu_init,
 };
 
 use systems::*;
@@ -32,12 +33,10 @@ pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
 pub mod dfg;
-pub mod gizmos;
 pub mod light;
 pub mod material;
 pub mod mesh;
 pub mod mipmap;
-pub mod post_processing;
 pub mod prelude;
 pub mod shader_loader;
 pub mod shadow_mapping;

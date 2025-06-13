@@ -1,3 +1,4 @@
+use lentille_math::*;
 use std::collections::HashSet;
 
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
@@ -7,10 +8,7 @@ use winit::{
     keyboard::{KeyCode, PhysicalKey},
 };
 
-use crate::{
-    cgmath_ext::{Vec2, VectorExt},
-    window::{WinitDeviceEvent, WinitWindowEvent},
-};
+use crate::window::{WinitDeviceEvent, WinitWindowEvent};
 
 pub struct InputPlugin;
 
@@ -89,8 +87,8 @@ impl Input {
         if let WindowEvent::KeyboardInput {
             event:
                 KeyEvent {
-                    ref state,
-                    physical_key: PhysicalKey::Code(ref key),
+                    state,
+                    physical_key: PhysicalKey::Code(key),
                     ..
                 },
             ..
