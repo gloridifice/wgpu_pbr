@@ -59,6 +59,7 @@ impl ApplicationHandler for MyApplicationHandler {
             .create_surface(window.clone())
             .expect("Failed to create surface!");
 
+        // TODO EguiRenderer and RenderState need to be migrated into there crate
         let render_state = block_on(RenderState::new(&instance, surface, i_width, i_height));
 
         self.app.insert_resource(render_state);
