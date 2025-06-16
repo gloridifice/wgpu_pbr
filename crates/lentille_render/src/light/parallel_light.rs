@@ -1,4 +1,4 @@
-use crate::render::{camera::OPENGL_TO_WGPU_MATRIX, prelude::*};
+use crate::{camera::OPENGL_TO_WGPU_MATRIX, prelude::*};
 use bevy_ecs::prelude::*;
 use cgmath::{Matrix, Matrix4};
 

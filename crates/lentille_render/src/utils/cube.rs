@@ -1,5 +1,5 @@
 use bevy_ecs::prelude::*;
-use wgpu::{util::DeviceExt, BufferUsages, VertexAttribute, VertexBufferLayout};
+use wgpu::{BufferUsages, VertexAttribute, VertexBufferLayout, util::DeviceExt};
 
 use crate::RenderState;
 

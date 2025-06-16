@@ -4,9 +4,8 @@ use bevy_ecs::{
     prelude::Resource,
     world::{FromWorld, World},
 };
-use wgpu::{BindGroupLayout, ShaderStages};
 
-use crate::{bg_layout_descriptor, macro_utils::BGLEntry, render::AlphaMode, RenderState};
+use crate::prelude::*;
 
 #[derive(Resource, Clone)]
 pub struct ObjectBindGroupLayout(pub Arc<BindGroupLayout>);

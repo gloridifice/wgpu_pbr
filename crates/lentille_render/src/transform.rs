@@ -2,9 +2,9 @@ use bevy_ecs::prelude::Query;
 use bevy_ecs::{component::Component, entity::Entity};
 use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
+use lentille_wgpu_utils::impl_pod_zeroable;
 
-use crate::cgmath_ext::{Mat3, Mat4};
-use crate::cgmath_ext::{Quat, QuatExt, Vec3, Vector3Ext, VectorExt};
+use lentille_math::*;
 
 #[allow(unused)]
 #[derive(Component, Builder, Clone, Debug)]
@@ -36,8 +36,7 @@ pub struct TransformUniform {
     pub normal: [[f32; 4]; 3],
 }
 
-unsafe impl bytemuck::Pod for TransformUniform {}
-unsafe impl bytemuck::Zeroable for TransformUniform {}
+impl_pod_zeroable!(TransformUniform);
 
 impl Default for WorldTransform {
     fn default() -> Self {

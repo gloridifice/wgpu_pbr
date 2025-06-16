@@ -1,10 +1,7 @@
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
-use crate::{
-    asset::AssetPath,
-    render::{bindings::global_binding::GlobalBindGroup, prelude::*},
-};
+use crate::prelude::*;
 
 use super::shader_loader::ShaderLoader;
 

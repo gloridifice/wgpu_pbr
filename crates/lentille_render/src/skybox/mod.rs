@@ -2,20 +2,12 @@ use std::fs;
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::cubemap::CubemapMatrixBindGroups;
+use crate::image::cubemap::load_cubemap_sliced;
+use crate::prelude::*;
+use crate::skybox::prefiltering::PrefilteringPipeline;
+use crate::utils::cube::CubeVerticesBuffer;
 use bevy_ecs::prelude::*;
-use bevy_ecs::world::FromWorld;
-use prefiltering::PrefilteringPipeline;
-use wgpu::util::DeviceExt;
-use wgpu::{Buffer, BufferUsages, PipelineLayout, RenderPipeline};
-
-use crate::asset::cubemap::load_cubemap_sliced;
-use crate::impl_pod_zeroable;
-use crate::render::bindings::global_binding::GlobalBindGroup;
-use crate::{asset::AssetPath, RenderState};
-
-use super::cubemap::CubemapMatrixBindGroups;
-use super::utils::cube::CubeVerticesBuffer;
-use super::{shader_loader::ShaderLoader, UploadedImage};
 
 pub mod prefiltering;
 pub mod sh_coefficients;
@@ -184,7 +176,7 @@ pub fn sys_update_skybox_sh_from_path(
                 .write_buffer(&skybox_sh_buffer.buffer, 0, bytemuck::cast_slice(&[raw]));
         }
         Err(err) => {
-            log::error!("Failed to update skybox SH from path. Err: \n {}", err);
+            bevy_log::error!("Failed to update skybox SH from path. Err: \n {}", err);
         }
     }
 }

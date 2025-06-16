@@ -9,30 +9,30 @@ use bevy_ecs::{
     prelude::Resource,
     world::{FromWorld, Mut, World},
 };
+use bevy_log::info;
 use defered_rendering::MainPipeline;
+use lentille_core::window::MainWindow;
 use material::pbr::{GltfMaterial, UploadedPBRMaterial};
 use shader_loader::ShaderLoader;
 use wgpu::{
-    Extent3d, Sampler, ShaderModule, Texture, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureView, TextureViewDescriptor,
-};
-
-use crate::{
-    MainWindow, RenderState,
-    asset::AssetPath,
-    egui_tools::EguiRenderer,
-    macro_utils::BGLEntry,
-    render::{post_processing::RenderStage, prelude::PBRMaterialBindGroupLayout},
-    wgpu_init,
+    Extent3d, Features, Instance, ShaderModule, Surface, TextureDescriptor, TextureDimension,
+    TextureFormat, TextureUsages, TextureViewDescriptor,
 };
 
 use systems::*;
+use winit::dpi::PhysicalSize;
 
+use crate::{
+    asset::AssetPath, image::UploadedImageWithSampler, prelude::PBRMaterialBindGroupLayout,
+};
+
+pub mod asset;
 pub mod bindings;
 pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
 pub mod dfg;
+pub mod image;
 pub mod light;
 pub mod material;
 pub mod mesh;
@@ -43,6 +43,12 @@ pub mod shadow_mapping;
 pub mod skybox;
 pub mod systems;
 pub mod transform;
+
+//TODO
+// pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![
+
+//     Features::TIMESTAMP_QUERY
+// ]);
 
 /// 想要一个物体以 Transparent 的管线渲染，需要至少有以下 Component:
 /// - `TransparentPassObject`
@@ -57,14 +63,131 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_systems(Last, sys_render);
+        app.init_resource::<RenderState>()
+            .add_systems(Last, sys_render);
+    }
+}
+
+#[derive(Resource)]
+pub struct RenderState {
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    surface: wgpu::Surface<'static>,
+    config: wgpu::SurfaceConfiguration,
+    size: PhysicalSize<u32>,
+}
+
+impl RenderState {
+    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+    pub async fn new(
+        instance: &Instance,
+        surface: Surface<'static>,
+        width: u32,
+        height: u32,
+    ) -> RenderState {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::default(),
+                compatible_surface: Some(&surface),
+                force_fallback_adapter: false,
+            })
+            .await
+            .unwrap();
+
+        let required_features = {
+            let mut ret = Features::empty();
+            for feat in DEVICE_FEATURES.iter() {
+                ret |= *feat;
+            }
+            ret
+        };
+        let (device, queue) = adapter
+            .request_device(
+                &wgpu::DeviceDescriptor {
+                    required_features,
+                    required_limits: if cfg!(target_arch = "wasm32") {
+                        wgpu::Limits::downlevel_webgl2_defaults()
+                    } else {
+                        wgpu::Limits::default()
+                    },
+                    label: None,
+                    memory_hints: Default::default(),
+                },
+                None,
+            )
+            .await
+            .unwrap();
+
+        let surface_caps = surface.get_capabilities(&adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(surface_caps.formats[0]);
+
+        info!("Surface format is: '{:?}'.", surface_format);
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width,
+            height,
+            // determine how to sync
+            present_mode: surface_caps.present_modes[0],
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        surface.configure(&device, &config);
+
+        Self {
+            device,
+            queue,
+            surface,
+            config,
+            size: PhysicalSize::new(width, height),
+        }
+    }
+
+    #[allow(unused)]
+    fn get_window_extend3d(&self) -> wgpu::Extent3d {
+        wgpu::Extent3d {
+            width: self.config.width.max(1),
+            height: self.config.height.max(1),
+            depth_or_array_layers: 1,
+        }
+    }
+}
+
+impl FromWorld for RenderState {
+    fn from_world(world: &mut World) -> Self {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            #[cfg(not(target_arch = "wasm32"))]
+            backends: wgpu::Backends::PRIMARY,
+            #[cfg(target_arch = "wasm32")]
+            backends: wgpu::Backends::GL,
+            ..Default::default()
+        });
+
+        let i_width = 1600;
+        let i_height = 900;
+
+        let window = Arc::clone(&world.resource::<MainWindow>().0);
+        let _ = window.request_inner_size(PhysicalSize::new(i_width, i_height));
+
+        let surface = instance
+            .create_surface(Arc::clone(&window))
+            .expect("Failed to create surface!");
+
+        block_on(RenderState::new(&instance, surface, i_width, i_height))
     }
 }
 
 fn sys_render(world: &mut World) {
     let window = Arc::clone(&world.resource::<MainWindow>().0);
-
-    world.resource_mut::<EguiRenderer>().begin_frame(&window);
 
     let mut ctx = world.resource_scope(|_world, render_state: Mut<RenderState>| {
         let output = render_state.surface.get_current_texture().unwrap();
@@ -79,8 +202,6 @@ fn sys_render(world: &mut World) {
             encoder,
             output_view,
             output_texture: output,
-            window: Arc::clone(&window),
-            stage: RenderStage::BeforeOpaque,
         }
     });
 
@@ -89,11 +210,6 @@ fn sys_render(world: &mut World) {
         .run_system_cached_with(sys_render_shadow_mapping_pass, &mut ctx)
         .unwrap();
     // --------------------------
-
-    ctx.stage = RenderStage::BeforeOpaque;
-    world
-        .run_system_cached_with(sys_render_post_processing, &mut ctx)
-        .unwrap();
 
     // PASS: Main ---------------
     world
@@ -104,34 +220,12 @@ fn sys_render(world: &mut World) {
         .unwrap();
     // -------------------------
 
-    ctx.stage = RenderStage::AfterOpaque;
-    world
-        .run_system_cached_with(sys_render_post_processing, &mut ctx)
-        .unwrap();
-
-    ctx.stage = RenderStage::BeforeTransparent;
-    world
-        .run_system_cached_with(sys_render_post_processing, &mut ctx)
-        .unwrap();
-
     world
         .run_system_cached_with(sys_render_transparent, &mut ctx)
         .unwrap();
 
-    ctx.stage = RenderStage::AfterTransparent;
-    world
-        .run_system_cached_with(sys_render_post_processing, &mut ctx)
-        .unwrap();
-
-    // Gizmos ---------------------
-    world
-        .run_system_cached_with(sys_render_gizmos, &mut ctx)
-        .unwrap();
-
     // PASS: Render Egui ----------
-    world
-        .run_system_cached_with(sys_render_egui, &mut ctx)
-        .unwrap();
+    //TODO
 
     // End Draw Objects ------------
     world
@@ -339,7 +433,7 @@ pub fn create_depth_texture(
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
     let sampler = device.create_sampler(&{
-        let mut desc = wgpu_init::sampler_desc_no_filter();
+        let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
         desc.compare = compare;
         desc
     });
@@ -402,48 +496,6 @@ pub struct MainPassObject;
 pub enum AlphaMode {
     Opaque,
     Blend,
-}
-
-pub struct UploadedImageWithSampler {
-    #[allow(unused)]
-    pub size: wgpu::Extent3d,
-    #[allow(unused)]
-    pub texture: Texture,
-    pub view: TextureView,
-    pub sampler: Sampler,
-}
-
-pub struct UploadedImage {
-    #[allow(unused)]
-    pub texture: Texture,
-    pub view: TextureView,
-}
-
-impl UploadedImageWithSampler {
-    pub fn image_data_layout(
-        width: u32,
-        heigh: u32,
-        pixel_size: u32,
-        offset: u64,
-    ) -> wgpu::TexelCopyBufferLayout {
-        wgpu::TexelCopyBufferLayout {
-            offset,
-            bytes_per_row: Some(pixel_size * width),
-            rows_per_image: Some(heigh),
-        }
-    }
-
-    pub fn default_sampler_desc() -> wgpu::SamplerDescriptor<'static> {
-        wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
-            ..Default::default()
-        }
-    }
 }
 
 #[derive(Resource, Clone)]

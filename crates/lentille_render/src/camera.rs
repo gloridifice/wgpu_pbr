@@ -5,15 +5,11 @@ use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::Single;
 use bevy_ecs::{prelude::Resource, world::FromWorld};
-use cgmath::{
-    perspective, vec2, Deg, InnerSpace, Matrix4, Quaternion, Rotation3, SquareMatrix, Vector3,
-};
+use cgmath::{Matrix4, SquareMatrix, perspective};
+use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::BufferDescriptor;
-use winit::keyboard::KeyCode;
 
-use crate::engine::input::Input;
-use crate::engine::time::Time;
-use crate::{impl_pod_zeroable, RenderState};
+use crate::RenderState;
 
 use super::transform::{Transform, WorldTransform};
 
@@ -117,59 +113,6 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     0.0, 0.0, 0.5, 0.5,
     0.0, 0.0, 0.0, 1.0,
 );
-
-pub fn sys_update_camera_control(
-    config: Res<CameraConfig>,
-    input: Res<Input>,
-    time: Res<Time>,
-    control_state: Res<ControlState>,
-    camera_query: Single<(
-        &Camera,
-        &mut Transform,
-        &WorldTransform,
-        &mut CameraController,
-    )>,
-) {
-    if !control_state.is_focused {
-        return;
-    }
-
-    let (_, mut cam_transform, world_trans, mut controller) = camera_query.into_inner();
-
-    let speed = config.speed;
-
-    let mut move_vec = Vector3::new(0., 0., 0.);
-    if input.is_key_hold(KeyCode::KeyW) {
-        move_vec += world_trans.forward();
-    }
-    if input.is_key_hold(KeyCode::KeyA) {
-        move_vec += world_trans.left();
-    }
-    if input.is_key_hold(KeyCode::KeyS) {
-        move_vec -= world_trans.forward();
-    }
-    if input.is_key_hold(KeyCode::KeyD) {
-        move_vec -= world_trans.left();
-    }
-    if input.is_key_hold(KeyCode::Space) {
-        if input.is_key_hold(KeyCode::ShiftLeft) {
-            move_vec += Vector3::new(0.0, -1.0, 0.0);
-        } else {
-            move_vec += Vector3::new(0.0, 1.0, 1.0);
-        }
-    }
-    let delta_time_sec = time.delta_time.as_secs_f32();
-    if move_vec != Vector3::new(0., 0., 0.) {
-        move_vec = move_vec.normalize() * speed * delta_time_sec;
-        cam_transform.position += move_vec;
-    }
-
-    let factor = vec2(0.6, 0.4);
-    controller.row -= input.cursor_delta.x * factor.x;
-    controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
-    cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
-        * Quaternion::from_angle_x(Deg(controller.yaw));
-}
 
 pub fn sys_update_camera_uniform(
     camera_buffer: Res<CameraBuffer>,

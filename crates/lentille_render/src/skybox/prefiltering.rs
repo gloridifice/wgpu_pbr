@@ -1,24 +1,12 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use wgpu::{
-    util::DeviceExt, BindGroupLayout, BindingResource, BufferUsages, CommandEncoderDescriptor,
-    PipelineLayout, RenderPipeline, SamplerBindingType, ShaderStages, TextureFormat,
-    TextureUsages,
-};
+use wgpu::{BindingResource, CommandEncoderDescriptor, util::DeviceExt};
 
 use crate::{
-    asset::AssetPath,
-    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
-    macro_utils::BGLEntry,
-    render::{
-        self,
-        cubemap::{CubemapMatrixBindGroups, CubemapVertexShader},
-        shader_loader::ShaderLoader,
-        utils::cube::CubeVerticesBuffer,
-        UploadedImage,
-    },
-    wgpu_init,
+    cubemap::{CubemapMatrixBindGroups, CubemapVertexShader},
+    prelude::*,
+    utils::cube::CubeVerticesBuffer,
 };
 
 const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
@@ -74,7 +62,7 @@ impl PrefilteringPipeline {
                 module: &vert_shader.module,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[render::utils::cube::cube_vertex_layout()],
+                buffers: &[crate::utils::cube::cube_vertex_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -144,7 +132,7 @@ impl FromWorld for PrefilteringPipeline {
                 module: &vert_shader.module,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
-                buffers: &[render::utils::cube::cube_vertex_layout()],
+                buffers: &[crate::utils::cube::cube_vertex_layout()],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
@@ -245,7 +233,7 @@ pub fn prefilter(
             }]),
             usage: BufferUsages::UNIFORM,
         });
-        let sampler = device.create_sampler(&wgpu_init::sampler_desc(
+        let sampler = device.create_sampler(&lentille_wgpu_utils::sampler_desc(
             None,
             wgpu::AddressMode::Repeat,
             wgpu::FilterMode::Linear,

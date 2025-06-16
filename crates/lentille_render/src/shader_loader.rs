@@ -1,11 +1,11 @@
 use std::{borrow::Cow, fs};
 
 use bevy_ecs::prelude::*;
-use log::error;
+use bevy_log::error;
 use naga_oil::compose::Composer;
 use wgpu::ShaderSource;
 
-use crate::asset::AssetPath;
+use crate::{RenderState, asset::AssetPath};
 
 #[derive(Resource)]
 pub struct ShaderLoader {
@@ -38,7 +38,7 @@ impl ShaderLoader {
         let mut shader_loader = world.resource_mut::<ShaderLoader>();
         let shader_source = shader_loader.load_source(path)?;
 
-        let rs = world.resource::<crate::RenderState>();
+        let rs = world.resource::<RenderState>();
         let device = &rs.device;
 
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

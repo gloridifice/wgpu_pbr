@@ -1,17 +1,8 @@
 use std::sync::Arc;
 
-use wgpu::{BindingResource, RenderPassColorAttachment, Sampler, ShaderStages};
-
-use crate::{
-    asset::AssetPath,
-    bg_descriptor, bg_layout_descriptor,
-    macro_utils::BGLEntry,
-    render::{
-        bindings::material_binding::PBRMaterialBindGroupLayout, prelude::*,
-        shader_loader::ShaderLoader, UploadedImage,
-    },
-};
+use crate::prelude::*;
 use bevy_ecs::prelude::*;
+use wgpu::RenderPassColorAttachment;
 
 use super::GlobalBindGroup;
 
@@ -79,7 +70,7 @@ impl GBufferTexturesBindGroup {
             .textures
             .iter()
             .map(|it| {
-                Some(wgpu_init::render_pass_color_attachment(
+                Some(lentille_wgpu_utils::render_pass_color_attachment(
                     &it.image.view,
                     Some(wgpu::Color::TRANSPARENT),
                     true,
@@ -91,7 +82,8 @@ impl GBufferTexturesBindGroup {
     }
 
     pub fn new(device: &wgpu::Device, size: Extent3d) -> Self {
-        let sampler = Arc::new(device.create_sampler(&wgpu_init::sampler_desc_no_filter()));
+        let sampler =
+            Arc::new(device.create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter()));
         let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
             ["GBuffert Textures"]
             0: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::NonFiltering); // Universal Sampler
@@ -125,7 +117,7 @@ pub fn create_g_buffer_image(
     size: Extent3d,
     format: TextureFormat,
 ) -> GBufferTexture {
-    let desc = wgpu_init::texture_desc_2d_one_mip_sample_level(
+    let desc = lentille_wgpu_utils::texture_desc_2d_one_mip_sample_level(
         Some("GBuffer Rgba8Unorm Texture"),
         size,
         format,
@@ -178,7 +170,7 @@ impl FromWorld for WriteGBufferPipeline {
 
         let targets = [
             // World Position
-            Some(wgpu_init::color_target_replace_write_all(
+            Some(lentille_wgpu_utils::color_target_replace_write_all(
                 wgpu::TextureFormat::Rgba16Float,
             )),
             // G-Buffer

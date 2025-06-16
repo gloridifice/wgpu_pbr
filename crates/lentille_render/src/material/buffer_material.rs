@@ -1,14 +1,14 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::{
-    any::{type_name, TypeId},
+    any::{TypeId, type_name},
+    collections::HashMap,
     sync::Arc,
 };
-use wgpu::{util::DeviceExt, BindGroupEntry, BindGroupLayoutDescriptor, BufferUsages};
+use wgpu::{BindGroupEntry, BindGroupLayoutDescriptor};
 
 use bevy_ecs::prelude::*;
-use egui::ahash::HashMap;
 
-use crate::render::prelude::*;
+use crate::prelude::*;
 
 pub struct UploadedBufferMaterialLayout {
     pub layout: Arc<BindGroupLayout>,

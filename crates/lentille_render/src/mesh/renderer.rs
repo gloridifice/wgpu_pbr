@@ -1,13 +1,11 @@
-use crate::render::{
+use crate::{
     material::{
-        pbr::{PBRMaterialOverride, UploadedPBRMaterial},
         UploadedMaterial,
+        pbr::{PBRMaterialOverride, UploadedPBRMaterial},
     },
+    prelude::*,
     transform::TransformUniform,
-    AlphaMode,
 };
-
-use super::super::prelude::*;
 use bevy_ecs::prelude::*;
 
 #[derive(Component, Clone)]

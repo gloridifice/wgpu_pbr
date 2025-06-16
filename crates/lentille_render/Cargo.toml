@@ -4,6 +4,28 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+# Bevy
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_log = { workspace = true }
+wgpu = { workspace = true }
+anyhow = { workspace = true }
+naga_oil = { workspace = true }
+derive_builder = { workspace = true }
+bytemuck = { workspace = true }
+cgmath = { workspace = true }
+winit = { workspace = true }
+uuid = { workspace = true }
+half = { workspace = true }
+
+png = "0.17.16"
+image = "0.25.4"
 
 # Workspace
-lentille_asset = { path = "../lentille_asset" }
+lentille_math = { path = "../lentille_math" }
+lentille_wgpu_utils = { path = "../lentille_wgpu_utils" }
+lentille_core = { path = "../lentille_core" }
+
+[dependencies.gltf]
+version = "1"
+features = ["extras", "names"]

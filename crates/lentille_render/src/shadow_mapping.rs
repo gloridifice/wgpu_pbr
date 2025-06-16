@@ -1,4 +1,4 @@
-use crate::{asset::AssetPath, macro_utils::BGLEntry, render::prelude::*};
+use crate::prelude::*;
 use bevy_ecs::prelude::*;
 
 use super::{light::LightUnifromBuffer, shader_loader::ShaderLoader};
@@ -119,7 +119,7 @@ impl FromWorld for ShadowMappingPipeline {
 impl FromWorld for ShadowMap {
     fn from_world(world: &mut World) -> Self {
         world.resource_scope(|_, render_state: Mut<RenderState>| {
-            let image = crate::render::create_depth_texture(
+            let image = crate::create_depth_texture(
                 &render_state.device,
                 4096,
                 4096,

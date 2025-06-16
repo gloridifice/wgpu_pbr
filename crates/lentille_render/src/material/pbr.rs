@@ -1,14 +1,7 @@
 use std::sync::Arc;
 
-use crate::{
-    bg_descriptor, impl_pod_zeroable,
-    render::{
-        bindings::material_binding::PBRMaterialBindGroupLayout, defered_rendering::MainPipeline,
-        prelude::*, AlphaMode, NormalDefaultTexture, WhiteTexture,
-    },
-};
+use crate::{defered_rendering::MainPipeline, prelude::*};
 use bevy_ecs::prelude::*;
-use wgpu::{util::DeviceExt, BindingResource, BufferUsages};
 
 use super::UploadedMaterial;
 

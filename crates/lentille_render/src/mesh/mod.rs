@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use super::{defered_rendering::MainPipeline, prelude::*, NormalDefaultTexture, WhiteTexture};
-use crate::{impl_pod_zeroable, render::material::pbr::UploadedPBRMaterial};
+use crate::material::pbr::UploadedPBRMaterial;
+
+use super::{NormalDefaultTexture, WhiteTexture, defered_rendering::MainPipeline, prelude::*};
 use bevy_ecs::prelude::*;
 
 pub mod renderer;

@@ -1,13 +1,10 @@
 use std::sync::Arc;
 
-use crate::render::{bindings::material_binding::PBRMaterialBindGroupLayout, prelude::*};
-use bevy_ecs::prelude::*;
-use wgpu::{BindGroupLayout, PipelineLayout, RenderPipeline};
-use write_g_buffer_pipeline::GBufferTexturesBindGroup;
-
 use crate::{
-    asset::AssetPath, render::bindings::global_binding::GlobalBindGroup, wgpu_init, RenderState,
+    bindings::material_binding::PBRMaterialBindGroupLayout,
+    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
 };
+use bevy_ecs::prelude::*;
 
 pub mod write_g_buffer_pipeline;
 
@@ -50,15 +47,16 @@ impl FromWorld for MainPipeline {
                 push_constant_ranges: &[],
             });
 
-        let render_pipeline = device.create_render_pipeline(&wgpu_init::full_screen_pipeline_desc(
-            Some("PBR Main Pipeline"),
-            &render_pipeline_layout,
-            &full_screen_shader.module,
-            &shader,
-            &[Some(wgpu_init::color_target_replace_write_all(
-                rs.config.format,
-            ))],
-        ));
+        let render_pipeline =
+            device.create_render_pipeline(&lentille_wgpu_utils::full_screen_pipeline_desc(
+                Some("PBR Main Pipeline"),
+                &render_pipeline_layout,
+                &full_screen_shader.module,
+                &shader,
+                &[Some(lentille_wgpu_utils::color_target_replace_write_all(
+                    rs.config.format,
+                ))],
+            ));
 
         MainPipeline {
             pipeline: Arc::new(render_pipeline),

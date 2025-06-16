@@ -1,4 +1,4 @@
-use crate::render::prelude::*;
+use crate::prelude::*;
 use bevy_ecs::prelude::*;
 
 #[derive(Component, Clone)]

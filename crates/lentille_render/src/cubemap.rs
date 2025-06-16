@@ -1,15 +1,9 @@
 use std::sync::Arc;
 
+use crate::prelude::*;
 use bevy_ecs::prelude::*;
 use cgmath::{Deg, Point3, Vector3};
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, BufferUsages, RenderPipeline, Sampler,
-    ShaderModule, ShaderStages, TextureDescriptor, TextureFormat, TextureUsages,
-};
-
-use crate::{
-    asset::AssetPath, bg_descriptor, bg_layout_descriptor, macro_utils::BGLEntry, RenderState,
-};
+use wgpu::util::DeviceExt;
 
 use super::shader_loader::ShaderLoader;
 

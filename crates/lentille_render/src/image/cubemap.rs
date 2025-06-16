@@ -2,9 +2,8 @@ use std::{fs::File, io::Read};
 
 use wgpu::TextureViewDescriptor;
 
-use crate::render::UploadedImage;
-
-use super::AssetPath;
+use crate::asset::AssetPath;
+use crate::image::UploadedImage;
 
 /// Order of paths is +x, -x, +y, -y, +z, -z
 pub fn load_cubemap_sliced(

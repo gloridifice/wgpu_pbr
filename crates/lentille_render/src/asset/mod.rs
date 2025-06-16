@@ -5,7 +5,6 @@ use std::{
     sync::Arc,
 };
 
-pub mod cubemap;
 pub mod load;
 
 #[derive(Clone)]

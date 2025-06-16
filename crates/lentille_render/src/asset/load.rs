@@ -1,23 +1,25 @@
 use std::io::Cursor;
 
 use std::path::Path;
-use std::thread::{scope, Scope};
+use std::thread::{Scope, scope};
 use std::time::Instant;
 use std::{fs, io, thread};
 use std::{fs::File, io::Read, sync::Arc};
 
-use crate::render::{self, UploadedImageWithSampler};
-use crate::render::{prelude::*, AlphaMode};
-use crate::RenderState;
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use bevy_ecs::world::World;
+use bevy_log::{error, info};
 use gltf::image::{Data, Format};
 use image::{ColorType, DynamicImage, Pixel};
-use log::{error, info};
 use png::Decoder;
 use wgpu::util::{DeviceExt, TextureDataOrder};
-use wgpu::{AddressMode, FilterMode, ShaderModule, TextureDescriptor};
+use wgpu::{AddressMode, Extent3d, FilterMode, ShaderModule, TextureDescriptor, TextureUsages};
+
+use crate::image::UploadedImageWithSampler;
+use crate::mesh::{Mesh, Model, Primitive, Vertex};
+use crate::prelude::GltfMaterial;
+use crate::{AlphaMode, RenderState};
 
 use super::AssetPath;
 
@@ -155,7 +157,7 @@ impl UploadedImageWithSampler {
         );
 
         let view = texture.create_view(&Default::default());
-        let sampler = device.create_sampler(&wgpu_init::sampler_desc(
+        let sampler = device.create_sampler(&lentille_wgpu_utils::sampler_desc(
             None,
             AddressMode::MirrorRepeat,
             FilterMode::Linear,
@@ -429,13 +431,13 @@ impl Loadable for Model {
                         material: Some(material_instance),
                     });
                 }
-                render::mesh::Mesh {
+                Mesh {
                     vertices,
                     indices,
                     primitives,
                 }
             })
-            .collect::<Vec<render::mesh::Mesh>>();
+            .collect::<Vec<Mesh>>();
 
         let duration = start_instant.elapsed();
         info!(

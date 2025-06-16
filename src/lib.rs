@@ -8,11 +8,8 @@ use winit::{dpi::PhysicalSize, window::Window};
 use crate::window::{ResizeEvent, WindowAndRenderStatePlugin};
 
 mod app;
-mod cgmath_ext;
 mod editor;
 mod egui_tools;
-mod macro_utils;
-pub mod wgpu_init;
 
 lazy_static::lazy_static! {
     pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![
@@ -28,14 +25,6 @@ pub fn run() {
 }
 
 #[derive(Resource)]
-pub struct RenderState {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-}
-
 pub enum InsertResourceStage {
     GlobalBindGroupLayot,
 }
@@ -50,87 +39,55 @@ fn sys_on_resize(event: Trigger<ResizeEvent>, mut rs: ResMut<RenderState>) {
     }
 }
 
-impl RenderState {
-    pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-
-    pub async fn new(
-        instance: &Instance,
-        surface: Surface<'static>,
-        width: u32,
-        height: u32,
-    ) -> RenderState {
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .unwrap();
-
-        let required_features = {
-            let mut ret = Features::empty();
-            for feat in DEVICE_FEATURES.iter() {
-                ret |= *feat;
-            }
-            ret
-        };
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    required_features,
-                    required_limits: if cfg!(target_arch = "wasm32") {
-                        wgpu::Limits::downlevel_webgl2_defaults()
-                    } else {
-                        wgpu::Limits::default()
-                    },
-                    label: None,
-                    memory_hints: Default::default(),
-                },
-                None,
-            )
-            .await
-            .unwrap();
-
-        let surface_caps = surface.get_capabilities(&adapter);
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-
-        info!("Surface format is: '{:?}'.", surface_format);
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width,
-            height,
-            // determine how to sync
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
-
-        surface.configure(&device, &config);
-
-        Self {
-            device,
-            queue,
-            surface,
-            config,
-            size: PhysicalSize { width, height },
-        }
+pub fn sys_update_camera_control(
+    config: Res<CameraConfig>,
+    input: Res<Input>,
+    time: Res<Time>,
+    control_state: Res<ControlState>,
+    camera_query: Single<(
+        &Camera,
+        &mut Transform,
+        &WorldTransform,
+        &mut CameraController,
+    )>,
+) {
+    if !control_state.is_focused {
+        return;
     }
 
-    #[allow(unused)]
-    fn get_window_extend3d(&self) -> wgpu::Extent3d {
-        wgpu::Extent3d {
-            width: self.config.width.max(1),
-            height: self.config.height.max(1),
-            depth_or_array_layers: 1,
+    let (_, mut cam_transform, world_trans, mut controller) = camera_query.into_inner();
+
+    let speed = config.speed;
+
+    let mut move_vec = Vector3::new(0., 0., 0.);
+    if input.is_key_hold(KeyCode::KeyW) {
+        move_vec += world_trans.forward();
+    }
+    if input.is_key_hold(KeyCode::KeyA) {
+        move_vec += world_trans.left();
+    }
+    if input.is_key_hold(KeyCode::KeyS) {
+        move_vec -= world_trans.forward();
+    }
+    if input.is_key_hold(KeyCode::KeyD) {
+        move_vec -= world_trans.left();
+    }
+    if input.is_key_hold(KeyCode::Space) {
+        if input.is_key_hold(KeyCode::ShiftLeft) {
+            move_vec += Vector3::new(0.0, -1.0, 0.0);
+        } else {
+            move_vec += Vector3::new(0.0, 1.0, 1.0);
         }
     }
+    let delta_time_sec = time.delta_time.as_secs_f32();
+    if move_vec != Vector3::new(0., 0., 0.) {
+        move_vec = move_vec.normalize() * speed * delta_time_sec;
+        cam_transform.position += move_vec;
+    }
+
+    let factor = vec2(0.6, 0.4);
+    controller.row -= input.cursor_delta.x * factor.x;
+    controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
+    cam_transform.rotation = Quaternion::from_angle_y(Deg(controller.row))
+        * Quaternion::from_angle_x(Deg(controller.yaw));
 }

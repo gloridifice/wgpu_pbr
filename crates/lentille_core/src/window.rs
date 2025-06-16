@@ -44,25 +44,9 @@ impl ApplicationHandler for MyApplicationHandler {
             .create_window(Window::default_attributes())
             .unwrap();
 
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
-            ..Default::default()
-        });
         let window = Arc::new(window);
-        let i_width = 1600;
-        let i_height = 900;
-        let _ = window.request_inner_size(PhysicalSize::new(i_width, i_height));
-        let surface = instance
-            .create_surface(window.clone())
-            .expect("Failed to create surface!");
-
         // TODO EguiRenderer and RenderState need to be migrated into there crate
-        let render_state = block_on(RenderState::new(&instance, surface, i_width, i_height));
 
-        self.app.insert_resource(render_state);
         self.app.insert_resource(MainWindow(Arc::clone(&window)));
 
         window.request_redraw();

@@ -1,20 +1,8 @@
-use bevy_ecs::{prelude::*, system::RunSystemOnce};
-use std::sync::Arc;
-use wgpu::{
-    util::DeviceExt, BindGroup, BindGroupLayout, BindingResource, Buffer, BufferUsages,
-    ShaderStages,
-};
-
 use crate::{
-    bg_descriptor, bg_layout_descriptor, impl_pod_zeroable,
-    macro_utils::BGLEntry,
-    render::{
-        self,
-        skybox::{DefaultSkybox, Skybox, SkyboxSHBuffer},
-        ColorRenderTarget,
-    },
-    RenderState,
+    prelude::*,
+    skybox::{DefaultSkybox, Skybox, SkyboxSHBuffer},
 };
+use bevy_ecs::{prelude::*, system::RunSystemOnce};
 
 use super::super::{
     camera::CameraBuffer, dfg::DFGTexture, light::LightUnifromBuffer, shadow_mapping::ShadowMap,
@@ -134,7 +122,7 @@ fn create_bind_group(world: &mut World, layout: &BindGroupLayout) -> Vec<Arc<Bin
 
 impl GlobalBindGroup {
     pub fn get_bind_group(&self) -> &Arc<BindGroup> {
-        &self.bind_groups[render::get_sampleable_target_index()]
+        &self.bind_groups[crate::get_sampleable_target_index()]
     }
 }
 
