@@ -2,6 +2,9 @@ use std::ops::{Add, Div, Mul, Sub};
 
 use cgmath::Point3;
 
+#[allow(unused)]
+pub use cgmath::{Deg, Euler, InnerSpace, Rad, Rotation3};
+
 pub type Vec2 = cgmath::Vector2<f32>;
 pub type Vec3 = cgmath::Vector3<f32>;
 pub type Vec4 = cgmath::Vector4<f32>;

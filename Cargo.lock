@@ -2014,6 +2014,7 @@ dependencies = [
  "lentille_wgpu_utils",
  "naga_oil",
  "png",
+ "pollster",
  "uuid",
  "wgpu",
  "winit",
@@ -4126,7 +4127,11 @@ dependencies = [
 name = "wgpu_pbr"
 version = "0.1.0"
 dependencies = [
+ "bevy_app",
+ "bevy_ecs",
+ "bevy_log",
  "bevy_reflect",
+ "cgmath",
  "color-backtrace",
  "egui",
  "egui-wgpu",
@@ -4136,7 +4141,10 @@ dependencies = [
  "lentille_core",
  "lentille_math",
  "lentille_render",
+ "rand",
  "tiny_bail",
+ "wgpu",
+ "winit",
 ]
 
 [[package]]

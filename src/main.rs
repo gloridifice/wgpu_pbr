@@ -1,3 +1,6 @@
+use bevy_app::App;
+use wgpu_pbr::WgpuPbrPlugin;
+
 fn main() {
-    wgpu_pbr::run();
+    App::new().add_plugins(WgpuPbrPlugin).run();
 }

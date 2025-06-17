@@ -3,7 +3,6 @@ use std::any::type_name;
 use bevy_ecs::entity::Entity;
 use bevy_ecs::prelude::Resource;
 use bevy_ecs::world::World;
-use cgmath::{Deg, Euler};
 use egui::{Color32, Context, DragValue, Ui, Widget};
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
@@ -11,13 +10,7 @@ use egui_winit::State;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
-use crate::cgmath_ext::{Vec3, Vec4, Vector4Ext, VectorExt};
-use crate::engine::Name;
-use lentille_render::camera::{Camera, CameraController};
-use lentille_render::light::parallel_light::ParallelLight;
-use lentille_render::light::point_light::PointLight;
-use lentille_render::material::pbr::PBRMaterial;
-use lentille_render::transform::Transform;
+use lentille_render::prelude::*;
 
 #[derive(Resource)]
 pub struct EguiConfig {
@@ -156,7 +149,7 @@ fn label_value(ui: &mut Ui, text: &str, v: &mut f32) {
 }
 
 fn color_vec4_rgba(ui: &mut Ui, color: &mut Vec4) -> egui::Response {
-    let mut c = color.to_color32();
+    let mut c: Color32 = color.into();
     let ret = ui.color_edit_button_srgba(&mut c);
     *color = Vec4::from_color32(&c);
     ret

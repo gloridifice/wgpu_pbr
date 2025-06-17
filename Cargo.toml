@@ -33,7 +33,17 @@ bevy_app = "0.16"
 bevy_log = "0.16"
 
 [dependencies]
+cgmath = { workspace = true }
+
+bevy_app = { workspace = true }
+bevy_ecs = { workspace = true }
+bevy_log = { workspace = true }
+wgpu = { workspace = true }
+winit = { workspace = true }
+rand = { workspace = true }
+
 color-backtrace = { version = "0.7" }
+
 tiny_bail = "0.4.3"
 bevy_reflect = "0.16"
 

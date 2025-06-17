@@ -3,16 +3,14 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use bevy_app::{Last, Plugin};
-use bevy_ecs::{
-    component::Component,
-    prelude::Resource,
-    world::{FromWorld, Mut, World},
-};
+use bevy_app::prelude::*;
+use bevy_ecs::prelude::*;
 use bevy_log::info;
 use defered_rendering::MainPipeline;
-use lentille_core::window::MainWindow;
+use lentille_core::window::{MainWindow, ResizeEvent};
 use material::pbr::{GltfMaterial, UploadedPBRMaterial};
+use pollster::block_on;
+use prelude::*;
 use shader_loader::ShaderLoader;
 use wgpu::{
     Extent3d, Features, Instance, ShaderModule, Surface, TextureDescriptor, TextureDimension,
@@ -23,7 +21,7 @@ use systems::*;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    asset::AssetPath, image::UploadedImageWithSampler, prelude::PBRMaterialBindGroupLayout,
+    asset::AssetPath, camera::CameraPlugin, light::LightPlugin, transform::TransformPlugin,
 };
 
 pub mod asset;
@@ -44,11 +42,8 @@ pub mod skybox;
 pub mod systems;
 pub mod transform;
 
-//TODO
-// pub static ref DEVICE_FEATURES: Arc<Vec<Features>> = Arc::new(vec![
-
-//     Features::TIMESTAMP_QUERY
-// ]);
+pub static DEVICE_FEATURES: LazyLock<Arc<Vec<Features>>> =
+    LazyLock::new(|| Arc::new(vec![Features::TIMESTAMP_QUERY]));
 
 /// 想要一个物体以 Transparent 的管线渲染，需要至少有以下 Component:
 /// - `TransparentPassObject`
@@ -64,17 +59,65 @@ pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_resource::<RenderState>()
-            .add_systems(Last, sys_render);
+            .init_resource::<ShaderLoader>()
+            .init_resource::<WhiteTexture>()
+            .init_resource::<NormalDefaultTexture>()
+            .init_resource::<dfg::DFGTexture>()
+            .init_resource::<mipmap::DefaultMipmapGenShader>()
+            .init_resource::<MissingTexture>()
+            .init_resource::<material::buffer_material::BufferMaterialManager>()
+            .init_resource::<RenderTargetSize>()
+            .init_resource::<ColorRenderTarget>()
+            .init_resource::<DepthRenderTarget>()
+            .init_resource::<utils::cube::CubeVerticesBuffer>()
+            .init_resource::<cubemap::CubemapVertexShader>()
+            .init_resource::<cubemap::CubemapConvertingShader>()
+            .init_resource::<cubemap::CubemapMatrixBindGroups>()
+            .init_resource::<cubemap::CubemapConverterRgba16Float>()
+            .init_resource::<skybox::DefaultSkybox>()
+            .init_resource::<GlobalUniformBuffer>()
+            // --- Render resource ---
+            .init_resource::<skybox::SkyboxSHBuffer>()
+            .init_resource::<shadow_mapping::ShadowMap>()
+            // .insert_resource::<ShadowMapEguiTextureId>()
+            .init_resource::<FullScreenVertexShader>()
+            // 0. Layouts
+            .init_resource::<ObjectBindGroupLayout>()
+            .init_resource::<PBRMaterialBindGroupLayout>()
+            // 1. Globals
+            .init_resource::<shadow_mapping::ShadowMapGlobalBindGroup>()
+            .init_resource::<DynamicLightBindGroup>()
+            // 1.5
+            .init_resource::<defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup>()
+            .init_resource::<GlobalBindGroup>()
+            // 2. Pipelines
+            .init_resource::<defered_rendering::write_g_buffer_pipeline::WriteGBufferPipeline>()
+            .init_resource::<skybox::SkyboxPipeline>()
+            .init_resource::<MainPipeline>()
+            .init_resource::<transparent::TransparentPipeline>()
+            .init_resource::<shadow_mapping::ShadowMappingPipeline>()
+            // --- Other resources ---
+            .init_resource::<DefaultPBRMaterial>();
+
+        app.add_systems(Last, sys_render)
+            .add_systems(Update, sys_refersh_global_bind_group)
+            .add_systems(
+                PostUpdate,
+                material::pbr::sys_update_override_pbr_material_bind_group,
+            )
+            .add_observer(sys_on_resize);
+
+        app.add_plugins((TransformPlugin, LightPlugin, CameraPlugin));
     }
 }
 
 #[derive(Resource)]
 pub struct RenderState {
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
-    size: PhysicalSize<u32>,
+    pub device: wgpu::Device,
+    pub queue: wgpu::Queue,
+    pub surface: wgpu::Surface<'static>,
+    pub config: wgpu::SurfaceConfiguration,
+    pub size: PhysicalSize<u32>,
 }
 
 impl RenderState {
@@ -576,5 +619,15 @@ impl FromWorld for DefaultPBRMaterial {
             },
         );
         Self(Arc::new(mat))
+    }
+}
+
+fn sys_on_resize(event: Trigger<ResizeEvent>, mut rs: ResMut<RenderState>) {
+    let new_size = event.physical_size;
+    if new_size.width > 0 && new_size.height > 0 {
+        rs.size = new_size;
+        rs.config.width = new_size.width;
+        rs.config.height = new_size.height;
+        rs.surface.configure(&rs.device, &rs.config);
     }
 }

@@ -1,10 +1,28 @@
-use bevy_ecs::prelude::Query;
-use bevy_ecs::{component::Component, entity::Entity};
+use bevy_app::{Plugin, PostUpdate};
+use bevy_ecs::prelude::*;
 use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
 use lentille_wgpu_utils::impl_pod_zeroable;
 
 use lentille_math::*;
+
+use crate::{RenderState, prelude::MeshRenderer};
+
+pub(crate) struct TransformPlugin;
+
+impl Plugin for TransformPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.add_systems(
+            PostUpdate,
+            (
+                sys_update_children,
+                sys_update_world_transform,
+                sys_update_transform_buffers,
+            )
+                .chain(),
+        );
+    }
+}
 
 #[allow(unused)]
 #[derive(Component, Builder, Clone, Debug)]
@@ -61,6 +79,16 @@ pub fn sys_update_world_transform(
     vec.into_iter().for_each(|(id, world_transform)| {
         let (_, _, mut to_modified) = q_transform.get_mut(id).unwrap();
         *to_modified = world_transform;
+    });
+}
+
+fn sys_update_transform_buffers(world: &mut World) {
+    world.resource_scope(|world, render_state: Mut<RenderState>| {
+        let mut query =
+            world.query_filtered::<(&WorldTransform, &MeshRenderer), Changed<WorldTransform>>();
+        for (world_trans, mesh_renderer) in query.iter(world) {
+            mesh_renderer.update_transform_buffer(&render_state.queue, world_trans.get_uniform());
+        }
     });
 }
 

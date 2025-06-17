@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
@@ -12,6 +13,15 @@ use wgpu::BufferDescriptor;
 use crate::RenderState;
 
 use super::transform::{Transform, WorldTransform};
+
+pub(crate) struct CameraPlugin;
+
+impl Plugin for CameraPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_resource::<CameraBuffer>()
+            .add_systems(PostUpdate, sys_update_camera_uniform);
+    }
+}
 
 #[derive(Resource)]
 pub struct CameraBuffer {
@@ -27,12 +37,6 @@ pub struct Camera {
     pub znear: f32,
     pub zfar: f32,
     pub view_proj: Matrix4<f32>,
-}
-
-#[derive(Component, Clone, Default)]
-pub struct CameraController {
-    pub row: f32,
-    pub yaw: f32,
 }
 
 impl FromWorld for CameraBuffer {
@@ -67,17 +71,6 @@ impl Camera {
             position: [pos.x, pos.y, pos.z, 1.],
             direction: [dir.x, dir.y, dir.z, 1.],
         }
-    }
-}
-
-#[derive(Resource)]
-pub struct CameraConfig {
-    pub speed: f32,
-}
-
-impl Default for CameraConfig {
-    fn default() -> Self {
-        Self { speed: 5.0 }
     }
 }
 

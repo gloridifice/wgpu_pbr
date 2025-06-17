@@ -1,18 +1,12 @@
 use bevy_ecs::prelude::*;
 use egui::load::SizedTexture;
-
-use crate::{
-    cgmath_ext::{Vec2, VectorExt},
-    egui_tools::{world_tree, EguiRenderer},
-    engine::input::{CursorButton, Input},
-    render::{
-        self, bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
-        defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
-        gizmos::GizmosPipeline, post_processing::PostProcessingManager, transform::Transform,
-        ColorRenderTarget, DepthRenderTarget, RenderTargetSize,
-    },
-    RenderState,
+use lentille_core::input::{CursorButton, Input};
+use lentille_render::{
+    bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
+    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
 };
+
+use crate::egui_tools::{world_tree, EguiRenderer};
 
 pub enum Pane {
     MainView,
@@ -82,7 +76,7 @@ pub fn sys_egui_tiles(world: &mut World) {
             let size = ui.available_size();
             if let Some(render_target_egui_tex_ids) = ids.0.as_ref() {
                 let main_view = ui.image(SizedTexture::new(
-                    render_target_egui_tex_ids[render::get_sampleable_target_index()],
+                    render_target_egui_tex_ids[lentille_render::get_sampleable_target_index()],
                     size,
                 ));
                 let mut input = world.resource_mut::<Input>();
@@ -122,8 +116,6 @@ pub fn sys_on_resize_render_target(
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
     mut egui: ResMut<EguiRenderer>,
     mut camera: Single<&mut Camera>,
-    mut post_processing_manager: ResMut<PostProcessingManager>,
-    mut gizmos_pipeline: ResMut<GizmosPipeline>,
 ) {
     if target_size.is_changed() {
         let device = &render_state.device;
@@ -133,7 +125,9 @@ pub fn sys_on_resize_render_target(
 
         color_target.update_images(width, height, device, config);
         commands.queue(RefreshGlobalBindGroupCmd);
-        depth_target.0 = Some(render::create_depth_texture(device, width, height, None));
+        depth_target.0 = Some(lentille_render::create_depth_texture(
+            device, width, height, None,
+        ));
 
         let vec = [0, 1]
             .into_iter()
@@ -149,11 +143,10 @@ pub fn sys_on_resize_render_target(
         egui_tex_id.0 = Some(vec);
         camera.aspect = height as f32 / width as f32;
 
-        post_processing_manager.resize(width, height, device, config);
         g_buffer_textures.resize(width, height, device);
-        gizmos_pipeline.resize(width, height, device);
     };
 }
+
 fn create_tree() -> egui_tiles::Tree<Pane> {
     let mut tiles = egui_tiles::Tiles::default();
 

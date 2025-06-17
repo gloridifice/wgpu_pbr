@@ -1,12 +1,32 @@
 use std::{collections::BTreeMap, sync::Arc};
 
 use crate::prelude::*;
+use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use parallel_light::ParallelLight;
 use point_light::{PointLight, RawPointLight};
 
 pub mod parallel_light;
 pub mod point_light;
+
+pub(crate) struct LightPlugin;
+
+impl Plugin for LightPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_resource::<LightUnifromBuffer>()
+            .init_resource::<DynamicLights>()
+            .add_observer(event_on_remove_point_light)
+            .add_systems(PostUpdate, sys_update_light_uniform)
+            .add_systems(
+                PostUpdate,
+                (
+                    sys_update_dynamic_lights,
+                    sys_update_dynamic_lights_bind_group,
+                )
+                    .chain(),
+            );
+    }
+}
 
 #[derive(Resource)]
 pub struct LightUnifromBuffer {
@@ -42,6 +62,13 @@ impl LightUnifromBuffer {
 
     pub fn write_buffer(&self, queue: &wgpu::Queue, light_uniform: LightUniform) {
         queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[light_uniform]));
+    }
+}
+
+impl FromWorld for LightUnifromBuffer {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        Self::new(&rs.device)
     }
 }
 
