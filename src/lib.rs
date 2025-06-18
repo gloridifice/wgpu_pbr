@@ -1,8 +1,7 @@
-use std::{fs, sync::Arc};
+use std::sync::Arc;
 
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::RunSystemOnce, world::CommandQueue};
-use egui::{epaint::text::InsertFontFamily, Visuals};
 use lentille_core::{
     input::InputPlugin,
     time::{Time, TimePlugin},

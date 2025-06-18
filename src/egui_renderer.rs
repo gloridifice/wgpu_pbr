@@ -1,14 +1,11 @@
-use bevy_app::{First, Plugin};
-use bevy_ecs::observer::Trigger;
 use bevy_ecs::prelude::Resource;
-use bevy_ecs::system::{Res, ResMut};
 use bevy_ecs::world::FromWorld;
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
-use lentille_core::window::{MainWindow, WinitWindowEvent};
-use lentille_render::{RenderContext, RenderState};
+use lentille_core::window::MainWindow;
+use lentille_render::RenderState;
 use winit::event::WindowEvent;
 use winit::window::Window;
 
