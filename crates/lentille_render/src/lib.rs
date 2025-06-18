@@ -13,8 +13,8 @@ use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
 use wgpu::{
-    Extent3d, Features, Instance, ShaderModule, Surface, TextureDescriptor, TextureDimension,
-    TextureFormat, TextureUsages, TextureViewDescriptor,
+    CommandEncoder, Extent3d, Features, Instance, ShaderModule, Surface, TextureDescriptor,
+    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
 };
 
 use systems::*;
@@ -100,6 +100,13 @@ impl Plugin for RenderPlugin {
             .init_resource::<DefaultPBRMaterial>();
 
         app.add_systems(Last, sys_render)
+            .add_systems(
+                Last,
+                (
+                    sys_create_render_context.in_set(RenderSets::Prepare),
+                    sys_present_output_view.in_set(RenderSets::Present),
+                ),
+            )
             .add_systems(Update, sys_refersh_global_bind_group)
             .add_systems(
                 PostUpdate,
@@ -108,7 +115,42 @@ impl Plugin for RenderPlugin {
             .add_observer(sys_on_resize);
 
         app.add_plugins((TransformPlugin, LightPlugin, CameraPlugin));
+
+        app.configure_sets(
+            Last,
+            (
+                RenderSets::Prepare,
+                RenderSets::FirstDraw.run_if(resource_exists::<RenderContext>),
+                RenderSets::PreDraw.run_if(resource_exists::<RenderContext>),
+                RenderSets::Draw.run_if(resource_exists::<RenderContext>),
+                RenderSets::PostDraw.run_if(resource_exists::<RenderContext>),
+                RenderSets::LastDraw.run_if(resource_exists::<RenderContext>),
+                RenderSets::Present.run_if(resource_exists::<RenderContext>),
+            )
+                .chain(),
+        );
     }
+}
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RenderSets {
+    /// Create RenderContext
+    Prepare,
+    // 5 Draw stages
+    FirstDraw,
+    PreDraw,
+    Draw,
+    PostDraw,
+    LastDraw,
+    /// Submit encoder and present output texture
+    Present,
+}
+
+#[derive(Resource)]
+pub struct RenderContext {
+    pub encoder: CommandEncoder,
+    pub output_view: TextureView,
+    pub output_texture: wgpu::SurfaceTexture,
 }
 
 #[derive(Resource)]
@@ -226,6 +268,34 @@ impl FromWorld for RenderState {
             .expect("Failed to create surface!");
 
         block_on(RenderState::new(&instance, surface, i_width, i_height))
+    }
+}
+
+fn sys_create_render_context(world: &mut World) {
+    world.resource_scope(|world: &mut World, rs: Mut<RenderState>| {
+        let output = rs.surface.get_current_texture().unwrap();
+        let output_view = output.texture.create_view(&Default::default());
+        let encoder = rs
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Main Render Encoder"),
+            });
+
+        world.insert_resource(RenderContext {
+            encoder,
+            output_view,
+            output_texture: output,
+        });
+    });
+}
+
+fn sys_present_output_view(world: &mut World) {
+    if let Some(ctx) = world.remove_resource::<RenderContext>() {
+        world
+            .resource::<RenderState>()
+            .queue
+            .submit(std::iter::once(ctx.encoder.finish()));
+        ctx.output_texture.present();
     }
 }
 

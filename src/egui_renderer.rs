@@ -1,8 +1,14 @@
+use bevy_app::{First, Plugin};
+use bevy_ecs::observer::Trigger;
 use bevy_ecs::prelude::Resource;
+use bevy_ecs::system::{Res, ResMut};
+use bevy_ecs::world::FromWorld;
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
+use lentille_core::window::{MainWindow, WinitWindowEvent};
+use lentille_render::{RenderContext, RenderState};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -11,6 +17,14 @@ pub struct EguiRenderer {
     pub state: State,
     pub renderer: Renderer,
     pub frame_started: bool,
+}
+
+impl FromWorld for EguiRenderer {
+    fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let window = world.resource::<MainWindow>();
+        Self::new(&rs.device, rs.config.format, None, 1, &window.0)
+    }
 }
 
 impl EguiRenderer {

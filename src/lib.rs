@@ -17,7 +17,7 @@ use lentille_render::{
 
 use crate::{
     control::{camera::CameraController, ControlPlugin},
-    egui_renderer::EguiRenderer,
+    editor::EditorPlugin,
 };
 
 mod control;
@@ -29,22 +29,13 @@ pub struct WgpuPbrPlugin;
 impl Plugin for WgpuPbrPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((RenderPlugin, InputPlugin, TimePlugin))
-            .add_plugins(ControlPlugin);
+            .add_plugins((ControlPlugin, EditorPlugin));
 
         app.add_systems(
             Startup,
             (
-                sys_setup_egui_visual,
                 sys_startup_light_and_environment,
                 sys_generate_dragons_scene,
-            ),
-        )
-        .add_systems(
-            PreUpdate,
-            (
-                // self.world.resource_mut::<Time>().update();
-                editor::sys_on_resize_render_target,
-                editor::sys_egui_tiles,
             ),
         )
         .add_systems(Update, sys_update_rotation);
@@ -77,25 +68,6 @@ impl<PB: Bundle, CB: Bundle + Clone> Command for SpawnModelCmd<PB, CB> {
             ));
         }
     }
-}
-
-fn sys_setup_egui_visual(mut egui: ResMut<EguiRenderer>) {
-    let mut visual = Visuals::dark();
-    let ctx = egui.context();
-
-    visual.widgets.noninteractive.bg_stroke.width = 0.0;
-    ctx.set_visuals(visual);
-
-    let font_data =
-        fs::read(AssetPath::Assets("fonts/MiSans-Normal.ttf".to_string()).final_path()).unwrap();
-    ctx.add_font(egui::epaint::text::FontInsert::new(
-        "MiSans",
-        egui::FontData::from_owned(font_data),
-        vec![InsertFontFamily {
-            family: egui::FontFamily::Proportional,
-            priority: egui::epaint::text::FontPriority::Highest,
-        }],
-    ));
 }
 
 pub fn sys_update_rotation(mut q: Query<(&mut Transform, &RotationObject)>, time: Res<Time>) {
