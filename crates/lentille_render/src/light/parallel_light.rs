@@ -5,7 +5,7 @@ use cgmath::{Matrix, Matrix4};
 #[derive(Component)]
 pub struct ParallelLight {
     pub intensity: f32,
-    pub color: Vec4,
+    pub color: Color,
     pub size: f32,
     pub near: f32,
     pub far: f32,
@@ -15,7 +15,7 @@ impl Default for ParallelLight {
     fn default() -> Self {
         Self {
             intensity: 1.0,
-            color: Vec4::new(0.6, 0.6, 0.5, 1.0),
+            color: Color::new(0.6, 0.6, 0.5, 1.0),
             size: 10.,
             near: 1.,
             far: 20.,

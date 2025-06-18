@@ -6,7 +6,11 @@ use lentille_render::{
     defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
 };
 
-use crate::egui_tools::{world_tree, EguiRenderer};
+use gui::components::world_tree;
+
+use crate::egui_renderer::EguiRenderer;
+
+mod gui;
 
 pub enum Pane {
     MainView,

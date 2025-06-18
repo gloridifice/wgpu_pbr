@@ -6,7 +6,6 @@ use egui::{epaint::text::InsertFontFamily, Visuals};
 use lentille_core::{
     input::InputPlugin,
     time::{Time, TimePlugin},
-    Name,
 };
 use lentille_render::{
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
@@ -18,12 +17,12 @@ use lentille_render::{
 
 use crate::{
     control::{camera::CameraController, ControlPlugin},
-    egui_tools::EguiRenderer,
+    egui_renderer::EguiRenderer,
 };
 
 mod control;
 mod editor;
-mod egui_tools;
+mod egui_renderer;
 
 pub struct WgpuPbrPlugin;
 
@@ -106,12 +105,12 @@ pub fn sys_update_rotation(mut q: Query<(&mut Transform, &RotationObject)>, time
     }
 }
 
-fn random_color_vec3() -> Vec3 {
+fn random_color() -> Color {
     let r = rand::random::<f32>();
     let a = rand::random::<f32>();
     let g = (1. - r) * a;
     let b = (1. - r) - g;
-    return Vec3::new(r, g, b);
+    return Color::new(r, g, b, 1.0);
 }
 
 fn generate_point_lights(
@@ -130,12 +129,12 @@ fn generate_point_lights(
         let z = rand::random::<f32>() * z_size;
         vec.push((
             PointLight {
-                color: random_color_vec3().extend(1.0),
+                color: random_color(),
                 intensity: rand::random::<f32>() * light_intensity_scale + light_intensity_offset,
                 ..Default::default()
             },
             Transform::with_position(Vec3::new(x, y, z)),
-            Name("点光源".to_string()),
+            Name::new("点光源"),
         ))
     }
     vec.into_iter().for_each(|it| {
@@ -167,7 +166,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform.clone(),
-                Name(format!("龙模型 No_{}", i)),
+                Name::new(format!("龙模型 No_{}", i)),
                 RotationObject { speed: 0.5 },
             ),
             child_bundle: (
@@ -185,7 +184,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform,
-                Name(format!("龙模型 No_{}", i)),
+                Name::new(format!("龙模型 No_{}", i)),
                 RotationObject { speed: 0.5 },
             ),
             child_bundle: (
@@ -213,11 +212,11 @@ fn sys_generate_dragons_scene(world: &mut World) {
             parent_bundle: (
                 transform.clone(),
                 RotationObject { speed: 0.5 },
-                Name(format!("透明龙模型 No_{}", i)),
+                Name::new(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
                 PBRMaterial {
-                    color: Some(Vec4::new(1.0, 1.0, 1.0, 0.0)),
+                    color: Some(Color::WHITE.with_alpha(0.0)),
                     metallic: Some(value),
                     alpha_mode: Some(AlphaMode::Blend),
                     ..Default::default()
@@ -229,10 +228,10 @@ fn sys_generate_dragons_scene(world: &mut World) {
         transform.position.y -= 3.0;
         commands.queue(SpawnModelCmd {
             model: dragon_model.clone(),
-            parent_bundle: (transform, Name(format!("透明龙模型 No_{}", i))),
+            parent_bundle: (transform, Name::new(format!("透明龙模型 No_{}", i))),
             child_bundle: (
                 PBRMaterial {
-                    color: Some(Vec4::new(1.0, 1.0, 1.0, 0.0)),
+                    color: Some(Color::WHITE.with_alpha(0.0)),
                     reflectance: Some(value),
                     alpha_mode: Some(AlphaMode::Blend),
                     ..Default::default()
@@ -257,11 +256,11 @@ fn sys_generate_dragons_scene(world: &mut World) {
             parent_bundle: (
                 transform.clone(),
                 RotationObject { speed: 0.5 },
-                Name(format!("透明龙模型 No_{}", i)),
+                Name::new(format!("透明龙模型 No_{}", i)),
             ),
             child_bundle: (
                 PBRMaterial {
-                    color: Some(random_color_vec3().extend(value)),
+                    color: Some(random_color().with_alpha(value)),
                     metallic: Some(value),
                     alpha_mode: Some(AlphaMode::Blend),
                     ..Default::default()
@@ -275,12 +274,12 @@ fn sys_generate_dragons_scene(world: &mut World) {
             model: dragon_model.clone(),
             parent_bundle: (
                 transform,
-                Name(format!("透明龙模型 No_{}", i)),
+                Name::new(format!("透明龙模型 No_{}", i)),
                 RotationObject { speed: 0.5 },
             ),
             child_bundle: (
                 PBRMaterial {
-                    color: Some(random_color_vec3().extend(value)),
+                    color: Some(random_color().with_alpha(value)),
                     reflectance: Some(value),
                     alpha_mode: Some(AlphaMode::Blend),
                     ..Default::default()
@@ -297,7 +296,7 @@ fn sys_generate_dragons_scene(world: &mut World) {
     //             .position(Vec3::new_y(-1.0))
     //             .build()
     //             .unwrap(),
-    //         Name("平面".to_string()),
+    //         Name::new("平面".to_string()),
     //     ),
     //     child_bundle: (
     //         CastShadow,
@@ -329,7 +328,7 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
                 .rotation(Quat::from_angle_x(Deg(90.0)))
                 .build()
                 .unwrap(),
-            Name(name),
+            Name::new(name),
         ),
         child_bundle: (CastShadow, MainPassObject),
     });
@@ -358,7 +357,7 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
                 .scale(Vec3::one() * 0.1)
                 .build()
                 .unwrap(),
-            Name("Room".to_string()),
+            Name::new("Room".to_string()),
         ),
         child_bundle: (CastShadow, MainPassObject),
     });
@@ -388,7 +387,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
             .rotation(Euler::new(Deg(0.0), Deg(-4.0), Deg(0.0)).into())
             .build()
             .unwrap(),
-        Name("相机".to_string()),
+        Name::new("相机"),
     ));
 
     SpawnModelCmd {
@@ -400,7 +399,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
                 .build()
                 .unwrap(),
             ParallelLight::default(),
-            Name("平行光源".to_string()),
+            Name::new("平行光源"),
         ),
         child_bundle: (MainPassObject,),
     }

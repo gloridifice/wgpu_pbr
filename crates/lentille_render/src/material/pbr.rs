@@ -100,7 +100,7 @@ pub struct PBRMaterialOverride {
 pub struct PBRMaterial {
     pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
     pub normal_texture: Option<Arc<UploadedImageWithSampler>>,
-    pub color: Option<Vec4>,
+    pub color: Option<Color>,
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,
     pub reflectance: Option<f32>,
@@ -172,7 +172,7 @@ pub fn sys_update_override_pbr_material_bind_group(
                     .map(|it| it.reflectance)
                     .unwrap_or(Default::default()),
             ),
-            color: pbr_mat.color.unwrap_or(Vec4::one()).into(),
+            color: pbr_mat.color.unwrap_or(Color::WHITE).into_array(),
             alpha_mode: pbr_mat.alpha_mode.unwrap_or(AlphaMode::Opaque),
         };
         override_pbr_mat.material = pbr_mat.clone();

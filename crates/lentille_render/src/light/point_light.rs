@@ -4,7 +4,7 @@ use bevy_ecs::prelude::*;
 #[derive(Component, Clone)]
 #[require(Transform)]
 pub struct PointLight {
-    pub color: Vec4,
+    pub color: Color,
     pub intensity: f32,
     pub distance: Option<f32>,
     pub decay: f32,
@@ -23,7 +23,7 @@ pub struct RawPointLight {
 impl Default for PointLight {
     fn default() -> Self {
         Self {
-            color: Vec4::one(),
+            color: Color::WHITE,
             intensity: 1.0,
             distance: None,
             decay: 1.0,
@@ -35,7 +35,7 @@ impl PointLight {
     pub fn raw(&self, transform: &WorldTransform) -> RawPointLight {
         let pos = transform.position;
         RawPointLight {
-            color: self.color.into(),
+            color: self.color.into_array(),
             intensity: self.intensity,
             distance: self
                 .distance

@@ -1,141 +1,9 @@
+use bevy_ecs::prelude::*;
+use egui::*;
+use lentille_render::prelude::*;
 use std::any::type_name;
 
-use bevy_ecs::entity::Entity;
-use bevy_ecs::prelude::Resource;
-use bevy_ecs::world::World;
-use egui::{Color32, Context, DragValue, Ui, Widget};
-use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
-use egui_winit::State;
-use winit::event::WindowEvent;
-use winit::window::Window;
-
-use lentille_render::prelude::*;
-
-#[derive(Resource)]
-pub struct EguiConfig {
-    pub egui_scale_factor: f32,
-}
-impl Default for EguiConfig {
-    fn default() -> Self {
-        Self {
-            egui_scale_factor: 0.8,
-        }
-    }
-}
-
-#[derive(Resource)]
-pub struct EguiRenderer {
-    pub state: State,
-    pub renderer: Renderer,
-    pub frame_started: bool,
-}
-
-impl EguiRenderer {
-    pub fn context(&self) -> &Context {
-        self.state.egui_ctx()
-    }
-
-    pub fn new(
-        device: &Device,
-        output_color_format: TextureFormat,
-        output_depth_format: Option<TextureFormat>,
-        msaa_samples: u32,
-        window: &Window,
-    ) -> EguiRenderer {
-        let egui_context = Context::default();
-
-        let egui_state = egui_winit::State::new(
-            egui_context,
-            egui::viewport::ViewportId::ROOT,
-            &window,
-            Some(window.scale_factor() as f32),
-            None,
-            Some(2 * 1024), // default dimension is 2048
-        );
-        let egui_renderer = Renderer::new(
-            device,
-            output_color_format,
-            output_depth_format,
-            msaa_samples,
-            true,
-        );
-
-        EguiRenderer {
-            state: egui_state,
-            renderer: egui_renderer,
-            frame_started: false,
-        }
-    }
-
-    pub fn handle_input(&mut self, window: &Window, event: &WindowEvent) {
-        let _ = self.state.on_window_event(window, event);
-    }
-
-    pub fn ppp(&mut self, v: f32) {
-        self.context().set_pixels_per_point(v);
-    }
-
-    pub fn begin_frame(&mut self, window: &Window) {
-        let raw_input = self.state.take_egui_input(window);
-        self.state.egui_ctx().begin_pass(raw_input);
-        self.frame_started = true;
-    }
-
-    pub fn end_frame_and_draw(
-        &mut self,
-        device: &Device,
-        queue: &Queue,
-        encoder: &mut CommandEncoder,
-        window: &Window,
-        window_surface_view: &TextureView,
-        screen_descriptor: ScreenDescriptor,
-    ) {
-        if !self.frame_started {
-            panic!("begin_frame must be called before end_frame_and_draw can be called!");
-        }
-
-        self.ppp(screen_descriptor.pixels_per_point);
-
-        let full_output = self.state.egui_ctx().end_pass();
-
-        self.state
-            .handle_platform_output(window, full_output.platform_output);
-
-        let tris = self
-            .state
-            .egui_ctx()
-            .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
-        for (id, image_delta) in &full_output.textures_delta.set {
-            self.renderer
-                .update_texture(device, queue, *id, image_delta);
-        }
-        self.renderer
-            .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
-        let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                view: window_surface_view,
-                resolve_target: None,
-                ops: egui_wgpu::wgpu::Operations {
-                    load: egui_wgpu::wgpu::LoadOp::Load,
-                    store: StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            timestamp_writes: None,
-            label: Some("egui main render pass"),
-            occlusion_query_set: None,
-        });
-
-        self.renderer
-            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
-        for x in &full_output.textures_delta.free {
-            self.renderer.free_texture(x)
-        }
-
-        self.frame_started = false;
-    }
-}
+use crate::control::camera::CameraController;
 
 fn value(ui: &mut Ui, v: &mut f32) {
     ui.add_sized([40.0, 20.0], DragValue::new(v).max_decimals(1).speed(0.05));
@@ -148,10 +16,20 @@ fn label_value(ui: &mut Ui, text: &str, v: &mut f32) {
     });
 }
 
-fn color_vec4_rgba(ui: &mut Ui, color: &mut Vec4) -> egui::Response {
-    let mut c: Color32 = color.into();
+fn color_rgba(ui: &mut Ui, color: &mut Color) -> egui::Response {
+    let mut c: Color32 = Color32::from_rgba_unmultiplied(
+        (color.r() * 255.0) as u8,
+        (color.g() * 255.0) as u8,
+        (color.g() * 255.0) as u8,
+        (color.a() * 255.0) as u8,
+    );
     let ret = ui.color_edit_button_srgba(&mut c);
-    *color = Vec4::from_color32(&c);
+    *color = Color::new(
+        c.r() as f32 / 255.0,
+        c.g() as f32 / 255.0,
+        c.b() as f32 / 255.0,
+        c.a() as f32 / 255.0,
+    );
     ret
 }
 
@@ -224,7 +102,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
     let display_name = {
         let mut ret = format!(" #{}", id.index());
         if let Some(name) = world.get::<Name>(id) {
-            ret.insert_str(0, &name.0);
+            ret.insert_str(0, name.as_str());
         }
         ret
     };
@@ -248,7 +126,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
         impl_component_ui!(PointLight, world, id, ui, ui, light, {
             ui.horizontal(|ui| {
                 ui.label("Color");
-                color_vec4_rgba(ui, &mut light.color);
+                color_rgba(ui, &mut light.color);
             });
             label_value(ui, "Intensity", &mut light.intensity);
             label_value(ui, "Iecay", &mut light.decay);
@@ -278,10 +156,10 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                     ui.end_row();
 
                     ui.label("Color");
-                    option_value(ui, &mut mat.color, Vec4::one(), |ui, it| {
-                        let mut array_color = (*it).into();
+                    option_value(ui, &mut mat.color, Color::WHITE, |ui, it| {
+                        let mut array_color = (*it).into_array();
                         ui.color_edit_button_rgba_unmultiplied(&mut array_color);
-                        *it = array_color.into();
+                        *it = Color::from_linear_array(array_color);
                     });
                     ui.end_row();
                 });
@@ -301,7 +179,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
                     ui.end_row();
 
                     ui.label("Color");
-                    color_vec4_rgba(ui, &mut light.color);
+                    color_rgba(ui, &mut light.color);
                     ui.end_row();
                 });
         });

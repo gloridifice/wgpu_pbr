@@ -80,7 +80,7 @@ impl LightUniform {
     ) -> Self {
         Self {
             direction: transform.forward().into(),
-            color: parallel.color.into(),
+            color: parallel.color.into_array(),
             intensity: parallel.intensity,
             padding2: [0f32; 3],
             padding1: 0.,

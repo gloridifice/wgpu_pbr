@@ -4131,7 +4131,6 @@ dependencies = [
  "bevy_ecs",
  "bevy_log",
  "bevy_reflect",
- "cgmath",
  "color-backtrace",
  "egui",
  "egui-wgpu",

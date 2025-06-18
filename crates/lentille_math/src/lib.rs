@@ -11,6 +11,7 @@ pub type Vec4 = cgmath::Vector4<f32>;
 pub type Quat = cgmath::Quaternion<f32>;
 pub type Mat4 = cgmath::Matrix4<f32>;
 pub type Mat3 = cgmath::Matrix3<f32>;
+pub type Pnt3 = cgmath::Point3<f32>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Color {
@@ -18,7 +19,9 @@ pub struct Color {
 }
 
 impl Color {
-    pub fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
+    pub const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+
+    pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
             vec4: Vec4::new(r, g, b, a),
         }
@@ -38,6 +41,19 @@ impl Color {
 
     pub fn a(&self) -> f32 {
         self.vec4.w
+    }
+
+    pub fn into_array(self) -> [f32; 4] {
+        [self.r(), self.g(), self.b(), self.a()]
+    }
+
+    pub fn with_alpha(mut self, a: f32) -> Self {
+        self.vec4.z = a;
+        self
+    }
+
+    pub fn from_linear_array(array: [f32; 4]) -> Self {
+        Color { vec4: array.into() }
     }
 }
 
