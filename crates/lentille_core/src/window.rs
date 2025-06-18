@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use bevy_app::{App, AppExit, Plugin};
+use bevy_ecs::event::Event;
 use bevy_ecs::prelude::*;
-use pollster::block_on;
 use winit::{
     application::ApplicationHandler, dpi::PhysicalSize, event::WindowEvent, event_loop::EventLoop,
     window::Window,
@@ -34,20 +34,28 @@ pub fn my_runner(app: App) -> AppExit {
     }
 }
 
+#[derive(Event, Clone)]
+pub struct MainWindowCreatedEvent {
+    pub window: Arc<Window>,
+}
+
 pub struct MyApplicationHandler {
     app: App,
 }
 
 impl ApplicationHandler for MyApplicationHandler {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = event_loop
-            .create_window(Window::default_attributes())
-            .unwrap();
-
-        let window = Arc::new(window);
-        // TODO EguiRenderer and RenderState need to be migrated into there crate
+        let window = Arc::new(
+            event_loop
+                .create_window(Window::default_attributes())
+                .unwrap(),
+        );
 
         self.app.insert_resource(MainWindow(Arc::clone(&window)));
+
+        self.app.world_mut().trigger(MainWindowCreatedEvent {
+            window: Arc::clone(&window),
+        });
 
         window.request_redraw();
     }

@@ -13,7 +13,7 @@ use lentille_core::{
 use lentille_render::{
     bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
     defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
-    RenderContext, RenderSets,
+    FrameRenderContext, RenderSets,
 };
 
 use components::world_tree;
@@ -22,9 +22,9 @@ use crate::egui_renderer::EguiRenderer;
 
 pub mod components;
 
-pub struct EditorEguiPlugin;
+pub struct EditorGuiPlugin;
 
-impl Plugin for EditorEguiPlugin {
+impl Plugin for EditorGuiPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(EguiRendererPlugin)
             .init_resource::<EguiRenderer>()
@@ -54,7 +54,7 @@ fn sys_begin_frame(mut egui_renderer: ResMut<EguiRenderer>, window: Res<MainWind
 fn sys_end_frame_and_draw(
     mut egui_renderer: ResMut<EguiRenderer>,
     rs: Res<RenderState>,
-    mut render_context: ResMut<RenderContext>,
+    mut render_context: ResMut<FrameRenderContext>,
     window: Res<MainWindow>,
     egui_config: Res<EguiConfig>,
 ) {
@@ -63,7 +63,7 @@ fn sys_end_frame_and_draw(
         pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
 
-    let RenderContext {
+    let FrameRenderContext {
         encoder,
         output_view,
         ..

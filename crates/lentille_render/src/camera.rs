@@ -5,7 +5,7 @@ use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::Single;
-use bevy_ecs::{prelude::Resource, world::FromWorld};
+use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::BufferDescriptor;
@@ -18,15 +18,18 @@ pub(crate) struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_resource::<CameraBuffer>()
-            .add_systems(PostUpdate, sys_update_camera_uniform);
+        app.add_systems(PostUpdate, sys_update_camera_uniform);
     }
 }
 
-#[derive(Resource)]
+#[derive(Component)]
 pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
 }
+
+#[derive(Component, Clone, Copy)]
+#[require(Camera)]
+pub struct ActiveCamera;
 
 #[derive(Component, Clone)]
 #[require(Transform)]
@@ -108,17 +111,30 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 );
 
 pub fn sys_update_camera_uniform(
-    camera_buffer: Res<CameraBuffer>,
-    single: Single<(&mut Camera, &WorldTransform), Or<(Changed<Camera>, Changed<WorldTransform>)>>,
+    mut commands: Commands,
+    single: Single<
+        (Entity, &mut Camera, &WorldTransform, Option<&CameraBuffer>),
+        (
+            With<ActiveCamera>,
+            Or<(Changed<Camera>, Changed<WorldTransform>)>,
+        ),
+    >,
     rs: Res<RenderState>,
 ) {
-    let (mut camera, transform) = single.into_inner();
+    let (id, mut camera, transform, camera_buffer) = single.into_inner();
 
-    camera.view_proj = camera.build_view_projection_matrix(transform);
+    match camera_buffer {
+        Some(camera_buffer) => {
+            camera.view_proj = camera.build_view_projection_matrix(transform);
 
-    rs.queue.write_buffer(
-        &camera_buffer.buffer,
-        0,
-        bytemuck::cast_slice(&[camera.get_uniform(transform)]),
-    );
+            rs.queue.write_buffer(
+                &camera_buffer.buffer,
+                0,
+                bytemuck::cast_slice(&[camera.get_uniform(transform)]),
+            );
+        }
+        None => {
+            commands.entity(id).insert(CameraBuffer::new(&rs.device));
+        }
+    };
 }

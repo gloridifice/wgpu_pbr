@@ -1,4 +1,5 @@
 use crate::{
+    camera::ActiveCamera,
     prelude::*,
     skybox::{DefaultSkybox, Skybox, SkyboxSHBuffer},
 };
@@ -83,11 +84,13 @@ impl FromWorld for GlobalUniformBuffer {
 fn create_bind_group(world: &mut World, layout: &BindGroupLayout) -> Vec<Arc<BindGroup>> {
     let mut skybox = world.query::<&Skybox>();
     let skybox_texture = skybox
-        .get_single(world)
+        .single(world)
         .ok()
         .and_then(|it| it.texture.as_ref())
         .unwrap_or(&world.resource::<DefaultSkybox>().texture);
-    let camera = world.resource::<CameraBuffer>();
+    let camera = world
+        .query_filtered::<&CameraBuffer, With<ActiveCamera>>()
+        .single(world); //TODO
     let light = world.resource::<LightUnifromBuffer>();
     let skybox_sh = world.resource::<SkyboxSHBuffer>();
     let shadow_map = world.resource::<ShadowMap>();

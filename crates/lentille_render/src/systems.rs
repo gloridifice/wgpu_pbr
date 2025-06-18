@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    MainPassObject, PingPongImages,
+    FrameRenderContext, MainPassObject, PingPongImages,
     camera::Camera,
     defered_rendering::{
         MainPipeline,
@@ -14,7 +14,6 @@ use crate::{
     utils::cube::CubeVerticesBuffer,
 };
 use bevy_ecs::prelude::*;
-use wgpu::{CommandEncoder, TextureView};
 
 use crate::bindings::global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd};
 
@@ -30,14 +29,8 @@ const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
     a: 1.0,
 };
 
-pub struct PassRenderContext {
-    pub encoder: CommandEncoder,
-    pub output_view: TextureView,
-    pub output_texture: wgpu::SurfaceTexture,
-}
-
 pub fn sys_render_shadow_mapping_pass(
-    InMut(ctx): InMut<PassRenderContext>,
+    mut ctx: ResMut<FrameRenderContext>,
     shadow_map: Res<ShadowMap>,
     shadow_mapping_pipeline: Res<ShadowMappingPipeline>,
     shadow_map_global_bind_group: Res<ShadowMapGlobalBindGroup>,
@@ -73,7 +66,7 @@ pub fn sys_render_shadow_mapping_pass(
 }
 
 pub fn sys_render_write_g_buffer_pass(
-    InMut(ctx): InMut<PassRenderContext>,
+    mut ctx: ResMut<FrameRenderContext>,
     g_buffer_textures: Res<GBufferTexturesBindGroup>,
     depth_target: Res<DepthRenderTarget>,
     main_pipeline: Res<WriteGBufferPipeline>,
@@ -114,7 +107,7 @@ pub fn sys_render_write_g_buffer_pass(
 }
 
 pub fn sys_render_main_pass(
-    InMut(ctx): InMut<PassRenderContext>,
+    mut ctx: ResMut<FrameRenderContext>,
     main_target: Res<ColorRenderTarget>,
     main_pipeline: Res<MainPipeline>,
     g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
@@ -162,7 +155,7 @@ pub fn sys_render_main_pass(
 }
 
 pub fn sys_render_transparent(
-    InMut(ctx): InMut<PassRenderContext>,
+    mut ctx: ResMut<FrameRenderContext>,
     mut main_target: ResMut<ColorRenderTarget>,
     transparent_pipeline: Res<TransparentPipeline>,
     main_global_bind_group: Res<GlobalBindGroup>,

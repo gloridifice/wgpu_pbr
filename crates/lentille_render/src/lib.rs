@@ -4,10 +4,10 @@ use std::sync::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use defered_rendering::MainPipeline;
-use lentille_core::window::{MainWindow, ResizeEvent};
+use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent};
 use material::pbr::{GltfMaterial, UploadedPBRMaterial};
 use pollster::block_on;
 use prelude::*;
@@ -58,96 +58,165 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_resource::<RenderState>()
-            .init_resource::<ShaderLoader>()
-            .init_resource::<WhiteTexture>()
-            .init_resource::<NormalDefaultTexture>()
-            .init_resource::<dfg::DFGTexture>()
-            .init_resource::<mipmap::DefaultMipmapGenShader>()
-            .init_resource::<MissingTexture>()
-            .init_resource::<material::buffer_material::BufferMaterialManager>()
-            .init_resource::<RenderTargetSize>()
-            .init_resource::<ColorRenderTarget>()
-            .init_resource::<DepthRenderTarget>()
-            .init_resource::<utils::cube::CubeVerticesBuffer>()
-            .init_resource::<cubemap::CubemapVertexShader>()
-            .init_resource::<cubemap::CubemapConvertingShader>()
-            .init_resource::<cubemap::CubemapMatrixBindGroups>()
-            .init_resource::<cubemap::CubemapConverterRgba16Float>()
-            .init_resource::<skybox::DefaultSkybox>()
-            .init_resource::<GlobalUniformBuffer>()
-            // --- Render resource ---
-            .init_resource::<skybox::SkyboxSHBuffer>()
-            .init_resource::<shadow_mapping::ShadowMap>()
-            // .insert_resource::<ShadowMapEguiTextureId>()
-            .init_resource::<FullScreenVertexShader>()
-            // 0. Layouts
-            .init_resource::<ObjectBindGroupLayout>()
-            .init_resource::<PBRMaterialBindGroupLayout>()
-            // 1. Globals
-            .init_resource::<shadow_mapping::ShadowMapGlobalBindGroup>()
-            .init_resource::<DynamicLightBindGroup>()
-            // 1.5
-            .init_resource::<defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup>()
-            .init_resource::<GlobalBindGroup>()
-            // 2. Pipelines
-            .init_resource::<defered_rendering::write_g_buffer_pipeline::WriteGBufferPipeline>()
-            .init_resource::<skybox::SkyboxPipeline>()
-            .init_resource::<MainPipeline>()
-            .init_resource::<transparent::TransparentPipeline>()
-            .init_resource::<shadow_mapping::ShadowMappingPipeline>()
-            // --- Other resources ---
-            .init_resource::<DefaultPBRMaterial>();
-
-        app.add_systems(Last, sys_render)
-            .add_systems(
-                Last,
-                (
-                    sys_create_render_context.in_set(RenderSets::Prepare),
-                    sys_present_output_view.in_set(RenderSets::Present),
-                ),
-            )
-            .add_systems(Update, sys_refersh_global_bind_group)
-            .add_systems(
-                PostUpdate,
-                material::pbr::sys_update_override_pbr_material_bind_group,
-            )
-            .add_observer(sys_on_resize);
-
         app.add_plugins((TransformPlugin, LightPlugin, CameraPlugin));
+        app.init_resource::<ShaderLoader>();
 
+        // Configure RenderSets
         app.configure_sets(
             Last,
             (
                 RenderSets::Prepare,
-                RenderSets::FirstDraw.run_if(resource_exists::<RenderContext>),
-                RenderSets::PreDraw.run_if(resource_exists::<RenderContext>),
-                RenderSets::Draw.run_if(resource_exists::<RenderContext>),
-                RenderSets::PostDraw.run_if(resource_exists::<RenderContext>),
-                RenderSets::LastDraw.run_if(resource_exists::<RenderContext>),
-                RenderSets::Present.run_if(resource_exists::<RenderContext>),
+                RenderSets::PreDraw.run_if(resource_exists::<FrameRenderContext>),
+                // Opaque
+                RenderSets::BeforeDrawOpaque.run_if(resource_exists::<FrameRenderContext>),
+                RenderSets::DrawOpaque.run_if(resource_exists::<FrameRenderContext>),
+                RenderSets::AfterDrawOpaque.run_if(resource_exists::<FrameRenderContext>),
+                // Transparent
+                RenderSets::BeforeDrawTransparent.run_if(resource_exists::<FrameRenderContext>),
+                RenderSets::DrawTransparent.run_if(resource_exists::<FrameRenderContext>),
+                RenderSets::AfterDrawTransparent.run_if(resource_exists::<FrameRenderContext>),
+                // Last and present
+                RenderSets::LastDraw.run_if(resource_exists::<FrameRenderContext>),
+                RenderSets::Present.run_if(resource_exists::<FrameRenderContext>),
             )
                 .chain(),
         );
+
+        // Add basics render systems
+        app.add_systems(
+            Last,
+            (
+                sys_create_render_context.in_set(RenderSets::Prepare),
+                sys_present_output_view.in_set(RenderSets::Present),
+            ),
+        )
+        // 初始化 RenderState 和初始化资源
+        .add_observer(sys_init_render_state_and_resources)
+        .add_systems(InitRenderResource, sys_init_render_resources)
+        // 一般系统
+        .add_systems(Update, sys_refersh_global_bind_group)
+        .add_systems(
+            PostUpdate,
+            material::pbr::sys_update_override_pbr_material_bind_group,
+        )
+        .add_observer(sys_on_resize);
+
+        // Add frame render systems
+        app.add_systems(
+            Last,
+            (
+                sys_render_shadow_mapping_pass.in_set(RenderSets::PreDraw),
+                (sys_render_write_g_buffer_pass, sys_render_main_pass)
+                    .chain()
+                    .in_set(RenderSets::DrawOpaque),
+                sys_render_transparent.in_set(RenderSets::DrawTransparent),
+            ),
+        );
     }
 }
+
+fn sys_init_render_state_and_resources(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+        #[cfg(not(target_arch = "wasm32"))]
+        backends: wgpu::Backends::PRIMARY,
+        #[cfg(target_arch = "wasm32")]
+        backends: wgpu::Backends::GL,
+        ..Default::default()
+    });
+
+    let u_width = 1600;
+    let u_height = 900;
+
+    let window = Arc::clone(&event.window);
+    let _ = window.request_inner_size(PhysicalSize::new(u_width, u_height));
+
+    let surface = instance
+        .create_surface(Arc::clone(&window))
+        .expect("Failed to create surface!");
+
+    world.insert_resource(block_on(RenderState::new(
+        &instance, surface, u_width, u_height,
+    )));
+
+    world.run_schedule(InitRenderResource);
+}
+
+fn sys_init_render_resources(world: &mut World) {
+    world.init_resource::<WhiteTexture>();
+    world.init_resource::<NormalDefaultTexture>();
+    world.init_resource::<dfg::DFGTexture>();
+    world.init_resource::<mipmap::DefaultMipmapGenShader>();
+    world.init_resource::<MissingTexture>();
+    world.init_resource::<material::buffer_material::BufferMaterialManager>();
+    world.init_resource::<RenderTargetSize>();
+    world.init_resource::<ColorRenderTarget>();
+    world.init_resource::<DepthRenderTarget>();
+    world.init_resource::<utils::cube::CubeVerticesBuffer>();
+    world.init_resource::<cubemap::CubemapVertexShader>();
+    world.init_resource::<cubemap::CubemapConvertingShader>();
+    world.init_resource::<cubemap::CubemapMatrixBindGroups>();
+    world.init_resource::<cubemap::CubemapConverterRgba16Float>();
+    world.init_resource::<skybox::DefaultSkybox>();
+    world.init_resource::<GlobalUniformBuffer>();
+    // --- Render resource ---
+    world.init_resource::<skybox::SkyboxSHBuffer>();
+    world.init_resource::<shadow_mapping::ShadowMap>();
+    // .insert_resource::<ShadowMapEguiTextureId>()
+    world.init_resource::<FullScreenVertexShader>();
+    // 0. Layouts
+    world.init_resource::<ObjectBindGroupLayout>();
+    world.init_resource::<PBRMaterialBindGroupLayout>();
+    // 1. Globals
+    world.init_resource::<shadow_mapping::ShadowMapGlobalBindGroup>();
+    world.init_resource::<DynamicLightBindGroup>();
+    // 1.5
+    world.init_resource::<defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup>();
+    world.init_resource::<GlobalBindGroup>();
+    // 2. Pipelines
+    world.init_resource::<defered_rendering::write_g_buffer_pipeline::WriteGBufferPipeline>();
+    world.init_resource::<skybox::SkyboxPipeline>();
+    world.init_resource::<MainPipeline>();
+    world.init_resource::<transparent::TransparentPipeline>();
+    world.init_resource::<shadow_mapping::ShadowMappingPipeline>();
+    // --- Other resources ---
+    world.init_resource::<DefaultPBRMaterial>();
+}
+
+/// 用于初始化渲染相关的资源，触发时机：在创建窗口和创建 RenderState 之后，在 Startup 之前；
+#[derive(Debug, ScheduleLabel, PartialEq, Eq, Hash, Clone, Copy)]
+pub struct InitRenderResource;
 
 #[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RenderSets {
     /// Create RenderContext
     Prepare,
     // 5 Draw stages
-    FirstDraw,
     PreDraw,
-    Draw,
-    PostDraw,
+
+    // Opaque
+    BeforeDrawOpaque,
+    DrawOpaque,
+    AfterDrawOpaque,
+
+    // Transparent
+    BeforeDrawTransparent,
+    DrawTransparent,
+    AfterDrawTransparent,
+
+    // Post-processing
+    DrawPostProcessing,
+
     LastDraw,
     /// Submit encoder and present output texture
     Present,
 }
 
+/// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
+/// 其只有在 Prepare 阶段之后存在，并在 Present 阶段删除。
+///
+/// 所以只能在这两个阶段之间的阶段使用，见 RenderSets.
 #[derive(Resource)]
-pub struct RenderContext {
+pub struct FrameRenderContext {
     pub encoder: CommandEncoder,
     pub output_view: TextureView,
     pub output_texture: wgpu::SurfaceTexture,
@@ -247,30 +316,6 @@ impl RenderState {
     }
 }
 
-impl FromWorld for RenderState {
-    fn from_world(world: &mut World) -> Self {
-        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
-            ..Default::default()
-        });
-
-        let i_width = 1600;
-        let i_height = 900;
-
-        let window = Arc::clone(&world.resource::<MainWindow>().0);
-        let _ = window.request_inner_size(PhysicalSize::new(i_width, i_height));
-
-        let surface = instance
-            .create_surface(Arc::clone(&window))
-            .expect("Failed to create surface!");
-
-        block_on(RenderState::new(&instance, surface, i_width, i_height))
-    }
-}
-
 fn sys_create_render_context(world: &mut World) {
     world.resource_scope(|world: &mut World, rs: Mut<RenderState>| {
         let output = rs.surface.get_current_texture().unwrap();
@@ -281,7 +326,7 @@ fn sys_create_render_context(world: &mut World) {
                 label: Some("Main Render Encoder"),
             });
 
-        world.insert_resource(RenderContext {
+        world.insert_resource(FrameRenderContext {
             encoder,
             output_view,
             output_texture: output,
@@ -290,62 +335,13 @@ fn sys_create_render_context(world: &mut World) {
 }
 
 fn sys_present_output_view(world: &mut World) {
-    if let Some(ctx) = world.remove_resource::<RenderContext>() {
+    if let Some(ctx) = world.remove_resource::<FrameRenderContext>() {
         world
             .resource::<RenderState>()
             .queue
             .submit(std::iter::once(ctx.encoder.finish()));
         ctx.output_texture.present();
     }
-}
-
-fn sys_render(world: &mut World) {
-    let window = Arc::clone(&world.resource::<MainWindow>().0);
-
-    let mut ctx = world.resource_scope(|_world, render_state: Mut<RenderState>| {
-        let output = render_state.surface.get_current_texture().unwrap();
-        let output_view = output.texture.create_view(&Default::default());
-        let encoder = render_state
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
-
-        PassRenderContext {
-            encoder,
-            output_view,
-            output_texture: output,
-        }
-    });
-
-    // PASS: Shadow Mapping -----
-    world
-        .run_system_cached_with(sys_render_shadow_mapping_pass, &mut ctx)
-        .unwrap();
-    // --------------------------
-
-    // PASS: Main ---------------
-    world
-        .run_system_cached_with(sys_render_write_g_buffer_pass, &mut ctx)
-        .unwrap();
-    world
-        .run_system_cached_with(sys_render_main_pass, &mut ctx)
-        .unwrap();
-    // -------------------------
-
-    world
-        .run_system_cached_with(sys_render_transparent, &mut ctx)
-        .unwrap();
-
-    // PASS: Render Egui ----------
-    //TODO
-
-    // End Draw Objects ------------
-    world
-        .resource::<RenderState>()
-        .queue
-        .submit(std::iter::once(ctx.encoder.finish()));
-    ctx.output_texture.present();
 }
 
 pub static COLOR_TARGET_INDEX: LazyLock<AtomicUsize> = LazyLock::new(|| AtomicUsize::new(0));
