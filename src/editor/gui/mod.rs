@@ -1,6 +1,6 @@
 use std::fs;
 
-use bevy_app::{First, Last, Plugin, PreUpdate, Startup, Update};
+use bevy_app::{First, Last, Plugin, PreUpdate, Startup};
 use bevy_ecs::prelude::*;
 use egui::{
     epaint::text::InsertFontFamily, load::SizedTexture, CentralPanel, PointerButton, Visuals,
