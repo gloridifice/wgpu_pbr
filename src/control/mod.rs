@@ -41,8 +41,11 @@ pub fn sys_control(
 }
 
 pub fn sys_control_state(control_state: ResMut<ControlState>, main_window: Res<MainWindow>) {
-    main_window.0.set_cursor_visible(!control_state.is_focused);
-    let _ = main_window.0.set_cursor_grab(if control_state.is_focused {
+    let Some(main_window) = main_window.0.as_ref() else {
+        return;
+    };
+    main_window.set_cursor_visible(!control_state.is_focused);
+    let _ = main_window.set_cursor_grab(if control_state.is_focused {
         winit::window::CursorGrabMode::Locked
     } else {
         winit::window::CursorGrabMode::None

@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use crate::{InitRenderResource, prelude::*};
 use bevy_app::{Plugin, PostUpdate};
-use bevy_ecs::{prelude::*, world};
+use bevy_ecs::prelude::*;
 use parallel_light::ParallelLight;
 use point_light::{PointLight, RawPointLight};
 

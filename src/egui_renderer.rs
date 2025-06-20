@@ -20,7 +20,13 @@ impl FromWorld for EguiRenderer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
         let rs = world.resource::<RenderState>();
         let window = world.resource::<MainWindow>();
-        Self::new(&rs.device, rs.config.format, None, 1, &window.0)
+        Self::new(
+            &rs.device,
+            rs.config.format,
+            None,
+            1,
+            window.0.as_ref().unwrap(),
+        )
     }
 }
 

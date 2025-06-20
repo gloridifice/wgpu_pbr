@@ -27,8 +27,7 @@ pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
 }
 
-#[derive(Component, Clone, Copy)]
-#[require(Camera)]
+#[derive(Component, Clone, Copy, Default)]
 pub struct ActiveCamera;
 
 #[derive(Component, Clone)]

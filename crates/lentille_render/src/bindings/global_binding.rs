@@ -82,15 +82,19 @@ impl FromWorld for GlobalUniformBuffer {
 }
 
 fn create_bind_group(world: &mut World, layout: &BindGroupLayout) -> Vec<Arc<BindGroup>> {
+    let camera = Arc::clone(
+        &world
+            .query_filtered::<&CameraBuffer, With<ActiveCamera>>()
+            .single(world)
+            .unwrap()
+            .buffer,
+    );
     let mut skybox = world.query::<&Skybox>();
     let skybox_texture = skybox
         .single(world)
         .ok()
         .and_then(|it| it.texture.as_ref())
         .unwrap_or(&world.resource::<DefaultSkybox>().texture);
-    let camera = world
-        .query_filtered::<&CameraBuffer, With<ActiveCamera>>()
-        .single(world); //TODO
     let light = world.resource::<LightUnifromBuffer>();
     let skybox_sh = world.resource::<SkyboxSHBuffer>();
     let shadow_map = world.resource::<ShadowMap>();
@@ -105,7 +109,7 @@ fn create_bind_group(world: &mut World, layout: &BindGroupLayout) -> Vec<Arc<Bin
             let image = target.ping_pong[it].as_ref().unwrap();
             let bind_group_desc = bg_descriptor! {
                 ["Main PBR Global BindGroup"][layout]
-                0: camera.buffer.as_entire_binding();
+                0: camera.as_entire_binding();
                 1: light.buffer.as_entire_binding();
                 2: BindingResource::TextureView(&shadow_map.image.view);
                 3: BindingResource::Sampler(&shadow_map.image.sampler);

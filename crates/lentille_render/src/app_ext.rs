@@ -1,0 +1,76 @@
+use std::{
+    collections::BTreeMap,
+    sync::{LazyLock, Mutex},
+};
+
+use bevy_app::Last;
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
+
+use crate::{FrameSets, RenderState, ResStage};
+
+pub(super) static RENDER_RESOURCES_TO_ADD: LazyLock<
+    Mutex<BTreeMap<ResStage, Vec<Box<dyn FnOnce(&mut World) + Send + Sync>>>>,
+> = LazyLock::new(|| Mutex::new(BTreeMap::new()));
+
+pub trait AppExt {
+    fn add_render_system<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self;
+
+    fn add_render_system_with_custom_schedule<M>(
+        &mut self,
+        schedule: impl ScheduleLabel,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self;
+
+    fn add_render_system_in_frame_set<M>(
+        &mut self,
+        set: FrameSets,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self;
+
+    fn init_render_resource<T: Resource + FromWorld>(&mut self, stage: ResStage) -> &mut Self;
+}
+
+impl AppExt for bevy_app::App {
+    fn add_render_system<M>(
+        &mut self,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
+        self.main_mut()
+            .add_systems(Last, systems.run_if(resource_exists::<RenderState>));
+        self
+    }
+
+    fn add_render_system_with_custom_schedule<M>(
+        &mut self,
+        schedule: impl ScheduleLabel,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
+        self.main_mut()
+            .add_systems(schedule, systems.run_if(resource_exists::<RenderState>));
+        self
+    }
+
+    fn add_render_system_in_frame_set<M>(
+        &mut self,
+        set: FrameSets,
+        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
+    ) -> &mut Self {
+        self.main_mut().add_systems(Last, systems.in_set(set));
+        self
+    }
+
+    fn init_render_resource<T: Resource + FromWorld>(&mut self, stage: ResStage) -> &mut Self {
+        RENDER_RESOURCES_TO_ADD
+            .lock()
+            .unwrap()
+            .entry(stage)
+            .or_insert(Default::default())
+            .push(Box::new(|world: &mut World| {
+                world.init_resource::<T>();
+            }));
+        self
+    }
+}

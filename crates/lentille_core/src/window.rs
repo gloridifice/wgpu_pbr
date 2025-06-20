@@ -8,14 +8,14 @@ use winit::{
     window::Window,
 };
 
-pub struct WindowAndRenderStatePlugin;
+pub struct WindowPlugin;
 
-#[derive(Resource, Clone)]
-pub struct MainWindow(pub Arc<Window>);
+#[derive(Resource, Clone, Default)]
+pub struct MainWindow(pub Option<Arc<Window>>);
 
-impl Plugin for WindowAndRenderStatePlugin {
+impl Plugin for WindowPlugin {
     fn build(&self, app: &mut App) {
-        app.set_runner(my_runner);
+        app.init_resource::<MainWindow>().set_runner(my_runner);
     }
 }
 
@@ -51,7 +51,8 @@ impl ApplicationHandler for MyApplicationHandler {
                 .unwrap(),
         );
 
-        self.app.insert_resource(MainWindow(Arc::clone(&window)));
+        self.app
+            .insert_resource(MainWindow(Some(Arc::clone(&window))));
 
         self.app.world_mut().trigger(MainWindowCreatedEvent {
             window: Arc::clone(&window),
@@ -78,7 +79,11 @@ impl ApplicationHandler for MyApplicationHandler {
         _window_id: winit::window::WindowId,
         event: WindowEvent,
     ) {
-        let window = Arc::clone(&self.app.world_mut().resource::<MainWindow>().0);
+        let window_arc = self.app.world_mut().resource::<MainWindow>().0.as_ref();
+        if window_arc.is_none() {
+            return;
+        }
+        let window = Arc::clone(window_arc.unwrap());
 
         match event {
             //Update and Render

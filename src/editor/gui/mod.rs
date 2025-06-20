@@ -1,7 +1,8 @@
-use std::fs;
+use std::fs::{self};
 
-use bevy_app::{First, Last, Plugin, PreUpdate, Startup};
+use bevy_app::{First, Last, Plugin, PreUpdate};
 use bevy_ecs::prelude::*;
+use bevy_log::info;
 use egui::{
     epaint::text::InsertFontFamily, load::SizedTexture, CentralPanel, PointerButton, Visuals,
 };
@@ -11,9 +12,9 @@ use lentille_core::{
     window::{MainWindow, WinitWindowEvent},
 };
 use lentille_render::{
-    bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
+    app_ext::AppExt, bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
     defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
-    FrameRenderContext, RenderSets,
+    FrameRenderContext, FrameSets, InitRenderResource, RenderPreparedStartup,
 };
 
 use components::world_tree;
@@ -27,11 +28,13 @@ pub struct EditorGuiPlugin;
 impl Plugin for EditorGuiPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(EguiRendererPlugin)
-            .init_resource::<EguiRenderer>()
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
-            .add_systems(Startup, sys_setup_egui_visual)
-            .add_systems(PreUpdate, (sys_egui_tiles, sys_on_resize_render_target));
+            .add_systems(RenderPreparedStartup, sys_setup_egui_visual)
+            .add_render_system_with_custom_schedule(
+                PreUpdate,
+                (sys_egui_tiles, sys_on_resize_render_target),
+            );
     }
 }
 
@@ -41,14 +44,25 @@ pub struct EguiRendererPlugin;
 
 impl Plugin for EguiRendererPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_systems(First, sys_begin_frame)
-            .add_systems(Last, sys_end_frame_and_draw.in_set(RenderSets::LastDraw))
-            .add_observer(sys_handle_input);
+        app.add_systems(
+            First,
+            sys_begin_frame.run_if(resource_exists::<RenderState>),
+        )
+        .add_systems(Last, sys_end_frame_and_draw.in_set(FrameSets::LastDraw))
+        .add_systems(InitRenderResource, sys_init_egui_renderer_resources)
+        .add_observer(sys_handle_input);
     }
 }
 
+fn sys_init_egui_renderer_resources(world: &mut World) {
+    world.init_resource::<EguiRenderer>();
+}
+
 fn sys_begin_frame(mut egui_renderer: ResMut<EguiRenderer>, window: Res<MainWindow>) {
-    egui_renderer.begin_frame(&window.0);
+    let Some(window) = window.0.as_ref() else {
+        return;
+    };
+    egui_renderer.begin_frame(window);
 }
 
 fn sys_end_frame_and_draw(
@@ -58,9 +72,13 @@ fn sys_end_frame_and_draw(
     window: Res<MainWindow>,
     egui_config: Res<EguiConfig>,
 ) {
+    let Some(window) = window.0.as_ref() else {
+        return;
+    };
+
     let screen_descriptor = ScreenDescriptor {
         size_in_pixels: [rs.config.width, rs.config.height],
-        pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
+        pixels_per_point: window.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
 
     let FrameRenderContext {
@@ -73,7 +91,7 @@ fn sys_end_frame_and_draw(
         &rs.device,
         &rs.queue,
         encoder,
-        &window.0,
+        window,
         &output_view,
         screen_descriptor,
     );
@@ -84,7 +102,10 @@ fn sys_handle_input(
     mut egui_renderer: ResMut<EguiRenderer>,
     window: Res<MainWindow>,
 ) {
-    egui_renderer.handle_input(&window.0, &trigger.window_event);
+    let Some(window) = window.0.as_ref() else {
+        return;
+    };
+    egui_renderer.handle_input(window, &trigger.window_event);
 }
 
 // End ===== EguiRenderer plugin =====
@@ -201,6 +222,7 @@ pub fn sys_egui_tiles(world: &mut World) {
 }
 
 fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
+    info!("Render prepared");
     let mut visual = Visuals::dark();
     let ctx = egui.context();
 

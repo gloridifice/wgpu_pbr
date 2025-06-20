@@ -2,16 +2,19 @@ use std::sync::Arc;
 
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::RunSystemOnce, world::CommandQueue};
+use bevy_log::LogPlugin;
 use lentille_core::{
     input::InputPlugin,
     time::{Time, TimePlugin},
+    window::WindowPlugin,
 };
 use lentille_render::{
+    camera::ActiveCamera,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
     skybox::{prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path, Skybox},
     utils::cube::CubeVerticesBuffer,
-    RenderPlugin,
+    RenderPlugin, RenderPreparedStartup,
 };
 
 use crate::{
@@ -27,11 +30,17 @@ pub struct WgpuPbrPlugin;
 
 impl Plugin for WgpuPbrPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((RenderPlugin, InputPlugin, TimePlugin))
-            .add_plugins((ControlPlugin, EditorPlugin));
+        app.add_plugins((
+            LogPlugin::default(),
+            RenderPlugin,
+            InputPlugin,
+            TimePlugin,
+            WindowPlugin,
+        ))
+        .add_plugins((ControlPlugin, EditorPlugin));
 
         app.add_systems(
-            Startup,
+            RenderPreparedStartup,
             (
                 sys_startup_light_and_environment,
                 sys_generate_dragons_scene,
@@ -349,6 +358,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
             fovy: 17.1,
             ..Camera::new(aspect)
         },
+        ActiveCamera,
         CameraController {
             row: -4.8,
             yaw: 0.0,
