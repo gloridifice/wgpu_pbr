@@ -213,19 +213,6 @@ fn sys_init_render_state_and_resources(event: Trigger<MainWindowCreatedEvent>, w
 #[derive(Debug, ScheduleLabel, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct InitRenderResource;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum ResStage {
-    BaseAssetsPre,
-    BaseAssets,
-    BaseAssetsPost,
-    DurableBufferPre,
-    DurableBuffer,
-    DurableBufferPost,
-    BindGroupLayout,
-    BindGroup,
-    Pipeline,
-}
-
 /// 在 Startup 之后
 #[derive(Debug, ScheduleLabel, PartialEq, Eq, Hash, Clone, Copy)]
 pub struct RenderPreparedStartup;

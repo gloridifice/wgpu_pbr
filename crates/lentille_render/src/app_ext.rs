@@ -1,16 +1,12 @@
-use std::{
-    collections::BTreeMap,
-    sync::{LazyLock, Mutex},
-};
+use std::sync::{LazyLock, Mutex};
 
 use bevy_app::Last;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
 
-use crate::{FrameSets, RenderState, ResStage};
+use crate::{FrameSets, RenderState, resource::ResourceGraph};
 
-pub(super) static RENDER_RESOURCES_TO_ADD: LazyLock<
-    Mutex<BTreeMap<ResStage, Vec<Box<dyn FnOnce(&mut World) + Send + Sync>>>>,
-> = LazyLock::new(|| Mutex::new(BTreeMap::new()));
+pub(super) static RENDER_RESOURCES_TO_ADD: LazyLock<Mutex<ResourceGraph>> =
+    LazyLock::new(|| Mutex::new(ResourceGraph::new()));
 
 pub trait AppExt {
     fn add_render_system<M>(
@@ -30,7 +26,7 @@ pub trait AppExt {
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self;
 
-    fn init_render_resource<T: Resource + FromWorld>(&mut self, stage: ResStage) -> &mut Self;
+    fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self;
 }
 
 impl AppExt for bevy_app::App {
