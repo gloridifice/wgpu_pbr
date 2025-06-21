@@ -15,8 +15,6 @@ use crate::{
 };
 use bevy_ecs::prelude::*;
 
-use crate::bindings::global_binding::{GlobalBindGroup, RefreshGlobalBindGroupCmd};
-
 use super::{
     ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},

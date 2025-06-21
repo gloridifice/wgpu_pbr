@@ -2,6 +2,7 @@ use std::fs;
 use std::io::Read;
 use std::sync::Arc;
 
+use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::cubemap::CubemapMatrixBindGroups;
 use crate::image::cubemap::load_cubemap_sliced;
 use crate::prelude::*;
@@ -22,7 +23,7 @@ impl Plugin for Skybox {
                 after::<CubemapMatrixBindGroups>(),
                 after::<CubeVerticesBuffer>(),
             ])
-            .init_render_resource_with_config::<SkyboxPipeline>([after::<GlobalBindGroup>()]);
+            .init_render_resource_with_config::<SkyboxPipeline>([after::<GlobalBindGroupLayout>()]);
     }
 }
 
@@ -81,7 +82,7 @@ impl FromWorld for SkyboxPipeline {
             .unwrap();
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
-        let global_bind_group = world.resource::<GlobalBindGroup>();
+        let global_bind_group = world.resource::<GlobalBindGroupLayout>();
         let skybox_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Skybox"),
             source: skybox_shader_source,
@@ -89,7 +90,7 @@ impl FromWorld for SkyboxPipeline {
         let pipeline_layout = Arc::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Skybox"),
-                bind_group_layouts: &[&global_bind_group.layout],
+                bind_group_layouts: &[&global_bind_group.0],
                 push_constant_ranges: &[],
             },
         ));

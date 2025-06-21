@@ -13,7 +13,7 @@ impl Plugin for BindingsPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource::<object_binding::ObjectBindGroupLayout>()
             .init_render_resource::<material_binding::PBRMaterialBindGroupLayout>()
-            .init_render_resource::<global_binding::GlobalBindGroup>()
+            .init_render_resource::<global_binding::GlobalBindGroupLayout>()
             .init_render_resource_with_config::<global_binding::GlobalUniformBuffer>([after::<
                 ColorRenderTarget,
             >(

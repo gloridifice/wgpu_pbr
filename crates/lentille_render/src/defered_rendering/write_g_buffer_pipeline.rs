@@ -1,10 +1,8 @@
 use std::sync::Arc;
 
-use crate::prelude::*;
+use crate::{bindings::global_binding::GlobalBindGroupLayout, prelude::*};
 use bevy_ecs::prelude::*;
 use wgpu::RenderPassColorAttachment;
-
-use super::GlobalBindGroup;
 
 #[derive(Resource, Clone)]
 pub struct GBufferTexturesBindGroup {
@@ -147,7 +145,7 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             source: shader_source,
         });
 
-        let global_bind_group_layout = Arc::clone(&world.resource::<GlobalBindGroup>().layout);
+        let global_bind_group_layout = Arc::clone(&world.resource::<GlobalBindGroupLayout>().0);
         let material_bind_group_layout =
             Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0);
         let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);

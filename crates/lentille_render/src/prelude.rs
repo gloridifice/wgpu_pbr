@@ -7,9 +7,8 @@ pub use crate::{
     asset::AssetPath,
     asset::load::Loadable,
     bindings::{
-        global_binding::GlobalBindGroup, global_binding::GlobalUniformBuffer,
-        light_binding::DynamicLightBindGroup, material_binding::PBRMaterialBindGroupLayout,
-        object_binding::ObjectBindGroupLayout,
+        global_binding::GlobalUniformBuffer, light_binding::DynamicLightBindGroup,
+        material_binding::PBRMaterialBindGroupLayout, object_binding::ObjectBindGroupLayout,
     },
     camera::Camera,
     image::{UploadedImage, UploadedImageWithSampler},

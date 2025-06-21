@@ -2,7 +2,7 @@ use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
-use crate::prelude::*;
+use crate::{bindings::global_binding::GlobalBindGroupLayout, prelude::*};
 
 use super::shader_loader::ShaderLoader;
 
@@ -11,7 +11,7 @@ pub(crate) struct TransparentPlugin;
 impl Plugin for TransparentPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource_with_config::<TransparentPipeline>([
-            after::<GlobalBindGroup>(),
+            after::<GlobalBindGroupLayout>(),
             after::<PBRMaterialBindGroupLayout>(),
             after::<ObjectBindGroupLayout>(),
             after::<DynamicLightBindGroup>(),
@@ -38,7 +38,7 @@ impl FromWorld for TransparentPipeline {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
         let config = &rs.config;
-        let global_bind_group = world.resource::<GlobalBindGroup>();
+        let global_bind_group = world.resource::<GlobalBindGroupLayout>();
         let material_bind_group = world.resource::<PBRMaterialBindGroupLayout>();
         let object_bind_group = world.resource::<ObjectBindGroupLayout>();
         let dynamic_light = world.resource::<DynamicLightBindGroup>();
@@ -49,7 +49,7 @@ impl FromWorld for TransparentPipeline {
         });
 
         let bind_group_layouts = vec![
-            global_bind_group.layout.as_ref(),
+            global_bind_group.0.as_ref(),
             material_bind_group.0.as_ref(),
             object_bind_group.0.as_ref(),
             dynamic_light.layout.as_ref(),

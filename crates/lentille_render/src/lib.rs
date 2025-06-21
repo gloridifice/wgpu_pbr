@@ -21,7 +21,10 @@ use wgpu::{
 };
 
 use systems::*;
-use winit::dpi::PhysicalSize;
+use winit::{
+    dpi::PhysicalSize,
+    window::{self, Window},
+};
 
 use crate::{
     app_ext::AppExt,
@@ -158,27 +161,15 @@ impl Plugin for RenderPlugin {
 }
 
 fn sys_init_render_state_and_resources(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-        #[cfg(not(target_arch = "wasm32"))]
-        backends: wgpu::Backends::PRIMARY,
-        #[cfg(target_arch = "wasm32")]
-        backends: wgpu::Backends::GL,
-        ..Default::default()
-    });
-
     let u_width = 1600;
     let u_height = 900;
 
     let window = Arc::clone(&event.window);
     let _ = window.request_inner_size(PhysicalSize::new(u_width, u_height));
 
-    let surface = instance
-        .create_surface(Arc::clone(&window))
-        .expect("Failed to create surface!");
-
-    world.insert_resource(block_on(RenderState::new(
-        &instance, surface, u_width, u_height,
-    )));
+    let surface = world
+        .resource::<RenderState>()
+        .create_surface(window, u_width, u_height);
 
     // 初始化 Resource
     let mut graph = ResourceGraph::new();
@@ -233,26 +224,40 @@ pub struct FrameRenderContext {
 
 #[derive(Resource)]
 pub struct RenderState {
+    pub instance: wgpu::Instance,
+    pub adapter: wgpu::Adapter,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
+}
+
+pub struct SurfaceState {
     pub surface: wgpu::Surface<'static>,
     pub config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
 }
 
+impl FromWorld for RenderState {
+    fn from_world(world: &mut World) -> Self {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
+            #[cfg(not(target_arch = "wasm32"))]
+            backends: wgpu::Backends::PRIMARY,
+            #[cfg(target_arch = "wasm32")]
+            backends: wgpu::Backends::GL,
+            ..Default::default()
+        });
+
+        Self::new(instance)
+    }
+}
+
 impl RenderState {
     pub const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-    pub async fn new(
-        instance: &Instance,
-        surface: Surface<'static>,
-        width: u32,
-        height: u32,
-    ) -> RenderState {
+    pub async fn new(instance: Instance) -> RenderState {
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
+                compatible_surface: None,
                 force_fallback_adapter: false,
             })
             .await
@@ -265,6 +270,7 @@ impl RenderState {
             }
             ret
         };
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -282,7 +288,26 @@ impl RenderState {
             .await
             .unwrap();
 
-        let surface_caps = surface.get_capabilities(&adapter);
+        Self {
+            instance,
+            adapter,
+            device,
+            queue,
+        }
+    }
+
+    pub async fn create_surface(
+        &self,
+        window: Arc<Window>,
+        width: u32,
+        height: u32,
+    ) -> SurfaceState {
+        let surface = self
+            .instance
+            .create_surface(window)
+            .expect("Failed to create surface!");
+
+        let surface_caps = surface.get_capabilities(&self.adapter);
         let surface_format = surface_caps
             .formats
             .iter()
@@ -304,23 +329,12 @@ impl RenderState {
             desired_maximum_frame_latency: 2,
         };
 
-        surface.configure(&device, &config);
+        surface.configure(&self.device, &config);
 
-        Self {
-            device,
-            queue,
+        SurfaceState {
             surface,
             config,
             size: PhysicalSize::new(width, height),
-        }
-    }
-
-    #[allow(unused)]
-    fn get_window_extend3d(&self) -> wgpu::Extent3d {
-        wgpu::Extent3d {
-            width: self.config.width.max(1),
-            height: self.config.height.max(1),
-            depth_or_array_layers: 1,
         }
     }
 }
