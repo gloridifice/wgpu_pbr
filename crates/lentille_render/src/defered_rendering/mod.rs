@@ -2,21 +2,44 @@ use std::sync::Arc;
 
 use crate::{
     bindings::material_binding::PBRMaterialBindGroupLayout,
-    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
+    defered_rendering::write_g_buffer_pipeline::{
+        DeferredWriteGBufferPipeline, GBufferTexturesBindGroup,
+    },
+    prelude::*,
 };
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
 pub mod write_g_buffer_pipeline;
 
+pub(crate) struct DeferredRenderingPlugin;
+
+impl Plugin for DeferredRenderingPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource_with_config::<DeferredWriteGBufferPipeline>([after::<
+            GlobalBindGroup,
+        >()])
+        .init_render_resource_with_config::<write_g_buffer_pipeline::GBufferTexturesBindGroup>([
+            after::<RenderTargetSize>(),
+        ])
+        .init_render_resource_with_config::<DeferredComputePipeline>([
+            after::<GlobalBindGroup>(),
+            after::<GBufferTexturesBindGroup>(),
+            after::<PBRMaterialBindGroupLayout>(),
+            after::<DynamicLightBindGroup>(),
+        ]);
+    }
+}
+
 #[allow(unused)]
 #[derive(Resource)]
-pub struct MainPipeline {
+pub struct DeferredComputePipeline {
     pub pipeline: Arc<RenderPipeline>,
     pub pipeline_layout: Arc<PipelineLayout>,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
-impl FromWorld for MainPipeline {
+impl FromWorld for DeferredComputePipeline {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
         let shader_source = world
             .resource_mut::<ShaderLoader>()
@@ -58,7 +81,7 @@ impl FromWorld for MainPipeline {
                 ))],
             ));
 
-        MainPipeline {
+        DeferredComputePipeline {
             pipeline: Arc::new(render_pipeline),
             pipeline_layout: Arc::new(render_pipeline_layout),
             bind_group_layouts,

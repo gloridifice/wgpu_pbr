@@ -7,10 +7,24 @@ use crate::image::cubemap::load_cubemap_sliced;
 use crate::prelude::*;
 use crate::skybox::prefiltering::PrefilteringPipeline;
 use crate::utils::cube::CubeVerticesBuffer;
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
 pub mod prefiltering;
 pub mod sh_coefficients;
+
+pub struct SkyBoxPlugin;
+
+impl Plugin for Skybox {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource::<SkyboxSHBuffer>()
+            .init_render_resource_with_config::<DefaultSkybox>([
+                after::<CubemapMatrixBindGroups>(),
+                after::<CubeVerticesBuffer>(),
+            ])
+            .init_render_resource_with_config::<SkyboxPipeline>([after::<GlobalBindGroup>()]);
+    }
+}
 
 #[derive(Resource)]
 pub struct SkyboxPipeline {

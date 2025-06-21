@@ -1,7 +1,23 @@
-use crate::prelude::*;
+use crate::{app_ext::AppExt, prelude::*, resource::after};
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
 use super::{light::LightUnifromBuffer, shader_loader::ShaderLoader};
+
+pub(crate) struct ShadowMappingPlugin;
+
+impl Plugin for ShadowMappingPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource::<ShadowMap>()
+            .init_render_resource_with_config::<ShadowMapGlobalBindGroup>([after::<
+                LightUnifromBuffer,
+            >()])
+            .init_render_resource_with_config::<ShadowMappingPipeline>([
+                after::<ShadowMapGlobalBindGroup>(),
+                after::<ObjectBindGroupLayout>(),
+            ]);
+    }
+}
 
 #[derive(Resource)]
 pub struct ShadowMap {

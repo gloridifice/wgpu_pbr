@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{defered_rendering::MainPipeline, prelude::*};
+use crate::{defered_rendering::DeferredComputePipeline, prelude::*};
 use bevy_ecs::prelude::*;
 
 use super::UploadedMaterial;
@@ -132,7 +132,7 @@ impl From<&GltfMaterial> for RawPBRMaterial {
 
 pub fn sys_update_override_pbr_material_bind_group(
     rs: Res<RenderState>,
-    main_pipeline: Res<MainPipeline>,
+    main_pipeline: Res<DeferredComputePipeline>,
     white: Res<WhiteTexture>,
     normal_default: Res<NormalDefaultTexture>,
     layout: Res<PBRMaterialBindGroupLayout>,

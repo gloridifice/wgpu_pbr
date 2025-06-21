@@ -1,11 +1,28 @@
 use std::sync::Arc;
 
-use crate::prelude::*;
+use crate::{app_ext::AppExt, prelude::*, resource::after};
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use cgmath::{Deg, Point3, Vector3};
 use wgpu::util::DeviceExt;
 
 use super::shader_loader::ShaderLoader;
+
+pub struct CubemapPlugin;
+
+impl Plugin for CubemapPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource::<CubemapVertexShader>()
+            .init_render_resource::<CubemapConvertingShader>()
+            .init_render_resource::<super::utils::cube::CubeVerticesBuffer>()
+            .init_render_resource::<CubemapMatrixBindGroups>()
+            .init_render_resource_with_config::<CubemapConverterRgba16Float>([
+                after::<CubemapConvertingShader>(),
+                after::<CubemapMatrixBindGroups>(),
+                after::<CubemapVertexShader>(),
+            ]);
+    }
+}
 
 pub struct CubemapConverter {
     pub pipeline: RenderPipeline,

@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::{InitRenderResource, prelude::*};
+use crate::{app_ext::AppExt, prelude::*};
 use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use parallel_light::ParallelLight;
@@ -14,7 +14,6 @@ pub(crate) struct LightPlugin;
 impl Plugin for LightPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_observer(event_on_remove_point_light)
-            .add_systems(InitRenderResource, sys_init_resources)
             .add_systems(PostUpdate, sys_update_light_uniform)
             .add_systems(
                 PostUpdate,
@@ -23,13 +22,11 @@ impl Plugin for LightPlugin {
                     sys_update_dynamic_lights_bind_group,
                 )
                     .chain(),
-            );
+            )
+            .init_render_resource::<LightUnifromBuffer>()
+            .init_render_resource::<DynamicLightBindGroup>()
+            .init_render_resource::<DynamicLights>();
     }
-}
-
-fn sys_init_resources(world: &mut World) {
-    world.init_resource::<LightUnifromBuffer>();
-    world.init_resource::<DynamicLights>();
 }
 
 #[derive(Resource)]

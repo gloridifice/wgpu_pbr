@@ -4,8 +4,8 @@ use crate::{
     FrameRenderContext, MainPassObject, PingPongImages,
     camera::Camera,
     defered_rendering::{
-        MainPipeline,
-        write_g_buffer_pipeline::{GBufferTexturesBindGroup, WriteGBufferPipeline},
+        DeferredComputePipeline,
+        write_g_buffer_pipeline::{DeferredWriteGBufferPipeline, GBufferTexturesBindGroup},
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
@@ -69,7 +69,7 @@ pub fn sys_render_write_g_buffer_pass(
     mut ctx: ResMut<FrameRenderContext>,
     g_buffer_textures: Res<GBufferTexturesBindGroup>,
     depth_target: Res<DepthRenderTarget>,
-    main_pipeline: Res<WriteGBufferPipeline>,
+    main_pipeline: Res<DeferredWriteGBufferPipeline>,
     global_bind_group: Res<GlobalBindGroup>,
     default_material: Res<DefaultPBRMaterial>,
     mesh_renderers: Query<
@@ -109,7 +109,7 @@ pub fn sys_render_write_g_buffer_pass(
 pub fn sys_render_main_pass(
     mut ctx: ResMut<FrameRenderContext>,
     main_target: Res<ColorRenderTarget>,
-    main_pipeline: Res<MainPipeline>,
+    main_pipeline: Res<DeferredComputePipeline>,
     g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
     main_global_bind_group: Res<GlobalBindGroup>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,

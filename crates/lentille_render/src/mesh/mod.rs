@@ -4,7 +4,9 @@ use wgpu::util::DeviceExt;
 
 use crate::material::pbr::UploadedPBRMaterial;
 
-use super::{NormalDefaultTexture, WhiteTexture, defered_rendering::MainPipeline, prelude::*};
+use super::{
+    NormalDefaultTexture, WhiteTexture, defered_rendering::DeferredComputePipeline, prelude::*,
+};
 use bevy_ecs::prelude::*;
 
 pub mod renderer;
@@ -41,7 +43,7 @@ impl Mesh {
     pub fn upload(&self, world: &World) -> UploadedMesh {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
-        let main_pipeline = world.resource::<MainPipeline>();
+        let main_pipeline = world.resource::<DeferredComputePipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
         let white_tex = world.resource::<WhiteTexture>();
         let normal_default = world.resource::<NormalDefaultTexture>();

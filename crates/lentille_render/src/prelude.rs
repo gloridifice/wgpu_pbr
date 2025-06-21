@@ -3,6 +3,7 @@ pub use crate::{
     AlphaMode, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
     MainPassObject, MissingTexture, NormalDefaultTexture, RenderState, RenderTargetSize,
     WhiteTexture,
+    app_ext::AppExt,
     asset::AssetPath,
     asset::load::Loadable,
     bindings::{
@@ -18,6 +19,8 @@ pub use crate::{
     mesh::{
         Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex, renderer::MeshRenderer,
     },
+    resource::after,
+    resource::before,
     shader_loader::ShaderLoader,
     shadow_mapping::CastShadow,
     skybox::Skybox,

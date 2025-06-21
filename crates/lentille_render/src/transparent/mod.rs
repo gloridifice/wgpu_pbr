@@ -1,9 +1,23 @@
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
 use crate::prelude::*;
 
 use super::shader_loader::ShaderLoader;
+
+pub(crate) struct TransparentPlugin;
+
+impl Plugin for TransparentPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource_with_config::<TransparentPipeline>([
+            after::<GlobalBindGroup>(),
+            after::<PBRMaterialBindGroupLayout>(),
+            after::<ObjectBindGroupLayout>(),
+            after::<DynamicLightBindGroup>(),
+        ]);
+    }
+}
 
 /// Transparent 是一个不进行深度写入，但是使用 Opaque 阶段的深度图进行深度测试的 Pipeline
 /// Transparent Pipeline 不在延迟渲染管线内，会进行单独地按顺序地渲染。

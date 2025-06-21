@@ -1,6 +1,5 @@
 use std::{
     mem::swap,
-    ptr::NonNull,
     sync::{
         Arc, LazyLock,
         atomic::{AtomicUsize, Ordering},
@@ -8,11 +7,9 @@ use std::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::{
-    change_detection::MaybeLocation, prelude::*, ptr::OwningPtr, schedule::ScheduleLabel,
-};
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
-use defered_rendering::MainPipeline;
+use defered_rendering::DeferredComputePipeline;
 use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent};
 use material::pbr::{GltfMaterial, UploadedPBRMaterial};
 use pollster::block_on;
@@ -27,11 +24,17 @@ use systems::*;
 use winit::dpi::PhysicalSize;
 
 use crate::{
-    app_ext::{AppExt, RENDER_RESOURCES_TO_ADD},
+    app_ext::AppExt,
     asset::AssetPath,
+    bindings::BindingsPlugin,
     camera::CameraPlugin,
+    cubemap::CubemapPlugin,
+    defered_rendering::DeferredRenderingPlugin,
     light::LightPlugin,
+    resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
+    shadow_mapping::ShadowMappingPlugin,
     transform::TransformPlugin,
+    transparent::TransparentPlugin,
 };
 
 pub mod asset;
@@ -70,7 +73,16 @@ pub struct RenderPlugin;
 
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_plugins((TransformPlugin, LightPlugin, CameraPlugin));
+        app.add_plugins((
+            TransformPlugin,
+            LightPlugin,
+            CameraPlugin,
+            CubemapPlugin,
+            BindingsPlugin,
+            ShadowMappingPlugin,
+            TransparentPlugin,
+            DeferredRenderingPlugin,
+        ));
         app.init_resource::<ShaderLoader>();
 
         // Configure RenderSets
@@ -107,19 +119,6 @@ impl Plugin for RenderPlugin {
         )
         // 初始化 RenderState 和初始化资源
         .add_observer(sys_init_render_state_and_resources);
-        // 将 init_render_resource 的资源加入世界
-        // .add_systems(InitRenderResource, |world: &mut World| {
-        //     let vec = {
-        //         let mut ret = Vec::new();
-        //         let mut to_add_res = RENDER_RESOURCES_TO_ADD.lock().unwrap();
-        //         swap(&mut ret, to_add_res.as_mut());
-        //         ret
-        //     };
-
-        //     for closure in vec {
-        //         closure(world);
-        //     }
-        // });
 
         // Add frame render systems
         app.add_observer(sys_on_resize)
@@ -139,46 +138,22 @@ impl Plugin for RenderPlugin {
                     sys_render_transparent.in_set(FrameSets::DrawTransparent),
                 ),
             );
-
-        // app
-        // .init_render_resource::<WhiteTexture>(ResStage::BaseAssets)
-        // .init_render_resource::<NormalDefaultTexture>(ResStage::BaseAssets)
-        // .init_render_resource::<dfg::DFGTexture>(ResStage::BaseAssets)
-        // .init_render_resource::<mipmap::DefaultMipmapGenShader>(ResStage::BaseAssets)
-        // .init_render_resource::<MissingTexture>(ResStage::BaseAssets)
-        // .init_render_resource::<material::buffer_material::BufferMaterialManager>(ResStage::BaseAssets)
-        // .init_render_resource::<RenderTargetSize>(ResStage::BaseAssets)
-        // .init_render_resource::<ColorRenderTarget>(ResStage::BaseAssets)
-        // .init_render_resource::<DepthRenderTarget>(ResStage::BaseAssets)
-        // .init_render_resource::<cubemap::CubemapVertexShader>(ResStage::BaseAssets)
-        // .init_render_resource::<cubemap::CubemapConvertingShader>(ResStage::BaseAssets)
-        // .init_render_resource::<utils::cube::CubeVerticesBuffer>(ResStage::DurableBuffer)
-        // .init_render_resource::<cubemap::CubemapMatrixBindGroups>(ResStage::BindGroup)
-        // .init_render_resource::<cubemap::CubemapConverterRgba16Float>(ResStage::BaseAssetsPost)
-        // .init_render_resource::<skybox::DefaultSkybox>(ResStage::BaseAssetsPost)
-        // .init_render_resource::<GlobalUniformBuffer>()
-        // // --- Render resource ---
-        // .init_render_resource::<skybox::SkyboxSHBuffer>()
-        // .init_render_resource::<shadow_mapping::ShadowMap>()
-        // // .insert_resource::<ShadowMapEguiTextureId>()
-        // .init_render_resource::<FullScreenVertexShader>()
-        // // 0. Layouts
-        // .init_render_resource::<ObjectBindGroupLayout>()
-        // .init_render_resource::<PBRMaterialBindGroupLayout>()
-        // // 1. Globals
-        // .init_render_resource::<shadow_mapping::ShadowMapGlobalBindGroup>()
-        // .init_render_resource::<DynamicLightBindGroup>()
-        // // 1.5
-        // .init_render_resource::<defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup>()
-        // .init_render_resource::<GlobalBindGroup>()
-        // // 2. Pipelines
-        // .init_render_resource::<defered_rendering::write_g_buffer_pipeline::WriteGBufferPipeline>()
-        // .init_render_resource::<skybox::SkyboxPipeline>()
-        // .init_render_resource::<MainPipeline>()
-        // .init_render_resource::<transparent::TransparentPipeline>()
-        // .init_render_resource::<shadow_mapping::ShadowMappingPipeline>()
-        // // --- Other resources ---
-        // .init_render_resource::<DefaultPBRMaterial>();
+        app.init_render_resource::<WhiteTexture>()
+            .init_render_resource::<NormalDefaultTexture>()
+            .init_render_resource::<dfg::DFGTexture>()
+            .init_render_resource::<mipmap::DefaultMipmapGenShader>()
+            .init_render_resource::<MissingTexture>()
+            .init_render_resource::<FullScreenVertexShader>()
+            .init_render_resource::<RenderTargetSize>()
+            .init_render_resource_with_config::<ColorRenderTarget>([after::<RenderTargetSize>()])
+            .init_render_resource_with_config::<DepthRenderTarget>([after::<RenderTargetSize>()])
+            .init_render_resource_with_config::<DefaultPBRMaterial>([
+                after::<MissingTexture>(),
+                after::<WhiteTexture>(),
+                after::<NormalDefaultTexture>(),
+                after::<DeferredComputePipeline>(),
+                after::<PBRMaterialBindGroupLayout>(),
+            ]);
     }
 }
 
@@ -205,13 +180,15 @@ fn sys_init_render_state_and_resources(event: Trigger<MainWindowCreatedEvent>, w
         &instance, surface, u_width, u_height,
     )));
 
-    world.run_schedule(InitRenderResource);
+    // 初始化 Resource
+    let mut graph = ResourceGraph::new();
+    swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());
+    for res in graph {
+        res(world);
+    }
+
     world.run_schedule(RenderPreparedStartup);
 }
-
-/// 用于初始化渲染相关的资源，触发时机：在创建窗口和创建 RenderState 之后（同时也在 Startup 之后）；
-#[derive(Debug, ScheduleLabel, PartialEq, Eq, Hash, Clone, Copy)]
-pub struct InitRenderResource;
 
 /// 在 Startup 之后
 #[derive(Debug, ScheduleLabel, PartialEq, Eq, Hash, Clone, Copy)]
@@ -702,7 +679,7 @@ impl FromWorld for DefaultPBRMaterial {
         let white_tex = &world.resource::<WhiteTexture>().0;
         let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
         let device = &world.resource::<RenderState>().device;
-        let main_pipeline = world.resource::<MainPipeline>();
+        let main_pipeline = world.resource::<DeferredComputePipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
 
         let mat = UploadedPBRMaterial::from_gltf(

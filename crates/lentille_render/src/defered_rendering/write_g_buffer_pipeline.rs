@@ -25,7 +25,7 @@ pub struct GBufferTexture {
 
 #[allow(unused)]
 #[derive(Resource)]
-pub struct WriteGBufferPipeline {
+pub struct DeferredWriteGBufferPipeline {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
@@ -34,8 +34,8 @@ pub struct WriteGBufferPipeline {
 impl FromWorld for GBufferTexturesBindGroup {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<crate::RenderState>();
-        let device = &rs.device;
         let size = world.resource::<RenderTargetSize>();
+        let device = &rs.device;
         Self::new(device, size.into())
     }
 }
@@ -133,7 +133,7 @@ pub fn create_g_buffer_image(
     }
 }
 
-impl FromWorld for WriteGBufferPipeline {
+impl FromWorld for DeferredWriteGBufferPipeline {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
         let shader_source = world
             .resource_mut::<ShaderLoader>()

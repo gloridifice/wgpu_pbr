@@ -1,12 +1,10 @@
-use std::sync::{LazyLock, Mutex};
-
 use bevy_app::Last;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
 
-use crate::{FrameSets, RenderState, resource::ResourceGraph};
-
-pub(super) static RENDER_RESOURCES_TO_ADD: LazyLock<Mutex<ResourceGraph>> =
-    LazyLock::new(|| Mutex::new(ResourceGraph::new()));
+use crate::{
+    FrameSets, RenderState,
+    resource::{InitConfig, RENDER_RESOURCES_TO_ADD},
+};
 
 pub trait AppExt {
     fn add_render_system<M>(
@@ -27,6 +25,10 @@ pub trait AppExt {
     ) -> &mut Self;
 
     fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self;
+    fn init_render_resource_with_config<T: Resource + FromWorld>(
+        &mut self,
+        configs: impl Into<Vec<Box<dyn InitConfig>>>,
+    ) -> &mut Self;
 }
 
 impl AppExt for bevy_app::App {
@@ -58,15 +60,19 @@ impl AppExt for bevy_app::App {
         self
     }
 
-    fn init_render_resource<T: Resource + FromWorld>(&mut self, stage: ResStage) -> &mut Self {
+    fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self {
+        RENDER_RESOURCES_TO_ADD.lock().unwrap().insert::<T>();
+        self
+    }
+
+    fn init_render_resource_with_config<T: Resource + FromWorld>(
+        &mut self,
+        configs: impl Into<Vec<Box<dyn InitConfig>>>,
+    ) -> &mut Self {
         RENDER_RESOURCES_TO_ADD
             .lock()
             .unwrap()
-            .entry(stage)
-            .or_insert(Default::default())
-            .push(Box::new(|world: &mut World| {
-                world.init_resource::<T>();
-            }));
+            .insert_with_configs::<T>(configs.into());
         self
     }
 }

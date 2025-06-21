@@ -14,7 +14,7 @@ use lentille_core::{
 use lentille_render::{
     app_ext::AppExt, bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
     defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
-    FrameRenderContext, FrameSets, InitRenderResource, RenderPreparedStartup,
+    FrameRenderContext, FrameSets, RenderPreparedStartup,
 };
 
 use components::world_tree;
@@ -49,13 +49,9 @@ impl Plugin for EguiRendererPlugin {
             sys_begin_frame.run_if(resource_exists::<RenderState>),
         )
         .add_systems(Last, sys_end_frame_and_draw.in_set(FrameSets::LastDraw))
-        .add_systems(InitRenderResource, sys_init_egui_renderer_resources)
+        .init_render_resource::<EguiRenderer>()
         .add_observer(sys_handle_input);
     }
-}
-
-fn sys_init_egui_renderer_resources(world: &mut World) {
-    world.init_resource::<EguiRenderer>();
 }
 
 fn sys_begin_frame(mut egui_renderer: ResMut<EguiRenderer>, window: Res<MainWindow>) {
