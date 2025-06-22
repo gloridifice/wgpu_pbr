@@ -1,11 +1,13 @@
 #[allow(unused)]
 pub use crate::{
-    AlphaMode, ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget, FullScreenVertexShader,
-    MainPassObject, MissingTexture, NormalDefaultTexture, RenderState, RenderTargetSize,
-    WhiteTexture,
+    AlphaMode, MainPassObject, RenderState,
     app_ext::AppExt,
     asset::AssetPath,
     asset::load::Loadable,
+    base_assets::{
+        DefaultPBRMaterial, FullScreenVertexShader, MissingTexture, NormalDefaultTexture,
+        WhiteTexture,
+    },
     bindings::{
         global_binding::GlobalUniformBuffer, light_binding::DynamicLightBindGroup,
         material_binding::PBRMaterialBindGroupLayout, object_binding::ObjectBindGroupLayout,

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
+use crate::asset::UuidManager;
 use crate::bindings::global_binding::{GlobalBindGroupLayout, RawGlobalUniform};
-use crate::prelude::*;
+use crate::{FrameSets, SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
@@ -10,7 +11,8 @@ use bevy_ecs::system::{RunSystemOnce, Single};
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_wgpu_utils::impl_pod_zeroable;
-use wgpu::{BindGroup, BufferDescriptor};
+use uuid::Uuid;
+use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
 
 use crate::dfg::DFGTexture;
 use crate::light::LightUnifromBuffer;
@@ -30,9 +32,12 @@ impl Plugin for CameraPlugin {
             (
                 sys_update_camera_uniform,
                 sys_create_camera_global_bind_group,
+                sys_create_render_target,
             )
                 .chain(),
-        );
+        )
+        .add_render_system_in_frame_set(FrameSets::Prepare, sys_create_render_context)
+        .add_render_system_in_frame_set(FrameSets::Present, sys_present_output_view);
     }
 }
 
@@ -54,6 +59,9 @@ pub struct Camera {
     pub zfar: f32,
     pub view_proj: Matrix4<f32>,
 }
+
+#[derive(Component)]
+pub struct CameraTarget(pub Option<wgpu::TextureView>);
 
 #[derive(Component)]
 pub struct CameraGlobalBindGroup(pub Vec<Arc<BindGroup>>);
@@ -254,4 +262,153 @@ pub fn sys_update_camera_uniform(
             commands.entity(id).insert(CameraBuffer::new(&rs.device));
         }
     };
+}
+
+fn sys_create_render_context(
+    mut commands: Commands,
+    q_camera: Query<(Entity, &SurfaceState)>,
+    rs: Res<RenderState>,
+    mut manager: ResMut<FrameContextManager>,
+) {
+    for (id, surface_state) in q_camera {
+        let output = surface_state.surface.get_current_texture().unwrap();
+        let output_view = output.texture.create_view(&Default::default());
+        let encoder = rs
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Main Render Encoder"),
+            });
+
+        let handle = manager.insert(FrameContext {
+            encoder,
+            output_view,
+            output_texture: output,
+        });
+        commands.entity(id).insert(FrameContextHandle::new(handle));
+    }
+}
+
+fn sys_present_output_view(
+    mut commands: Commands,
+    q_frame: Query<(Entity, &FrameContextHandle)>,
+    rs: Res<RenderState>,
+    mut manager: ResMut<FrameContextManager>,
+) {
+    for (id, handle) in q_frame {
+        if let Some(frame) = manager.remove(handle.0) {
+            rs.queue.submit(std::iter::once(frame.encoder.finish()));
+            frame.output_texture.present();
+        }
+        commands.entity(id).remove::<FrameContextHandle>();
+    }
+}
+
+// ========= RenderTarget ============
+
+#[derive(Component)]
+pub struct RenderTarget {
+    pub current_color: Arc<UploadedImage>,
+    color_a: Arc<UploadedImage>,
+    color_b: Arc<UploadedImage>,
+    pub depth: Option<Arc<UploadedImage>>,
+}
+
+impl RenderTarget {
+    pub fn swap_targets(&mut self) {
+        self.current_color = if Arc::ptr_eq(&self.current_color, &self.color_a) {
+            Arc::clone(&self.color_b)
+        } else {
+            Arc::clone(&self.color_a)
+        }
+    }
+}
+
+pub fn sys_create_render_target(
+    mut commands: Commands,
+    q_camera: Query<(Entity, &SurfaceState), Without<RenderTarget>>,
+    rs: Res<RenderState>,
+) {
+    for (id, surface) in q_camera {
+        let width = surface.size.width;
+        let height = surface.size.height;
+        let device = &rs.device;
+        let config = &surface.config;
+        let color_a = Arc::new(create_color_render_target_image(
+            width, height, device, config,
+        ));
+        let color_b = Arc::new(create_color_render_target_image(
+            width, height, device, config,
+        ));
+        let depth = Arc::new(create_depth_texture(width, height, device));
+
+        commands.entity(id).insert(RenderTarget {
+            current_color: color_a.clone(),
+            color_a,
+            color_b,
+            depth: Some(depth),
+        });
+    }
+}
+
+pub fn create_color_render_target_image(
+    width: u32,
+    height: u32,
+    device: &wgpu::Device,
+    config: &wgpu::SurfaceConfiguration,
+) -> UploadedImage {
+    let size = Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let desc = TextureDescriptor {
+        label: Some("Render Target"),
+        size,
+        format: config.format,
+        usage: config.usage
+            | TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: TextureDimension::D2,
+        view_formats: &[],
+    };
+    let texture = device.create_texture(&desc);
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    UploadedImage { texture, view }
+}
+
+pub fn create_depth_texture(
+    width: u32,
+    height: u32,
+    device: &wgpu::Device,
+    // compare: Option<wgpu::CompareFunction>, TODO
+) -> UploadedImage {
+    let size = wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+    };
+    let desc = wgpu::TextureDescriptor {
+        label: Some("Depth Texture"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: RenderState::DEPTH_FORMAT,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+        view_formats: &[RenderState::DEPTH_FORMAT],
+    };
+    let texture = device.create_texture(&desc);
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+    // let sampler = device.create_sampler(&{
+    //     let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
+    //     desc.compare = compare;
+    //     desc
+    // });
+
+    UploadedImage { texture, view }
 }

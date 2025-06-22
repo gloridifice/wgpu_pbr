@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use crate::{
-    FrameRenderContext, MainPassObject, PingPongImages,
+    MainPassObject,
     camera::Camera,
     defered_rendering::{
         DeferredComputePipeline,
@@ -16,7 +16,7 @@ use crate::{
 use bevy_ecs::prelude::*;
 
 use super::{
-    ColorRenderTarget, DefaultPBRMaterial, DepthRenderTarget,
+    DefaultPBRMaterial,
     shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
 };
 

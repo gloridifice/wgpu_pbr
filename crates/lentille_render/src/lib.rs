@@ -7,28 +7,25 @@ use std::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::SystemId};
 use bevy_log::info;
 use defered_rendering::DeferredComputePipeline;
 use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent};
-use material::pbr::{GltfMaterial, UploadedPBRMaterial};
 use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
+use uuid::Uuid;
 use wgpu::{
-    CommandEncoder, Extent3d, Features, Instance, ShaderModule, Surface, TextureDescriptor,
-    TextureDimension, TextureFormat, TextureUsages, TextureView, TextureViewDescriptor,
+    Extent3d, Features, Instance, ShaderModule, TextureDescriptor, TextureDimension, TextureFormat,
+    TextureUsages, TextureViewDescriptor,
 };
 
 use systems::*;
-use winit::{
-    dpi::PhysicalSize,
-    window::{self, Window},
-};
+use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     app_ext::AppExt,
-    asset::AssetPath,
+    asset::{AssetPath, UuidManager},
     bindings::BindingsPlugin,
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
@@ -41,6 +38,7 @@ use crate::{
 };
 
 pub mod asset;
+pub mod base_assets;
 pub mod bindings;
 pub mod camera;
 pub mod cubemap;
@@ -93,18 +91,18 @@ impl Plugin for RenderPlugin {
             Last,
             (
                 FrameSets::Prepare,
-                FrameSets::PreDraw.run_if(resource_exists::<FrameRenderContext>),
+                FrameSets::PreDraw,
                 // Opaque
-                FrameSets::BeforeDrawOpaque.run_if(resource_exists::<FrameRenderContext>),
-                FrameSets::DrawOpaque.run_if(resource_exists::<FrameRenderContext>),
-                FrameSets::AfterDrawOpaque.run_if(resource_exists::<FrameRenderContext>),
+                FrameSets::BeforeDrawOpaque,
+                FrameSets::DrawOpaque,
+                FrameSets::AfterDrawOpaque,
                 // Transparent
-                FrameSets::BeforeDrawTransparent.run_if(resource_exists::<FrameRenderContext>),
-                FrameSets::DrawTransparent.run_if(resource_exists::<FrameRenderContext>),
-                FrameSets::AfterDrawTransparent.run_if(resource_exists::<FrameRenderContext>),
+                FrameSets::BeforeDrawTransparent,
+                FrameSets::DrawTransparent,
+                FrameSets::AfterDrawTransparent,
                 // Last and present
-                FrameSets::LastDraw.run_if(resource_exists::<FrameRenderContext>),
-                FrameSets::Present.run_if(resource_exists::<FrameRenderContext>),
+                FrameSets::LastDraw,
+                FrameSets::Present,
                 FrameSets::Cleanup,
             )
                 .chain()
@@ -114,14 +112,10 @@ impl Plugin for RenderPlugin {
         // Add basics render systems
         app.add_systems(
             Last,
-            (
-                sys_create_render_context.in_set(FrameSets::Prepare),
-                sys_present_output_view.in_set(FrameSets::Present),
-                sys_cleanup_frame_context.in_set(FrameSets::Cleanup),
-            ),
+            (sys_cleanup_frame_context.in_set(FrameSets::Cleanup),),
         )
         // 初始化 RenderState 和初始化资源
-        .add_observer(sys_init_render_state_and_resources);
+        .add_observer(sys_init_window);
 
         // Add frame render systems
         app.add_observer(sys_on_resize)
@@ -147,9 +141,6 @@ impl Plugin for RenderPlugin {
             .init_render_resource::<mipmap::DefaultMipmapGenShader>()
             .init_render_resource::<MissingTexture>()
             .init_render_resource::<FullScreenVertexShader>()
-            .init_render_resource::<RenderTargetSize>()
-            .init_render_resource_with_config::<ColorRenderTarget>([after::<RenderTargetSize>()])
-            .init_render_resource_with_config::<DepthRenderTarget>([after::<RenderTargetSize>()])
             .init_render_resource_with_config::<DefaultPBRMaterial>([
                 after::<MissingTexture>(),
                 after::<WhiteTexture>(),
@@ -160,25 +151,13 @@ impl Plugin for RenderPlugin {
     }
 }
 
-fn sys_init_render_state_and_resources(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
-    let u_width = 1600;
-    let u_height = 900;
+#[derive(Component, Clone)]
+pub struct MainPassObject;
 
-    let window = Arc::clone(&event.window);
-    let _ = window.request_inner_size(PhysicalSize::new(u_width, u_height));
-
-    let surface = world
-        .resource::<RenderState>()
-        .create_surface(window, u_width, u_height);
-
-    // 初始化 Resource
-    let mut graph = ResourceGraph::new();
-    swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());
-    for res in graph {
-        res(world);
-    }
-
-    world.run_schedule(RenderPreparedStartup);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AlphaMode {
+    Opaque,
+    Blend,
 }
 
 /// 在 Startup 之后
@@ -211,17 +190,6 @@ pub enum FrameSets {
     Cleanup,
 }
 
-/// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
-/// 其只有在 Prepare 阶段之后存在，并在 Present 阶段删除。
-///
-/// 所以只能在这两个阶段之间的阶段使用，见 RenderSets.
-#[derive(Resource)]
-pub struct FrameRenderContext {
-    pub encoder: CommandEncoder,
-    pub output_view: TextureView,
-    pub output_texture: wgpu::SurfaceTexture,
-}
-
 #[derive(Resource)]
 pub struct RenderState {
     pub instance: wgpu::Instance,
@@ -230,14 +198,40 @@ pub struct RenderState {
     pub queue: wgpu::Queue,
 }
 
+#[derive(Component)]
 pub struct SurfaceState {
     pub surface: wgpu::Surface<'static>,
     pub config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
 }
 
+/// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
+/// 其只有在 Prepare 阶段之后存在，并在 Present 阶段删除。
+///
+/// 所以只能在这两个阶段之间的阶段使用，见 RenderSets.
+pub struct FrameContext {
+    pub encoder: wgpu::CommandEncoder,
+    pub output_view: wgpu::TextureView,
+    pub output_texture: wgpu::SurfaceTexture,
+}
+
+#[derive(Debug, Component)]
+pub struct FrameContextHandle(pub Uuid);
+
+impl FrameContextHandle {
+    pub fn new(uuid: Uuid) -> Self {
+        Self(uuid)
+    }
+}
+
+type FrameContextManager = UuidManager<FrameContext>;
+
+pub struct RenderStage {
+    systems: Vec<SystemId<In<FrameContextHandle>>>,
+}
+
 impl FromWorld for RenderState {
-    fn from_world(world: &mut World) -> Self {
+    fn from_world(_world: &mut World) -> Self {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
@@ -246,7 +240,7 @@ impl FromWorld for RenderState {
             ..Default::default()
         });
 
-        Self::new(instance)
+        block_on(Self::new(instance))
     }
 }
 
@@ -339,376 +333,27 @@ impl RenderState {
     }
 }
 
-fn sys_create_render_context(world: &mut World) {
-    world.resource_scope(|world: &mut World, rs: Mut<RenderState>| {
-        let output = rs.surface.get_current_texture().unwrap();
-        let output_view = output.texture.create_view(&Default::default());
-        let encoder = rs
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Main Render Encoder"),
-            });
+fn sys_init_window(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
+    let u_width = 1600;
+    let u_height = 900;
+    let window = Arc::clone(&event.window);
+    let _ = window.request_inner_size(PhysicalSize::new(u_width, u_height));
 
-        world.insert_resource(FrameRenderContext {
-            encoder,
-            output_view,
-            output_texture: output,
-        });
-    });
-}
-
-fn sys_present_output_view(world: &mut World) {
-    if let Some(ctx) = world.remove_resource::<FrameRenderContext>() {
+    let surface = block_on(
         world
             .resource::<RenderState>()
-            .queue
-            .submit(std::iter::once(ctx.encoder.finish()));
-        ctx.output_texture.present();
-    }
-}
-
-pub static COLOR_TARGET_INDEX: LazyLock<AtomicUsize> = LazyLock::new(|| AtomicUsize::new(0));
-
-pub fn get_color_target_index() -> usize {
-    COLOR_TARGET_INDEX.load(Ordering::Relaxed)
-}
-pub fn get_sampleable_target_index() -> usize {
-    (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2
-}
-pub fn switch_ping_pong() {
-    COLOR_TARGET_INDEX.store(
-        (COLOR_TARGET_INDEX.load(Ordering::Relaxed) + 1) % 2,
-        Ordering::Relaxed,
+            .create_surface(window, u_width, u_height),
     );
-}
+    world.entity_mut(event.id).insert(surface);
 
-#[derive(Resource)]
-pub struct ColorRenderTarget {
-    pub ping_pong: Vec<Option<UploadedImageWithSampler>>,
-}
-
-#[derive(Resource)]
-pub struct DepthRenderTarget(pub Option<UploadedImageWithSampler>);
-
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
-pub struct RTId(uuid::Uuid);
-
-#[derive(Resource, Clone)]
-pub struct RenderTargetSize {
-    pub width: u32,
-    pub height: u32,
-}
-
-#[derive(Resource, Clone)]
-pub struct FullScreenVertexShader {
-    module: Arc<ShaderModule>,
-}
-
-impl Default for RenderTargetSize {
-    fn default() -> Self {
-        Self {
-            width: 512,
-            height: 512,
-        }
-    }
-}
-
-impl From<&RenderTargetSize> for Extent3d {
-    fn from(value: &RenderTargetSize) -> Self {
-        Self {
-            width: value.width,
-            height: value.height,
-            depth_or_array_layers: 1,
-        }
-    }
-}
-
-/// 包含两个部分，target 是用于被写入的。
-/// sampleable 是用于作为读取的可被采样的。
-pub struct PingPongImages<'a> {
-    pub target: Option<&'a UploadedImageWithSampler>,
-    #[allow(unused)]
-    pub sampleable: Option<&'a UploadedImageWithSampler>,
-}
-
-impl ColorRenderTarget {
-    pub fn new(
-        width: u32,
-        height: u32,
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-    ) -> Self {
-        let a = create_color_render_target_image(width, height, device, config);
-        let b = create_color_render_target_image(width, height, device, config);
-        Self {
-            ping_pong: vec![Some(a), Some(b)],
-        }
+    // 初始化 Resource
+    let mut graph = ResourceGraph::new();
+    swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());
+    for res in graph {
+        res(world);
     }
 
-    pub fn get_size(&self) -> Option<Extent3d> {
-        self.get_target().map(|it| it.size)
-    }
-
-    pub fn update_images(
-        &mut self,
-        width: u32,
-        height: u32,
-        device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
-    ) {
-        let a = create_color_render_target_image(width, height, device, config);
-        let b = create_color_render_target_image(width, height, device, config);
-        self.ping_pong[0] = Some(a);
-        self.ping_pong[1] = Some(b);
-    }
-
-    /// 更新序号，然后获取当前的 Target 和采样贴图。
-    pub fn switch_and_get_images(&mut self) -> PingPongImages {
-        switch_ping_pong();
-
-        PingPongImages {
-            target: self
-                .ping_pong
-                .get(get_color_target_index())
-                .and_then(|it| it.as_ref()),
-            sampleable: self
-                .ping_pong
-                .get(get_sampleable_target_index())
-                .and_then(|it| it.as_ref()),
-        }
-    }
-
-    pub fn get_target(&self) -> Option<&UploadedImageWithSampler> {
-        self.ping_pong
-            .get(get_color_target_index())
-            .and_then(|it| it.as_ref())
-    }
-
-    #[allow(unused)]
-    pub fn get_sampleable(&self) -> Option<&UploadedImageWithSampler> {
-        self.ping_pong
-            .get(get_sampleable_target_index())
-            .and_then(|it| it.as_ref())
-    }
-}
-
-pub fn create_color_render_target_image(
-    width: u32,
-    height: u32,
-    device: &wgpu::Device,
-    config: &wgpu::SurfaceConfiguration,
-) -> UploadedImageWithSampler {
-    let size = Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-    };
-    let desc = TextureDescriptor {
-        label: Some("Render Target"),
-        size,
-        format: config.format,
-        usage: config.usage
-            | TextureUsages::TEXTURE_BINDING
-            | TextureUsages::COPY_SRC
-            | TextureUsages::COPY_DST,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: TextureDimension::D2,
-        view_formats: &[],
-    };
-    let texture = device.create_texture(&desc);
-    let view = texture.create_view(&TextureViewDescriptor::default());
-
-    let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-        // 4.
-        address_mode_u: wgpu::AddressMode::ClampToEdge,
-        address_mode_v: wgpu::AddressMode::ClampToEdge,
-        address_mode_w: wgpu::AddressMode::ClampToEdge,
-        mag_filter: wgpu::FilterMode::Linear,
-        min_filter: wgpu::FilterMode::Linear,
-        mipmap_filter: wgpu::FilterMode::Linear,
-        compare: None, // 5.
-        lod_min_clamp: 0.0,
-        lod_max_clamp: 100.0,
-        ..Default::default()
-    });
-
-    UploadedImageWithSampler {
-        size,
-        texture,
-        view,
-        sampler,
-    }
-}
-
-pub fn create_depth_texture(
-    device: &wgpu::Device,
-    width: u32,
-    height: u32,
-    compare: Option<wgpu::CompareFunction>,
-) -> UploadedImageWithSampler {
-    let size = wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-    };
-    let desc = wgpu::TextureDescriptor {
-        label: Some("Depth Texture"),
-        size,
-        mip_level_count: 1,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: RenderState::DEPTH_FORMAT,
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-        view_formats: &[RenderState::DEPTH_FORMAT],
-    };
-    let texture = device.create_texture(&desc);
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-    let sampler = device.create_sampler(&{
-        let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
-        desc.compare = compare;
-        desc
-    });
-
-    UploadedImageWithSampler {
-        size,
-        texture,
-        view,
-        sampler,
-    }
-}
-
-impl FromWorld for FullScreenVertexShader {
-    fn from_world(world: &mut World) -> Self {
-        let source = world
-            .resource_mut::<ShaderLoader>()
-            .load_source(AssetPath::new_shader_wgsl("utils/fullscreen_vertex"))
-            .unwrap();
-        let shader = world.resource::<RenderState>().device.create_shader_module(
-            wgpu::ShaderModuleDescriptor {
-                label: Some("Fullscreen Vertex Shader"),
-                source,
-            },
-        );
-        Self {
-            module: Arc::new(shader),
-        }
-    }
-}
-
-impl FromWorld for ColorRenderTarget {
-    fn from_world(world: &mut World) -> Self {
-        let render_state = world.resource::<RenderState>();
-        let size = world.resource::<RenderTargetSize>();
-
-        Self::new(
-            size.width,
-            size.height,
-            &render_state.device,
-            &render_state.config,
-        )
-    }
-}
-
-impl FromWorld for DepthRenderTarget {
-    fn from_world(world: &mut World) -> Self {
-        let render_state = world.resource::<RenderState>();
-        let size = world.resource::<RenderTargetSize>();
-
-        let target = create_depth_texture(&render_state.device, size.width, size.height, None);
-
-        Self(Some(target))
-    }
-}
-
-#[derive(Component, Clone)]
-pub struct MainPassObject;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AlphaMode {
-    Opaque,
-    Blend,
-}
-
-#[derive(Resource, Clone)]
-pub struct WhiteTexture(pub Arc<UploadedImageWithSampler>);
-
-#[derive(Resource, Clone)]
-pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler>);
-
-#[derive(Resource, Clone)]
-pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
-
-#[derive(Resource, Clone)]
-pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
-
-impl FromWorld for WhiteTexture {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
-                AssetPath::Assets("textures/white.png".to_string()),
-                &rs.device,
-                &rs.queue,
-                TextureFormat::Rgba8UnormSrgb,
-            )
-            .unwrap(),
-        ))
-    }
-}
-
-impl FromWorld for NormalDefaultTexture {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
-                AssetPath::Assets("textures/normal_default.png".to_string()),
-                &rs.device,
-                &rs.queue,
-                TextureFormat::Rgba8UnormSrgb,
-            )
-            .unwrap(),
-        ))
-    }
-}
-
-impl FromWorld for MissingTexture {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
-                AssetPath::Assets("textures/missing.png".to_string()),
-                &rs.device,
-                &rs.queue,
-                TextureFormat::Rgba8UnormSrgb,
-            )
-            .unwrap(),
-        ))
-    }
-}
-
-impl FromWorld for DefaultPBRMaterial {
-    fn from_world(world: &mut World) -> Self {
-        let missing_tex = &world.resource::<MissingTexture>().0;
-        let white_tex = &world.resource::<WhiteTexture>().0;
-        let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
-        let device = &world.resource::<RenderState>().device;
-        let main_pipeline = world.resource::<DeferredComputePipeline>();
-        let layout = world.resource::<PBRMaterialBindGroupLayout>();
-
-        let mat = UploadedPBRMaterial::from_gltf(
-            device,
-            layout,
-            white_tex,
-            normal_default_tex,
-            Arc::clone(&main_pipeline.pipeline),
-            &GltfMaterial {
-                base_color_texture: Some(Arc::clone(missing_tex)),
-                ..Default::default()
-            },
-        );
-        Self(Arc::new(mat))
-    }
+    world.run_schedule(RenderPreparedStartup);
 }
 
 fn sys_on_resize(event: Trigger<ResizeEvent>, mut rs: ResMut<RenderState>) {

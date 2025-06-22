@@ -5,7 +5,41 @@ use std::{
     sync::Arc,
 };
 
+use bevy_ecs::resource::Resource;
+use uuid::Uuid;
+
 pub mod load;
+
+#[derive(Resource)]
+pub struct UuidManager<T> {
+    map: HashMap<Uuid, T>,
+}
+
+impl<T> UuidManager<T> {
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, v: T) -> Uuid {
+        let uuid = Uuid::new_v4();
+        self.map.insert(uuid, v);
+        uuid
+    }
+
+    pub fn remove(&mut self, uuid: Uuid) -> Option<T> {
+        self.map.remove(&uuid)
+    }
+
+    pub fn get(&self, uuid: Uuid) -> Option<&T> {
+        self.map.get(&uuid)
+    }
+
+    pub fn get_mut(&mut self, uuid: Uuid) -> Option<&mut T> {
+        self.map.get_mut(&uuid)
+    }
+}
 
 #[derive(Clone)]
 pub enum AssetPath {
