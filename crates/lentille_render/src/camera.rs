@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::asset::UuidManager;
 use crate::bindings::global_binding::{GlobalBindGroupLayout, RawGlobalUniform};
 use crate::{FrameSets, SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate};
@@ -11,15 +10,14 @@ use bevy_ecs::system::{RunSystemOnce, Single};
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_wgpu_utils::impl_pod_zeroable;
-use uuid::Uuid;
 use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
 
+use crate::RenderState;
 use crate::dfg::DFGTexture;
 use crate::light::LightUnifromBuffer;
 use crate::prelude::GlobalUniformBuffer;
 use crate::shadow_mapping::ShadowMap;
 use crate::skybox::{DefaultSkybox, SkyboxSHBuffer};
-use crate::{ColorRenderTarget, RenderState};
 
 use super::transform::{Transform, WorldTransform};
 
@@ -64,7 +62,17 @@ pub struct Camera {
 pub struct CameraTarget(pub Option<wgpu::TextureView>);
 
 #[derive(Component)]
-pub struct CameraGlobalBindGroup(pub Vec<Arc<BindGroup>>);
+pub struct CameraGlobalBindGroup{
+    current: Arc<BindGroup>,
+    a: Arc<BindGroup>,
+    b: Arc<BindGroup>,
+};
+
+impl CameraGlobalBindGroup {
+    pub fn next(&mut self) {
+        todo!();
+    }
+}
 
 impl FromWorld for CameraBuffer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
@@ -307,18 +315,24 @@ fn sys_present_output_view(
 
 #[derive(Component)]
 pub struct RenderTarget {
-    pub current_color: Arc<UploadedImage>,
+    current_color: Arc<UploadedImage>,
     color_a: Arc<UploadedImage>,
     color_b: Arc<UploadedImage>,
     pub depth: Option<Arc<UploadedImage>>,
 }
 
 impl RenderTarget {
-    pub fn swap_targets(&mut self) {
-        self.current_color = if Arc::ptr_eq(&self.current_color, &self.color_a) {
-            Arc::clone(&self.color_b)
+    pub fn next_target_and_texture(&mut self) -> (Arc<UploadedImage>, Arc<UploadedImage>) {
+        let ret = self.get_next_target_and_texture();
+        self.current_color = ret.0;
+        ret
+    }
+
+    fn get_next_target_and_texture(&self) -> (Arc<UploadedImage>, Arc<UploadedImage>) {
+        if Arc::ptr_eq(&self.current_color, &self.color_a) {
+            (Arc::clone(&self.color_b), Arc::clone(&self.color_a))
         } else {
-            Arc::clone(&self.color_a)
+            (Arc::clone(&self.color_a), Arc::clone(&self.color_b))
         }
     }
 }

@@ -1,9 +1,6 @@
 use std::{
     mem::swap,
-    sync::{
-        Arc, LazyLock,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, LazyLock},
 };
 
 use bevy_app::prelude::*;
@@ -15,10 +12,7 @@ use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
 use uuid::Uuid;
-use wgpu::{
-    Extent3d, Features, Instance, ShaderModule, TextureDescriptor, TextureDimension, TextureFormat,
-    TextureUsages, TextureViewDescriptor,
-};
+use wgpu::{Features, Instance};
 
 use systems::*;
 use winit::{dpi::PhysicalSize, window::Window};
@@ -54,6 +48,7 @@ pub mod resource;
 pub mod shader_loader;
 pub mod shadow_mapping;
 pub mod skybox;
+pub mod stage;
 pub mod systems;
 pub mod transform;
 
@@ -203,31 +198,6 @@ pub struct SurfaceState {
     pub surface: wgpu::Surface<'static>,
     pub config: wgpu::SurfaceConfiguration,
     pub size: PhysicalSize<u32>,
-}
-
-/// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
-/// 其只有在 Prepare 阶段之后存在，并在 Present 阶段删除。
-///
-/// 所以只能在这两个阶段之间的阶段使用，见 RenderSets.
-pub struct FrameContext {
-    pub encoder: wgpu::CommandEncoder,
-    pub output_view: wgpu::TextureView,
-    pub output_texture: wgpu::SurfaceTexture,
-}
-
-#[derive(Debug, Component)]
-pub struct FrameContextHandle(pub Uuid);
-
-impl FrameContextHandle {
-    pub fn new(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-}
-
-type FrameContextManager = UuidManager<FrameContext>;
-
-pub struct RenderStage {
-    systems: Vec<SystemId<In<FrameContextHandle>>>,
 }
 
 impl FromWorld for RenderState {
