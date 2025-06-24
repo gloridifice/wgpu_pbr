@@ -8,7 +8,7 @@ use winit::{
     dpi::PhysicalSize,
     event::WindowEvent,
     event_loop::{ActiveEventLoop, EventLoop},
-    window::Window,
+    window::{Window, WindowId},
 };
 
 pub struct WindowPlugin;
@@ -89,7 +89,7 @@ impl ApplicationHandler for MyApplicationHandler {
     fn window_event(
         &mut self,
         event_loop: &winit::event_loop::ActiveEventLoop,
-        _window_id: winit::window::WindowId,
+        window_id: WindowId,
         event: WindowEvent,
     ) {
         let window_arc = self.app.world_mut().resource::<MainWindow>().0.as_ref();
@@ -112,7 +112,10 @@ impl ApplicationHandler for MyApplicationHandler {
 
             // Reszie
             WindowEvent::Resized(physical_size) => {
-                self.app.world_mut().trigger(ResizeEvent { physical_size });
+                self.app.world_mut().trigger(ResizeEvent {
+                    window_id,
+                    physical_size,
+                });
             }
             _ => {}
         }
@@ -133,5 +136,6 @@ pub struct WinitWindowEvent {
 
 #[derive(Event)]
 pub struct ResizeEvent {
+    pub window_id: WindowId,
     pub physical_size: PhysicalSize<u32>,
 }

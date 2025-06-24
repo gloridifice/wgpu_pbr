@@ -1,10 +1,8 @@
 use crate::{
-    asset::UuidManager,
-    camera::{CameraGlobalBindGroup, CameraTarget, RenderTarget},
+    camera::{CameraGlobalBindGroup, RenderTarget},
     prelude::*,
 };
 use bevy_ecs::{prelude::*, system::SystemId};
-use uuid::Uuid;
 use wgpu::CommandEncoderDescriptor;
 
 #[derive(Resource)]
@@ -18,46 +16,50 @@ pub struct RenderStageManager {
 /// 所以只能在这两个阶段之间的阶段使用，见 RenderSets.
 pub struct RenderContext {
     pub encoder: wgpu::CommandEncoder,
-    pub output_view: wgpu::TextureView,
-    pub output_texture: wgpu::SurfaceTexture,
+    pub color_target: Arc<UploadedImage>,
+    pub camera_global_bind_group: Arc<BindGroup>,
+    depth_target: Option<Arc<UploadedImage>>,
 }
-
-#[derive(Debug, Component)]
-pub struct RenderContextHandle(pub Uuid);
-
-impl RenderContextHandle {
-    pub fn new(uuid: Uuid) -> Self {
-        Self(uuid)
-    }
-}
-
-type FrameContextManager = UuidManager<RenderContext>;
 
 pub struct RenderStage {
     pub name: Option<String>,
-    pub systems: Vec<SystemId<In<RenderContextHandle>>>,
+    pub systems: Vec<SystemId<InMut<'static, RenderContext>>>,
 }
 
 pub fn sys_render(
+    mut commands: Commands,
     render_stage_manager: Res<RenderStageManager>,
-    q_camera: Query<(&RenderTarget, &CameraGlobalBindGroup)>,
+    mut q_camera: Query<(&mut RenderTarget, &mut CameraGlobalBindGroup)>,
     rs: Res<RenderState>,
 ) {
-    for (camera_target, camera_global_bind_group) in q_camera.iter() {
+    for (mut camera_target, mut camera_global_bind_group) in q_camera.iter_mut() {
         for stage in render_stage_manager.stages.iter() {
-            let (color_target) = camera_target.current_color;
+            let color_target = camera_target.next();
+            let depth_target = camera_target.depth.clone();
+            let camera_global_bind_group = camera_global_bind_group.next();
 
             let encoder = rs.device.create_command_encoder(&CommandEncoderDescriptor {
-                label: stage.name.as_ref(),
+                label: stage.name.as_ref().map(|it| it.as_str()),
             });
 
             let render_context = RenderContext {
                 encoder,
-                output_view: todo!(),
-                output_texture: todo!(),
+                color_target,
+                camera_global_bind_group,
+                depth_target,
             };
 
-            let 
+            let systems = stage.systems.clone();
+            commands.queue(move |world: &mut World| {
+                let mut ctx = render_context;
+                for system in systems {
+                    world.run_system_with(system, &mut ctx);
+                }
+                world
+                    .resource::<RenderState>()
+                    .queue
+                    .submit(std::iter::once(ctx.encoder.finish()));
+            });
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::bindings::global_binding::{GlobalBindGroupLayout, RawGlobalUniform};
-use crate::{FrameSets, SurfaceState, prelude::*};
+use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
@@ -30,12 +30,9 @@ impl Plugin for CameraPlugin {
             (
                 sys_update_camera_uniform,
                 sys_create_camera_global_bind_group,
-                sys_create_render_target,
             )
                 .chain(),
-        )
-        .add_render_system_in_frame_set(FrameSets::Prepare, sys_create_render_context)
-        .add_render_system_in_frame_set(FrameSets::Present, sys_present_output_view);
+        );
     }
 }
 
@@ -62,15 +59,19 @@ pub struct Camera {
 pub struct CameraTarget(pub Option<wgpu::TextureView>);
 
 #[derive(Component)]
-pub struct CameraGlobalBindGroup{
-    current: Arc<BindGroup>,
+pub struct CameraGlobalBindGroup {
+    /// 该值应该与 RenderTarget 的 is_current_color_a 值保持一致
+    is_current_b: bool,
+    /// 对应 RenderTarget 的 color_a
     a: Arc<BindGroup>,
+    /// 对应 RenderTarget 的 color_b
     b: Arc<BindGroup>,
-};
+}
 
 impl CameraGlobalBindGroup {
-    pub fn next(&mut self) {
-        todo!();
+    pub fn next(&mut self) -> Arc<BindGroup> {
+        self.is_current_b = !self.is_current_b;
+        Arc::clone(if self.is_current_b { &self.b } else { &self.a })
     }
 }
 
@@ -157,11 +158,10 @@ fn refresh_camera_global_bind_group_by_ids(
     In(to_refresh): In<Vec<Entity>>,
 
     mut commands: Commands,
-    q_camera_buffers: Query<(Entity, &CameraBuffer)>,
+    q_camera_buffers: Query<(Entity, &CameraBuffer, &RenderTarget)>,
     light: Res<LightUnifromBuffer>,
     shadow_map: Res<ShadowMap>,
     dfg: Res<DFGTexture>,
-    target: Res<ColorRenderTarget>,
     global_uniform_buffer: Res<GlobalUniformBuffer>,
     layout: Res<GlobalBindGroupLayout>,
     rs: Res<RenderState>,
@@ -170,16 +170,6 @@ fn refresh_camera_global_bind_group_by_ids(
     skybox_sh: Res<SkyboxSHBuffer>,
     skeybox: Query<&Skybox>,
 ) {
-    let size = target.get_size().unwrap_or_default();
-    let buffer = &global_uniform_buffer.buffer;
-    rs.queue.write_buffer(
-        buffer,
-        0,
-        bytemuck::cast_slice(&[RawGlobalUniform {
-            screen_resolution: [size.width as f32, size.height as f32],
-        }]),
-    );
-
     let skybox_texture = skeybox
         .single()
         .ok()
@@ -187,14 +177,27 @@ fn refresh_camera_global_bind_group_by_ids(
         .unwrap_or(&default_skybox.texture);
 
     let device = &rs.device;
-    for (id, camera) in q_camera_buffers
+    for (id, camera, target) in q_camera_buffers
         .iter()
-        .filter(|(id, _)| to_refresh.contains(&id))
+        .filter(|(id, _, _)| to_refresh.contains(&id))
     {
+        let size = target.color_a.texture.size();
+        let buffer = &global_uniform_buffer.buffer;
+        rs.queue.write_buffer(
+            buffer,
+            0,
+            bytemuck::cast_slice(&[RawGlobalUniform {
+                screen_resolution: [size.width as f32, size.height as f32],
+            }]),
+        );
         let bind_groups = [0, 1]
             .into_iter()
             .map(|it| {
-                let image = target.ping_pong[it].as_ref().unwrap();
+                let image = if it == 0 {
+                    &target.color_a
+                } else {
+                    &target.color_b
+                };
                 let bind_group_desc = bg_descriptor! {
                     ["Main PBR Global BindGroup"][&layout.0]
                     0: camera.buffer.as_entire_binding();
@@ -206,15 +209,17 @@ fn refresh_camera_global_bind_group_by_ids(
                     6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
                     7: skybox_sh.buffer.as_entire_binding();
                     8: BindingResource::TextureView(&image.view);
-                    9: BindingResource::Sampler(&image.sampler);
+                    9: BindingResource::Sampler(&image.sampler); //TODO A universal sampler
                     10: global_uniform_buffer.buffer.as_entire_binding();
                 };
                 Arc::new(device.create_bind_group(&bind_group_desc))
             })
             .collect::<Vec<_>>();
-        commands
-            .entity(id)
-            .insert(CameraGlobalBindGroup(bind_groups));
+        commands.entity(id).insert(CameraGlobalBindGroup {
+            is_current_b: false,
+            a: bind_groups[0],
+            b: bind_groups[1],
+        });
     }
 }
 
@@ -272,95 +277,56 @@ pub fn sys_update_camera_uniform(
     };
 }
 
-fn sys_create_render_context(
-    mut commands: Commands,
-    q_camera: Query<(Entity, &SurfaceState)>,
-    rs: Res<RenderState>,
-    mut manager: ResMut<FrameContextManager>,
-) {
-    for (id, surface_state) in q_camera {
-        let output = surface_state.surface.get_current_texture().unwrap();
-        let output_view = output.texture.create_view(&Default::default());
-        let encoder = rs
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Main Render Encoder"),
-            });
-
-        let handle = manager.insert(FrameContext {
-            encoder,
-            output_view,
-            output_texture: output,
-        });
-        commands.entity(id).insert(FrameContextHandle::new(handle));
-    }
-}
-
-fn sys_present_output_view(
-    mut commands: Commands,
-    q_frame: Query<(Entity, &FrameContextHandle)>,
-    rs: Res<RenderState>,
-    mut manager: ResMut<FrameContextManager>,
-) {
-    for (id, handle) in q_frame {
-        if let Some(frame) = manager.remove(handle.0) {
-            rs.queue.submit(std::iter::once(frame.encoder.finish()));
-            frame.output_texture.present();
-        }
-        commands.entity(id).remove::<FrameContextHandle>();
-    }
-}
-
 // ========= RenderTarget ============
 
+/// RenderTarget 采用 PingPong 的方式，
+/// 在所有渲染阶段完成后会拷贝到 view 中
 #[derive(Component)]
 pub struct RenderTarget {
-    current_color: Arc<UploadedImage>,
+    view: Arc<wgpu::TextureView>,
+    /// true = a, false = b
+    is_current_color_a: bool,
     color_a: Arc<UploadedImage>,
     color_b: Arc<UploadedImage>,
     pub depth: Option<Arc<UploadedImage>>,
 }
 
 impl RenderTarget {
-    pub fn next_target_and_texture(&mut self) -> (Arc<UploadedImage>, Arc<UploadedImage>) {
-        let ret = self.get_next_target_and_texture();
-        self.current_color = ret.0;
-        ret
-    }
-
-    fn get_next_target_and_texture(&self) -> (Arc<UploadedImage>, Arc<UploadedImage>) {
-        if Arc::ptr_eq(&self.current_color, &self.color_a) {
-            (Arc::clone(&self.color_b), Arc::clone(&self.color_a))
+    pub fn next(&mut self) -> Arc<UploadedImage> {
+        self.is_current_color_a = !self.is_current_color_a;
+        Arc::clone(if self.is_current_color_a {
+            &self.color_a
         } else {
-            (Arc::clone(&self.color_a), Arc::clone(&self.color_b))
-        }
+            &self.color_b
+        })
     }
-}
 
-pub fn sys_create_render_target(
-    mut commands: Commands,
-    q_camera: Query<(Entity, &SurfaceState), Without<RenderTarget>>,
-    rs: Res<RenderState>,
-) {
-    for (id, surface) in q_camera {
-        let width = surface.size.width;
-        let height = surface.size.height;
-        let device = &rs.device;
-        let config = &surface.config;
+    pub fn from_texture(texture: &wgpu::Texture, device: &wgpu::Device) -> Self {
+        let size = texture.size();
+        let width = size.width;
+        let height = size.height;
         let color_a = Arc::new(create_color_render_target_image(
-            width, height, device, config,
+            width,
+            height,
+            device,
+            texture.format(),
         ));
         let color_b = Arc::new(create_color_render_target_image(
-            width, height, device, config,
+            width,
+            height,
+            device,
+            texture.format(),
         ));
-        let depth = Arc::new(create_depth_texture(width, height, device));
 
-        commands.entity(id).insert(RenderTarget {
-            current_color: color_a.clone(),
+        let view = Arc::new(texture.create_view(&Default::default()));
+        let depth = Arc::new(create_depth_texture(width, height, device));
+        Self {
+            view,
+            is_current_color_a: false,
             color_a,
             color_b,
             depth: Some(depth),
-        });
+        }
     }
 }
 
@@ -368,7 +334,7 @@ pub fn create_color_render_target_image(
     width: u32,
     height: u32,
     device: &wgpu::Device,
-    config: &wgpu::SurfaceConfiguration,
+    format: wgpu::TextureFormat,
 ) -> UploadedImage {
     let size = Extent3d {
         width,
@@ -378,11 +344,8 @@ pub fn create_color_render_target_image(
     let desc = TextureDescriptor {
         label: Some("Render Target"),
         size,
-        format: config.format,
-        usage: config.usage
-            | TextureUsages::TEXTURE_BINDING
-            | TextureUsages::COPY_SRC
-            | TextureUsages::COPY_DST,
+        format,
+        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC | TextureUsages::COPY_DST,
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,

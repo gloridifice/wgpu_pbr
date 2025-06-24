@@ -4,14 +4,13 @@ use std::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::SystemId};
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use defered_rendering::DeferredComputePipeline;
-use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent};
+use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent, WinitWindow};
 use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
-use uuid::Uuid;
 use wgpu::{Features, Instance};
 
 use systems::*;
@@ -19,7 +18,6 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     app_ext::AppExt,
-    asset::{AssetPath, UuidManager},
     bindings::BindingsPlugin,
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
@@ -326,13 +324,20 @@ fn sys_init_window(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
     world.run_schedule(RenderPreparedStartup);
 }
 
-fn sys_on_resize(event: Trigger<ResizeEvent>, mut rs: ResMut<RenderState>) {
-    let new_size = event.physical_size;
-    if new_size.width > 0 && new_size.height > 0 {
-        rs.size = new_size;
-        rs.config.width = new_size.width;
-        rs.config.height = new_size.height;
-        rs.surface.configure(&rs.device, &rs.config);
+fn sys_on_resize(
+    event: Trigger<ResizeEvent>,
+    mut rs: ResMut<RenderState>,
+    q_window: Query<&WinitWindow>,
+) {
+    // TODO 将 SurfaceState 移动到 Window Entity 中
+    if let Some(window) = q_window.iter().find(|it| it.0.id() == event.window_id) {
+        let new_size = event.physical_size;
+        if new_size.width > 0 && new_size.height > 0 {
+            rs.size = new_size;
+            rs.config.width = new_size.width;
+            rs.config.height = new_size.height;
+            rs.surface.configure(&rs.device, &rs.config);
+        }
     }
 }
 
