@@ -258,16 +258,12 @@ impl RenderState {
         }
     }
 
-    pub async fn create_surface(
-        &self,
-        window: Arc<Window>,
-        width: u32,
-        height: u32,
-    ) -> SurfaceState {
+    pub async fn create_surface(&self, window: Arc<Window>) -> SurfaceState {
         let surface = self
             .instance
             .create_surface(window)
             .expect("Failed to create surface!");
+        let size = window.inner_size();
 
         let surface_caps = surface.get_capabilities(&self.adapter);
         let surface_format = surface_caps
@@ -282,8 +278,8 @@ impl RenderState {
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
-            width,
-            height,
+            width: size.width,
+            height: size.height,
             // determine how to sync
             present_mode: surface_caps.present_modes[0],
             alpha_mode: surface_caps.alpha_modes[0],
@@ -296,24 +292,12 @@ impl RenderState {
         SurfaceState {
             surface,
             config,
-            size: PhysicalSize::new(width, height),
+            size,
         }
     }
 }
 
 fn sys_init_window(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
-    let u_width = 1600;
-    let u_height = 900;
-    let window = Arc::clone(&event.window);
-    let _ = window.request_inner_size(PhysicalSize::new(u_width, u_height));
-
-    let surface = block_on(
-        world
-            .resource::<RenderState>()
-            .create_surface(window, u_width, u_height),
-    );
-    world.entity_mut(event.id).insert(surface);
-
     // 初始化 Resource
     let mut graph = ResourceGraph::new();
     swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());
@@ -322,6 +306,18 @@ fn sys_init_window(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
     }
 
     world.run_schedule(RenderPreparedStartup);
+}
+
+fn sys_create_surface(
+    mut commands: Commands,
+    q_window: Query<(Entity, &WinitWindow), Without<SurfaceState>>,
+    rs: Res<RenderState>,
+) {
+    for (id, window) in q_window {
+        commands
+            .entity(id)
+            .insert(block_on(rs.create_surface(Arc::clone(&window.0))));
+    }
 }
 
 fn sys_on_resize(

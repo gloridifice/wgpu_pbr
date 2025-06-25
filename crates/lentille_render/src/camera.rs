@@ -9,8 +9,10 @@ use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{RunSystemOnce, Single};
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
+use gltf::animation::Target;
 use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
+use winit::window::WindowId;
 
 use crate::RenderState;
 use crate::dfg::DFGTexture;
@@ -282,13 +284,62 @@ pub fn sys_update_camera_uniform(
 /// RenderTarget 采用 PingPong 的方式，
 /// 在所有渲染阶段完成后会拷贝到 view 中
 #[derive(Component)]
+#[require(RenderTargetSize)]
 pub struct RenderTarget {
-    view: Arc<wgpu::TextureView>,
+    target_type: TargetType,
     /// true = a, false = b
     is_current_color_a: bool,
     color_a: Arc<UploadedImage>,
     color_b: Arc<UploadedImage>,
     pub depth: Option<Arc<UploadedImage>>,
+}
+
+/// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
+#[derive(Component)]
+pub struct RenderTargetSize {
+    width: u32,
+    height: u32,
+}
+
+impl Default for RenderTargetSize {
+    fn default() -> Self {
+        Self {
+            width: 512,
+            height: 512,
+        }
+    }
+}
+
+pub fn sys_resize_render_target(
+    q_render_target: Query<(&mut RenderTarget, &RenderTargetSize), Changed<RenderTargetSize>>,
+    q_window_surface: Query<&SurfaceState>,
+    rs: Res<RenderState>,
+) {
+    for (mut target, size) in q_render_target {
+        let format = match &target.target_type {
+            TargetType::WindowAndSurface(entity) => {
+                q_window_surface
+                    .get(*entity)
+                    .expect("SurfaceState not exists")
+                    .config
+                    .format
+            }
+            TargetType::Texture(uploaded_image) => uploaded_image.texture.format(),
+        };
+
+        (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
+            size.width,
+            size.height,
+            format,
+            target.depth.is_some(),
+            &rs.device,
+        );
+    }
+}
+
+pub enum TargetType {
+    WindowAndSurface(Entity),
+    Texture(Arc<UploadedImage>),
 }
 
 impl RenderTarget {
@@ -301,31 +352,74 @@ impl RenderTarget {
         })
     }
 
-    pub fn from_texture(texture: &wgpu::Texture, device: &wgpu::Device) -> Self {
-        let size = texture.size();
-        let width = size.width;
-        let height = size.height;
+    /// Return `(color_a, color_b, depth)`
+    fn create_images(
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+        has_depth: bool,
+        device: &wgpu::Device,
+    ) -> (
+        Arc<UploadedImage>,
+        Arc<UploadedImage>,
+        Option<Arc<UploadedImage>>,
+    ) {
         let color_a = Arc::new(create_color_render_target_image(
-            width,
-            height,
-            device,
-            texture.format(),
-        ));
-        let color_b = Arc::new(create_color_render_target_image(
-            width,
-            height,
-            device,
-            texture.format(),
+            width, height, device, format,
         ));
 
-        let view = Arc::new(texture.create_view(&Default::default()));
-        let depth = Arc::new(create_depth_texture(width, height, device));
+        let color_b = Arc::new(create_color_render_target_image(
+            width, height, device, format,
+        ));
+
+        let depth = if has_depth {
+            Some(Arc::new(create_depth_texture(width, height, device)))
+        } else {
+            None
+        };
+
+        (color_a, color_b, depth)
+    }
+
+    pub fn from_window(
+        window_entity: Entity,
+        surface_state: &SurfaceState,
+        device: &wgpu::Device,
+    ) -> Self {
+        let size = surface_state.size;
+        let width = size.width;
+        let height = size.height;
+        let format = surface_state.config.format;
+
+        let (color_a, color_b, depth) = Self::create_images(width, height, format, true, device);
+
         Self {
-            view,
+            target_type: TargetType::WindowAndSurface(window_entity),
             is_current_color_a: false,
             color_a,
             color_b,
-            depth: Some(depth),
+            depth,
+        }
+    }
+
+    pub fn new_texture_target(
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+        device: &wgpu::Device,
+    ) -> Self {
+        let color = Arc::new(create_color_render_target_image(
+            width, height, device, format,
+        ));
+
+        let (color_a, color_b, depth) = Self::create_images(width, height, format, true, device);
+
+        Self {
+            target_type: TargetType::Texture(color),
+            is_current_color_a: false,
+            color_a,
+            color_b,
+            depth,
         }
     }
 }
