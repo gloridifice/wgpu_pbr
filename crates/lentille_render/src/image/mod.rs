@@ -6,8 +6,6 @@ pub mod cubemap;
 
 pub struct UploadedImageWithSampler {
     #[allow(unused)]
-    pub size: wgpu::Extent3d,
-    #[allow(unused)]
     pub texture: Texture,
     pub view: TextureView,
     pub sampler: Sampler,
@@ -31,6 +29,10 @@ impl UploadedImageWithSampler {
             bytes_per_row: Some(pixel_size * width),
             rows_per_image: Some(heigh),
         }
+    }
+
+    pub fn size(&self) -> Extent3d {
+        self.texture.size()
     }
 
     pub fn default_sampler_desc() -> wgpu::SamplerDescriptor<'static> {

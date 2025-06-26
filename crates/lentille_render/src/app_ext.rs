@@ -1,14 +1,36 @@
 use bevy_app::Last;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
 
-use crate::{FrameSets, RenderState, graph::InsertConfig, resource::RENDER_RESOURCES_TO_ADD};
+use crate::{
+    FrameSets, RenderState,
+    graph::InsertConfig,
+    resource::RENDER_RESOURCES_TO_ADD,
+    stage::{RenderContext, RenderStageManager},
+};
 
 pub trait AppExt {
+    fn configure_render_stage<Stage: 'static>(
+        &mut self,
+        configs: impl Into<Vec<InsertConfig>>,
+    ) -> &mut Self;
+
+    fn add_frame_system<
+        Stage: 'static,
+        M,
+        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static,
+    >(
+        &mut self,
+        system: S,
+        configs: impl Into<Vec<InsertConfig>>,
+    ) -> &mut Self;
+
+    #[deprecated]
     fn add_render_system<M>(
         &mut self,
         systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
     ) -> &mut Self;
 
+    #[deprecated]
     fn add_render_system_with_custom_schedule<M>(
         &mut self,
         schedule: impl ScheduleLabel,
@@ -22,9 +44,10 @@ pub trait AppExt {
     ) -> &mut Self;
 
     fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self;
+
     fn init_render_resource_with_config<T: Resource + FromWorld>(
         &mut self,
-        configs: impl Into<Vec<Box<dyn InsertConfig<T>>>>,
+        configs: impl Into<Vec<InsertConfig>>,
     ) -> &mut Self;
 }
 
@@ -48,6 +71,22 @@ impl AppExt for bevy_app::App {
         self
     }
 
+    fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self {
+        RENDER_RESOURCES_TO_ADD.lock().unwrap().insert::<T>();
+        self
+    }
+
+    fn init_render_resource_with_config<T: Resource + FromWorld>(
+        &mut self,
+        configs: impl Into<Vec<InsertConfig>>,
+    ) -> &mut Self {
+        RENDER_RESOURCES_TO_ADD
+            .lock()
+            .unwrap()
+            .insert_with_configs::<T>(configs);
+        self
+    }
+
     fn add_render_system_in_frame_set<M>(
         &mut self,
         set: FrameSets,
@@ -57,19 +96,34 @@ impl AppExt for bevy_app::App {
         self
     }
 
-    fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self {
-        RENDER_RESOURCES_TO_ADD.lock().unwrap().insert::<T>();
+    fn configure_render_stage<Stage: 'static>(
+        &mut self,
+        configs: impl Into<Vec<InsertConfig>>,
+    ) -> &mut Self {
+        let mut render_stage_manager = self
+            .world_mut()
+            .get_resource_or_init::<RenderStageManager>();
+        render_stage_manager.try_init_stage::<Stage>();
+        render_stage_manager
+            .stages
+            .configure_node::<Stage>(configs.into());
         self
     }
 
-    fn init_render_resource_with_config<T: Resource + FromWorld>(
+    fn add_frame_system<
+        Stage: 'static,
+        M,
+        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static,
+    >(
         &mut self,
-        configs: impl Into<Vec<Box<InsertConfig>>>,
+        system: S,
+        configs: impl Into<Vec<InsertConfig>>,
     ) -> &mut Self {
-        RENDER_RESOURCES_TO_ADD
-            .lock()
-            .unwrap()
-            .insert_with_configs::<T>(configs);
+        let id = self.register_system(system);
+        let mut render_stage_manager = self
+            .world_mut()
+            .get_resource_or_init::<RenderStageManager>();
+        render_stage_manager.insert_system::<Stage, S>(id, configs);
         self
     }
 }

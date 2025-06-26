@@ -5,6 +5,7 @@ struct CameraUniform {
     view_proj: mat4x4<f32>,
     position: vec3<f32>,
     direction: vec3<f32>,
+    screen_resolution: vec2<f32>,
 }
 
 struct LightUniform {
@@ -13,10 +14,6 @@ struct LightUniform {
     view_proj: mat4x4<f32>,
     intensity: f32,
     lights_nums: vec4<u32>,
-}
-
-struct GlobalUniform {
-    screen_resolution: vec2<f32>,
 }
 
 @group(0) @binding(0) var<uniform> camera: CameraUniform;
@@ -31,5 +28,3 @@ struct GlobalUniform {
 
 @group(0) @binding(8) var rendered_image: texture_2d<f32>;
 @group(0) @binding(9) var rendered_sampler: sampler;
-
-@group(0) @binding(10) var<uniform> global: GlobalUniform;

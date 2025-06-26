@@ -30,13 +30,13 @@ impl ResourceGraph {
 
     pub fn insert_with_configs<T: Resource + FromWorld>(
         &mut self,
-        configs: impl Into<Vec<Box<InsertConfig>>>,
+        configs: impl Into<Vec<InsertConfig>>,
     ) {
-        self.0.insert_with_configs(
-            configs.into(),
+        self.0.insert_with_configs::<T>(
             Box::new(|world: &mut World| {
                 world.init_resource::<T>();
             }),
+            configs.into(),
         );
     }
 }
@@ -47,7 +47,7 @@ impl IntoIterator for ResourceGraph {
 
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = Vec::new();
-        for (_, item) in self.0.into_bfs() {
+        for (_, item) in self.0.into_iter_bfs() {
             vec.push(item);
         }
         vec.into_iter()

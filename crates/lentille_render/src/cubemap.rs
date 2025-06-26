@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{app_ext::AppExt, prelude::*, resource::after};
+use crate::{app_ext::AppExt, prelude::*};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use cgmath::{Deg, Point3, Vector3};

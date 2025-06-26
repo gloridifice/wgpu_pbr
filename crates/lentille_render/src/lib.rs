@@ -22,6 +22,7 @@ use crate::{
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
     defered_rendering::DeferredRenderingPlugin,
+    graph::after,
     light::LightPlugin,
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
     shadow_mapping::ShadowMappingPlugin,
@@ -98,23 +99,19 @@ impl Plugin for RenderPlugin {
             .add_observer(sys_init_window);
 
         // Add frame render systems
-        app
+        app.configure_render_stage::<OpaqueStage>([after::<PreStage>()])
+            .configure_render_stage::<TransparentStage>([after::<OpaqueStage>()])
             // 一般系统
             .add_systems(Update, sys_refersh_global_bind_group)
             .add_systems(
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,
             )
-            .add_systems(
-                Last,
-                (
-                    sys_render_shadow_mapping_pass.in_set(FrameSets::PreDraw),
-                    (sys_render_write_g_buffer_pass, sys_render_main_pass)
-                        .chain()
-                        .in_set(FrameSets::DrawOpaque),
-                    sys_render_transparent.in_set(FrameSets::DrawTransparent),
-                ),
-            );
+            .add_frame_system::<PreStage, _, _>(sys_render_shadow_mapping_pass, [])
+            .add_frame_system::<OpaqueStage, _, _>(sys_render_write_g_buffer_pass, [])
+            .add_frame_system::<OpaqueStage, _, _>(sys_render_main_pass, [])
+            .add_frame_system::<TransparentStage, _, _>(sys_render_transparent, []);
+
         app.init_render_resource::<WhiteTexture>()
             .init_render_resource::<NormalDefaultTexture>()
             .init_render_resource::<dfg::DFGTexture>()
@@ -130,6 +127,10 @@ impl Plugin for RenderPlugin {
             ]);
     }
 }
+
+pub struct PreStage;
+pub struct OpaqueStage;
+pub struct TransparentStage;
 
 #[derive(Component, Clone)]
 pub struct MainPassObject;
@@ -268,7 +269,7 @@ impl RenderState {
     }
 }
 
-fn sys_init_window(event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
+fn sys_init_window(_event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
     // 初始化 Resource
     let mut graph = ResourceGraph::new();
     swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());

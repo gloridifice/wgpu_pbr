@@ -9,10 +9,11 @@ pub use crate::{
         WhiteTexture,
     },
     bindings::{
-        global_binding::GlobalUniformBuffer, light_binding::DynamicLightBindGroup,
-        material_binding::PBRMaterialBindGroupLayout, object_binding::ObjectBindGroupLayout,
+        light_binding::DynamicLightBindGroup, material_binding::PBRMaterialBindGroupLayout,
+        object_binding::ObjectBindGroupLayout,
     },
     camera::Camera,
+    graph::{after, before},
     image::{UploadedImage, UploadedImageWithSampler},
     light::{parallel_light::ParallelLight, point_light::PointLight},
     material::pbr::GltfMaterial,
@@ -20,8 +21,6 @@ pub use crate::{
     mesh::{
         Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex, renderer::MeshRenderer,
     },
-    resource::after,
-    resource::before,
     shader_loader::ShaderLoader,
     shadow_mapping::CastShadow,
     skybox::Skybox,

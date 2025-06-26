@@ -38,6 +38,9 @@ pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
 #[derive(Resource, Clone)]
 pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 
+#[derive(Resource, Clone)]
+pub struct NoFilterSampler(pub Arc<Sampler>);
+
 impl FromWorld for WhiteTexture {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
@@ -104,5 +107,15 @@ impl FromWorld for DefaultPBRMaterial {
             },
         );
         Self(Arc::new(mat))
+    }
+}
+
+impl FromWorld for NoFilterSampler {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let sampler = rs
+            .device
+            .create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter());
+        Self(Arc::new(sampler))
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::bindings::global_binding::{GlobalBindGroupLayout, RawGlobalUniform};
+use crate::base_assets::NoFilterSampler;
+use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate, Update};
 use bevy_ecs::component::Component;
@@ -15,7 +16,6 @@ use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
 use crate::RenderState;
 use crate::dfg::DFGTexture;
 use crate::light::LightUnifromBuffer;
-use crate::prelude::GlobalUniformBuffer;
 use crate::shadow_mapping::ShadowMap;
 use crate::skybox::{DefaultSkybox, SkyboxSHBuffer};
 
@@ -97,13 +97,14 @@ impl Camera {
         }
     }
 
-    pub fn get_uniform(&self, transform: &WorldTransform) -> CameraUniform {
+    pub fn get_uniform(&self, transform: &WorldTransform, resolution: [f32; 2]) -> CameraUniform {
         let pos = transform.position;
         let dir = transform.forward();
         CameraUniform {
             view_proj: self.build_view_projection_matrix(transform).into(),
             position: [pos.x, pos.y, pos.z, 1.],
             direction: [dir.x, dir.y, dir.z, 1.],
+            resolution,
         }
     }
 }
@@ -129,6 +130,7 @@ pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
     pub position: [f32; 4],
     pub direction: [f32; 4],
+    pub resolution: [f32; 2],
 }
 
 impl_pod_zeroable!(CameraUniform);
@@ -160,9 +162,9 @@ fn refresh_camera_global_bind_group_by_ids(
     light: Res<LightUnifromBuffer>,
     shadow_map: Res<ShadowMap>,
     dfg: Res<DFGTexture>,
-    global_uniform_buffer: Res<GlobalUniformBuffer>,
     layout: Res<GlobalBindGroupLayout>,
     rs: Res<RenderState>,
+    no_filter_sampler: Res<NoFilterSampler>,
 
     default_skybox: Res<DefaultSkybox>,
     skybox_sh: Res<SkyboxSHBuffer>,
@@ -179,16 +181,7 @@ fn refresh_camera_global_bind_group_by_ids(
         .iter()
         .filter(|(id, _, _)| to_refresh.contains(&id))
     {
-        let size = target.color_a.texture.size();
-        let buffer = &global_uniform_buffer.buffer;
-        rs.queue.write_buffer(
-            buffer,
-            0,
-            bytemuck::cast_slice(&[RawGlobalUniform {
-                screen_resolution: [size.width as f32, size.height as f32],
-            }]),
-        );
-        let bind_groups = [0, 1]
+        let mut bind_groups = [0, 1]
             .into_iter()
             .map(|it| {
                 let image = if it == 0 {
@@ -207,16 +200,16 @@ fn refresh_camera_global_bind_group_by_ids(
                     6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
                     7: skybox_sh.buffer.as_entire_binding();
                     8: BindingResource::TextureView(&image.view);
-                    9: BindingResource::Sampler(&image.sampler); //TODO A universal sampler
-                    10: global_uniform_buffer.buffer.as_entire_binding();
+                    9: BindingResource::Sampler(&no_filter_sampler.0);
                 };
                 Arc::new(device.create_bind_group(&bind_group_desc))
             })
             .collect::<Vec<_>>();
+
         commands.entity(id).insert(CameraGlobalBindGroup {
             is_current_b: false,
-            a: bind_groups[0],
-            b: bind_groups[1],
+            a: bind_groups.remove(0),
+            b: bind_groups.remove(0),
         });
     }
 }
@@ -252,12 +245,18 @@ impl Command for RefreshAllCameraGlobalBindGroupCmd {
 pub fn sys_update_camera_buffer(
     mut commands: Commands,
     single: Single<
-        (Entity, &mut Camera, &WorldTransform, Option<&CameraBuffer>),
+        (
+            Entity,
+            &mut Camera,
+            &WorldTransform,
+            &RenderTargetSize,
+            Option<&CameraBuffer>,
+        ),
         (Or<(Changed<Camera>, Changed<WorldTransform>)>,),
     >,
     rs: Res<RenderState>,
 ) {
-    let (id, mut camera, transform, camera_buffer) = single.into_inner();
+    let (id, mut camera, transform, render_target_size, camera_buffer) = single.into_inner();
 
     match camera_buffer {
         Some(camera_buffer) => {
@@ -266,7 +265,13 @@ pub fn sys_update_camera_buffer(
             rs.queue.write_buffer(
                 &camera_buffer.buffer,
                 0,
-                bytemuck::cast_slice(&[camera.get_uniform(transform)]),
+                bytemuck::cast_slice(&[camera.get_uniform(
+                    transform,
+                    [
+                        render_target_size.width as f32,
+                        render_target_size.height as f32,
+                    ],
+                )]),
             );
         }
         None => {
@@ -460,12 +465,7 @@ pub fn create_color_render_target_image(
     UploadedImage { texture, view }
 }
 
-pub fn create_depth_texture(
-    width: u32,
-    height: u32,
-    device: &wgpu::Device,
-    // compare: Option<wgpu::CompareFunction>, TODO
-) -> UploadedImage {
+pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> UploadedImage {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -484,11 +484,17 @@ pub fn create_depth_texture(
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-    // let sampler = device.create_sampler(&{
-    //     let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
-    //     desc.compare = compare;
-    //     desc
-    // });
-
     UploadedImage { texture, view }
+}
+
+pub fn create_depth_sampler(
+    compare: Option<wgpu::CompareFunction>,
+    device: &wgpu::Device,
+) -> Sampler {
+    let sampler = device.create_sampler(&{
+        let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
+        desc.compare = compare;
+        desc
+    });
+    sampler
 }

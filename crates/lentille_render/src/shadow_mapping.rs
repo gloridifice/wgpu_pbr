@@ -1,4 +1,4 @@
-use crate::{app_ext::AppExt, prelude::*, resource::after};
+use crate::{app_ext::AppExt, camera, prelude::*};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
@@ -134,15 +134,17 @@ impl FromWorld for ShadowMappingPipeline {
 
 impl FromWorld for ShadowMap {
     fn from_world(world: &mut World) -> Self {
-        world.resource_scope(|_, render_state: Mut<RenderState>| {
-            let image = crate::create_depth_texture(
-                &render_state.device,
-                4096,
-                4096,
-                Some(wgpu::CompareFunction::LessEqual),
-            );
+        let rs = world.resource::<RenderState>();
+        let device = &rs.device;
+        let UploadedImage { texture, view } = camera::create_depth_texture(4096, 4096, device);
+        let sampler = camera::create_depth_sampler(Some(wgpu::CompareFunction::LessEqual), device);
 
-            Self { image }
-        })
+        Self {
+            image: UploadedImageWithSampler {
+                texture,
+                view,
+                sampler,
+            },
+        }
     }
 }
