@@ -1,10 +1,7 @@
 use bevy_app::Last;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
 
-use crate::{
-    FrameSets, RenderState,
-    resource::{InitConfig, RENDER_RESOURCES_TO_ADD},
-};
+use crate::{FrameSets, RenderState, graph::InsertConfig, resource::RENDER_RESOURCES_TO_ADD};
 
 pub trait AppExt {
     fn add_render_system<M>(
@@ -27,7 +24,7 @@ pub trait AppExt {
     fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self;
     fn init_render_resource_with_config<T: Resource + FromWorld>(
         &mut self,
-        configs: impl Into<Vec<Box<dyn InitConfig>>>,
+        configs: impl Into<Vec<Box<dyn InsertConfig<T>>>>,
     ) -> &mut Self;
 }
 
@@ -67,12 +64,12 @@ impl AppExt for bevy_app::App {
 
     fn init_render_resource_with_config<T: Resource + FromWorld>(
         &mut self,
-        configs: impl Into<Vec<Box<dyn InitConfig>>>,
+        configs: impl Into<Vec<Box<InsertConfig>>>,
     ) -> &mut Self {
         RENDER_RESOURCES_TO_ADD
             .lock()
             .unwrap()
-            .insert_with_configs::<T>(configs.into());
+            .insert_with_configs::<T>(configs);
         self
     }
 }

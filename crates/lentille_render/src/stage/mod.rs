@@ -1,9 +1,23 @@
 use crate::{
-    camera::{CameraGlobalBindGroup, RenderTarget},
+    FrameSets, SurfaceState,
+    camera::{CameraGlobalBindGroup, RenderTarget, TargetType},
     prelude::*,
 };
+use bevy_app::Plugin;
 use bevy_ecs::{prelude::*, system::SystemId};
 use wgpu::CommandEncoderDescriptor;
+
+pub(crate) struct StagePlugin;
+
+impl Plugin for StagePlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.add_render_system_in_frame_set(
+            FrameSets::Draw,
+            (sys_render, sys_copy_to_real_target).chain(),
+        )
+        .add_render_system_in_frame_set(FrameSets::Present, sys_present);
+    }
+}
 
 #[derive(Resource)]
 pub struct RenderStageManager {
@@ -61,5 +75,37 @@ pub fn sys_render(
                     .submit(std::iter::once(ctx.encoder.finish()));
             });
         }
+    }
+}
+
+pub fn sys_copy_to_real_target(
+    rs: Res<RenderState>,
+    q_render_target: Query<&RenderTarget>,
+    q_surface_state: Query<&SurfaceState>,
+) {
+    for target in q_render_target {
+        let current_colot = target.get_current_color();
+        let size = current_colot.texture.size();
+        let texture = match &target.target_type {
+            TargetType::WindowAndSurface(entity) => {
+                let surface_state = q_surface_state.get(*entity).unwrap();
+                &surface_state.surface.get_current_texture().unwrap().texture
+            }
+            TargetType::Texture(uploaded_image) => &uploaded_image.texture,
+        };
+
+        let mut encoder = rs.device.create_command_encoder(&Default::default());
+        lentille_wgpu_utils::copy_texture(&mut encoder, &current_colot.texture, texture, size);
+        rs.queue.submit(std::iter::once(encoder.finish()));
+    }
+}
+
+pub fn sys_present(q_surface_state: Query<&SurfaceState>) {
+    for surface_state in q_surface_state {
+        surface_state
+            .surface
+            .get_current_texture()
+            .unwrap()
+            .present();
     }
 }

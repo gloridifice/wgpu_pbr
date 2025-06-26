@@ -3,14 +3,15 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
 };
 
+/// 这是一个基于 TypeId 的有向无环图
 #[derive(Debug)]
-pub struct Graph<T> {
-    pub(super) nodes: HashMap<TypeId, T>,
+pub struct TypeIdGraph<T> {
+    pub(super) nodes: HashMap<TypeId, Option<T>>,
     pub(super) edges: HashMap<TypeId, Vec<TypeId>>,
     pub(super) parents: HashMap<TypeId, Vec<TypeId>>,
 }
 
-impl<T> Graph<T> {
+impl<T: 'static> TypeIdGraph<T> {
     pub fn new() -> Self {
         Self {
             nodes: HashMap::new(),
@@ -19,7 +20,7 @@ impl<T> Graph<T> {
         }
     }
 
-    pub fn add_node(&mut self, id: TypeId, data: T) {
+    pub fn add_node(&mut self, id: TypeId, data: Option<T>) {
         self.nodes.insert(id, data);
         self.edges.entry(id).or_insert_with(Vec::new);
         self.parents.entry(id).or_insert_with(Vec::new);
@@ -30,20 +31,72 @@ impl<T> Graph<T> {
         self.parents.entry(to).or_default().push(from);
     }
 
+    pub fn insert_with_configs(&mut self, mut configs: Vec<Box<InsertConfig>>, value: T) {
+        let id = TypeId::of::<T>();
+        self.add_node(id, Some(value));
+
+        for config in configs.iter_mut() {
+            config.work(id, self);
+        }
+    }
+
+    pub fn get_node_or_create_none(&mut self) -> TypeId {
+        let id = TypeId::of::<T>();
+        if !self.nodes.contains_key(&id) {
+            self.add_node(id, None);
+        }
+        id
+    }
+
+    pub fn get_node_or_create_none_by_id(&mut self, id: TypeId) -> TypeId {
+        if !self.nodes.contains_key(&id) {
+            self.add_node(id, None);
+        }
+        id
+    }
+
     // Consume the graph and return a BFS iterator starting from the given node
     pub fn into_bfs(self) -> BfsIterator<T> {
         BfsIterator::new(self)
     }
 }
 
+pub enum InsertConfig {
+    After(TypeId),
+    Before(TypeId),
+}
+
+impl InsertConfig {
+    pub fn work<T: 'static>(&mut self, node: TypeId, graph: &mut TypeIdGraph<T>) {
+        match self {
+            InsertConfig::After(type_id) => {
+                let before = graph.get_node_or_create_none_by_id(self.0);
+                graph.add_edge(before, node);
+            }
+            InsertConfig::Before(type_id) => {
+                let after = graph.get_node_or_create_none_by_id(self.0);
+                graph.add_edge(node, after);
+            }
+        }
+    }
+}
+
+pub fn after<T: 'static>() -> Box<InsertConfig> {
+    Box::new(InsertConfig::AfterConfig(TypeId::of::<T>()))
+}
+
+pub fn before<T: 'static>() -> Box<InsertConfig> {
+    Box::new(InsertConfig::BeforeConfig(TypeId::of::<T>()))
+}
+
 pub struct BfsIterator<T> {
-    graph: Graph<T>,
+    graph: TypeIdGraph<T>,
     queue: VecDeque<TypeId>,
     visited: HashSet<TypeId>,
 }
 
 impl<T> BfsIterator<T> {
-    fn new(graph: Graph<T>) -> Self {
+    fn new(graph: TypeIdGraph<T>) -> Self {
         let mut queue = VecDeque::new();
         let visited = HashSet::new();
 
@@ -61,7 +114,7 @@ impl<T> BfsIterator<T> {
     }
 }
 
-impl<T> Iterator for BfsIterator<T> {
+impl<T: 'static> Iterator for BfsIterator<T> {
     type Item = (TypeId, T);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -83,7 +136,7 @@ impl<T> Iterator for BfsIterator<T> {
             }
 
             // Remove and return the node data
-            if let Some(data) = self.graph.nodes.remove(&current) {
+            if let Some(Some(data)) = self.graph.nodes.remove(&current) {
                 return Some((current, data));
             }
         }

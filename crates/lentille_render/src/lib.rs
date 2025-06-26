@@ -36,6 +36,7 @@ pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
 pub mod dfg;
+pub mod graph;
 pub mod image;
 pub mod light;
 pub mod material;
@@ -84,17 +85,7 @@ impl Plugin for RenderPlugin {
             Last,
             (
                 FrameSets::Prepare,
-                FrameSets::PreDraw,
-                // Opaque
-                FrameSets::BeforeDrawOpaque,
-                FrameSets::DrawOpaque,
-                FrameSets::AfterDrawOpaque,
-                // Transparent
-                FrameSets::BeforeDrawTransparent,
-                FrameSets::DrawTransparent,
-                FrameSets::AfterDrawTransparent,
-                // Last and present
-                FrameSets::LastDraw,
+                FrameSets::Draw,
                 FrameSets::Present,
                 FrameSets::Cleanup,
             )
@@ -102,16 +93,12 @@ impl Plugin for RenderPlugin {
                 .run_if(resource_exists::<RenderState>),
         );
 
-        // Add basics render systems
-        app.add_systems(
-            Last,
-            (sys_cleanup_frame_context.in_set(FrameSets::Cleanup),),
-        )
-        // 初始化 RenderState 和初始化资源
-        .add_observer(sys_init_window);
+        app
+            // 初始化 RenderState 和初始化资源
+            .add_observer(sys_init_window);
 
         // Add frame render systems
-        app.add_observer(sys_on_resize)
+        app
             // 一般系统
             .add_systems(Update, sys_refersh_global_bind_group)
             .add_systems(
@@ -161,23 +148,7 @@ pub struct RenderPreparedStartup;
 pub enum FrameSets {
     /// Create RenderContext
     Prepare,
-    // 5 Draw stages
-    PreDraw,
-
-    // Opaque
-    BeforeDrawOpaque,
-    DrawOpaque,
-    AfterDrawOpaque,
-
-    // Transparent
-    BeforeDrawTransparent,
-    DrawTransparent,
-    AfterDrawTransparent,
-
-    // Post-processing
-    DrawPostProcessing,
-
-    LastDraw,
+    Draw,
     /// Submit encoder and present output texture
     Present,
     Cleanup,
@@ -259,11 +230,11 @@ impl RenderState {
     }
 
     pub async fn create_surface(&self, window: Arc<Window>) -> SurfaceState {
+        let size = window.inner_size();
         let surface = self
             .instance
             .create_surface(window)
             .expect("Failed to create surface!");
-        let size = window.inner_size();
 
         let surface_caps = surface.get_capabilities(&self.adapter);
         let surface_format = surface_caps
@@ -318,25 +289,4 @@ fn sys_create_surface(
             .entity(id)
             .insert(block_on(rs.create_surface(Arc::clone(&window.0))));
     }
-}
-
-fn sys_on_resize(
-    event: Trigger<ResizeEvent>,
-    mut rs: ResMut<RenderState>,
-    q_window: Query<&WinitWindow>,
-) {
-    // TODO 将 SurfaceState 移动到 Window Entity 中
-    if let Some(window) = q_window.iter().find(|it| it.0.id() == event.window_id) {
-        let new_size = event.physical_size;
-        if new_size.width > 0 && new_size.height > 0 {
-            rs.size = new_size;
-            rs.config.width = new_size.width;
-            rs.config.height = new_size.height;
-            rs.surface.configure(&rs.device, &rs.config);
-        }
-    }
-}
-
-fn sys_cleanup_frame_context(world: &mut World) {
-    world.remove_resource::<FrameRenderContext>();
 }

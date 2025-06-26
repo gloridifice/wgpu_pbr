@@ -2,17 +2,15 @@ use std::sync::Arc;
 
 use crate::bindings::global_binding::{GlobalBindGroupLayout, RawGlobalUniform};
 use crate::{SurfaceState, prelude::*};
-use bevy_app::{Plugin, PostUpdate};
+use bevy_app::{Plugin, PostUpdate, Update};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{RunSystemOnce, Single};
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
-use gltf::animation::Target;
 use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
-use winit::window::WindowId;
 
 use crate::RenderState;
 use crate::dfg::DFGTexture;
@@ -30,11 +28,12 @@ impl Plugin for CameraPlugin {
         app.add_systems(
             PostUpdate,
             (
-                sys_update_camera_uniform,
+                sys_update_camera_buffer,
                 sys_create_camera_global_bind_group,
             )
                 .chain(),
-        );
+        )
+        .add_systems(Update, sys_resize_render_target);
     }
 }
 
@@ -56,9 +55,6 @@ pub struct Camera {
     pub zfar: f32,
     pub view_proj: Matrix4<f32>,
 }
-
-#[derive(Component)]
-pub struct CameraTarget(pub Option<wgpu::TextureView>);
 
 #[derive(Component)]
 pub struct CameraGlobalBindGroup {
@@ -253,7 +249,7 @@ impl Command for RefreshAllCameraGlobalBindGroupCmd {
     }
 }
 
-pub fn sys_update_camera_uniform(
+pub fn sys_update_camera_buffer(
     mut commands: Commands,
     single: Single<
         (Entity, &mut Camera, &WorldTransform, Option<&CameraBuffer>),
@@ -286,7 +282,7 @@ pub fn sys_update_camera_uniform(
 #[derive(Component)]
 #[require(RenderTargetSize)]
 pub struct RenderTarget {
-    target_type: TargetType,
+    pub target_type: TargetType,
     /// true = a, false = b
     is_current_color_a: bool,
     color_a: Arc<UploadedImage>,
@@ -301,6 +297,11 @@ pub struct RenderTargetSize {
     height: u32,
 }
 
+pub enum TargetType {
+    WindowAndSurface(Entity),
+    Texture(Arc<UploadedImage>),
+}
+
 impl Default for RenderTargetSize {
     fn default() -> Self {
         Self {
@@ -310,19 +311,24 @@ impl Default for RenderTargetSize {
     }
 }
 
+/// 负责监控 `RenderTargetSize` 的变化并更新纹理
 pub fn sys_resize_render_target(
     q_render_target: Query<(&mut RenderTarget, &RenderTargetSize), Changed<RenderTargetSize>>,
-    q_window_surface: Query<&SurfaceState>,
+    mut q_window_surface: Query<&mut SurfaceState>,
     rs: Res<RenderState>,
 ) {
     for (mut target, size) in q_render_target {
         let format = match &target.target_type {
             TargetType::WindowAndSurface(entity) => {
-                q_window_surface
-                    .get(*entity)
-                    .expect("SurfaceState not exists")
-                    .config
-                    .format
+                let mut surface_state = q_window_surface
+                    .get_mut(*entity)
+                    .expect("SurfaceState not exists");
+                surface_state.config.width = size.width;
+                surface_state.config.height = size.height;
+                surface_state
+                    .surface
+                    .configure(&rs.device, &surface_state.config);
+                surface_state.config.format
             }
             TargetType::Texture(uploaded_image) => uploaded_image.texture.format(),
         };
@@ -337,14 +343,17 @@ pub fn sys_resize_render_target(
     }
 }
 
-pub enum TargetType {
-    WindowAndSurface(Entity),
-    Texture(Arc<UploadedImage>),
-}
-
 impl RenderTarget {
     pub fn next(&mut self) -> Arc<UploadedImage> {
         self.is_current_color_a = !self.is_current_color_a;
+        Arc::clone(if self.is_current_color_a {
+            &self.color_a
+        } else {
+            &self.color_b
+        })
+    }
+
+    pub fn get_current_color(&self) -> Arc<UploadedImage> {
         Arc::clone(if self.is_current_color_a {
             &self.color_a
         } else {
