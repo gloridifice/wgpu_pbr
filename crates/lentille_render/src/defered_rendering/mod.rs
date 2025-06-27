@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
+    SCREEN_FORMAT,
     bindings::{
         global_binding::GlobalBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
     },
     defered_rendering::write_g_buffer_pipeline::{
-        DeferredWriteGBufferPipeline, GBufferTexturesBindGroup,
+        DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, GBufferTexturesBindGroup,
     },
     prelude::*,
 };
@@ -18,11 +19,9 @@ pub(crate) struct DeferredRenderingPlugin;
 
 impl Plugin for DeferredRenderingPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_render_resource_with_config::<DeferredWriteGBufferPipeline>([after::<
-            GlobalBindGroupLayout,
-        >()])
-        .init_render_resource_with_config::<write_g_buffer_pipeline::GBufferTexturesBindGroup>([
-            after::<RenderTargetSize>(),
+        app.init_render_resource_with_config::<DeferredWriteGBufferPipeline>([
+            after::<GlobalBindGroupLayout>(),
+            after::<GBufferTextureBindGroupLayout>(),
         ])
         .init_render_resource_with_config::<DeferredComputePipeline>([
             after::<GBufferTexturesBindGroup>(),
@@ -57,7 +56,7 @@ impl FromWorld for DeferredComputePipeline {
 
         let bind_group_layouts = vec![
             Arc::clone(&world.resource::<GlobalBindGroupLayout>().0),
-            Arc::clone(&world.resource::<GBufferTexturesBindGroup>().layout),
+            Arc::clone(&world.resource::<GBufferTextureBindGroupLayout>().layout),
             Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0),
             Arc::clone(&world.resource::<DynamicLightBindGroup>().layout),
         ];
@@ -79,7 +78,7 @@ impl FromWorld for DeferredComputePipeline {
                 &full_screen_shader.module,
                 &shader,
                 &[Some(lentille_wgpu_utils::color_target_replace_write_all(
-                    rs.config.format,
+                    SCREEN_FORMAT,
                 ))],
             ));
 

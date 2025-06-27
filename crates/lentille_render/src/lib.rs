@@ -7,7 +7,7 @@ use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use defered_rendering::DeferredComputePipeline;
-use lentille_core::window::{MainWindowCreatedEvent, ResizeEvent, WinitWindow};
+use lentille_core::window::{MainWindowCreatedEvent, WinitWindow};
 use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
@@ -64,6 +64,12 @@ pub mod app_ext;
 /// 同时物体不能持有 `MainPassObject`
 pub mod transparent;
 pub mod utils;
+
+// TODO 检查这个 format 的正确性
+#[cfg(target_os = "windows")]
+pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
+#[cfg(not(target_os = "windows"))]
+pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 pub struct RenderPlugin;
 

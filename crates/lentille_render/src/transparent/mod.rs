@@ -2,7 +2,7 @@ use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
-use crate::{bindings::global_binding::GlobalBindGroupLayout, prelude::*};
+use crate::{SCREEN_FORMAT, bindings::global_binding::GlobalBindGroupLayout, prelude::*};
 
 use super::shader_loader::ShaderLoader;
 
@@ -37,7 +37,6 @@ impl FromWorld for TransparentPipeline {
 
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
-        let config = &rs.config;
         let global_bind_group = world.resource::<GlobalBindGroupLayout>();
         let material_bind_group = world.resource::<PBRMaterialBindGroupLayout>();
         let object_bind_group = world.resource::<ObjectBindGroupLayout>();
@@ -75,7 +74,7 @@ impl FromWorld for TransparentPipeline {
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: SCREEN_FORMAT,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: ColorWrites::ALL,
                 })],

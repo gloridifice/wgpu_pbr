@@ -5,7 +5,7 @@ use bevy_ecs::prelude::*;
 
 #[derive(Resource, Clone)]
 pub struct FullScreenVertexShader {
-    module: Arc<ShaderModule>,
+    pub module: Arc<ShaderModule>,
 }
 
 impl FromWorld for FullScreenVertexShader {

@@ -1,24 +1,39 @@
 use std::sync::Arc;
 
-use crate::{bindings::global_binding::GlobalBindGroupLayout, prelude::*};
+use crate::{
+    base_assets::NoFilterSampler, bindings::global_binding::GlobalBindGroupLayout,
+    camera::RenderTargetSize, prelude::*,
+};
+use bevy_app::{Plugin, Update};
 use bevy_ecs::prelude::*;
 use wgpu::RenderPassColorAttachment;
 
+pub struct WriteGBufferPipeline;
+
+impl Plugin for WriteGBufferPipeline {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource::<GBufferTextureBindGroupLayout>()
+            .add_systems(Update, sys_resize_g_buffer_texture);
+    }
+}
+
 #[derive(Resource, Clone)]
-pub struct GBufferTexturesBindGroup {
-    pub sampler: Arc<Sampler>,
+pub struct GBufferTextureBindGroupLayout {
     pub layout: Arc<BindGroupLayout>,
+}
+
+/// 挂在相机上
+#[derive(Component, Clone)]
+pub struct GBufferTexturesBindGroup {
     pub textures: Vec<GBufferTexture>,
     pub bind_group: Arc<BindGroup>,
 }
 
+/// 挂在相机上
 #[allow(unused)]
 #[derive(Clone)]
 pub struct GBufferTexture {
-    pub label: String,
-    pub size: Extent3d,
     pub image: Arc<UploadedImage>,
-    pub format: TextureFormat,
 }
 
 #[allow(unused)]
@@ -29,28 +44,19 @@ pub struct DeferredWriteGBufferPipeline {
     pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
-impl FromWorld for GBufferTexturesBindGroup {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<crate::RenderState>();
-        let size = world.resource::<RenderTargetSize>();
-        let device = &rs.device;
-        Self::new(device, size.into())
-    }
-}
-
 impl GBufferTexturesBindGroup {
     pub fn create_textures_and_bind_groups(
         device: &wgpu::Device,
         size: Extent3d,
-        sampler: &Sampler,
         layout: &BindGroupLayout,
+        sampler: &Sampler,
     ) -> (Vec<GBufferTexture>, Arc<BindGroup>) {
         let textures: Vec<GBufferTexture> = vec![
             ("World Pos", TextureFormat::Rgba16Float),
             ("G-Buffer", TextureFormat::Rgba32Uint),
         ]
         .into_iter()
-        .map(|(label, format)| create_g_buffer_image(label, device, size, format))
+        .map(|(_, format)| create_g_buffer_image(device, size, format))
         .collect();
 
         let bind_group = Arc::new(device.create_bind_group(&bg_descriptor! {
@@ -79,38 +85,40 @@ impl GBufferTexturesBindGroup {
         color_attachements
     }
 
-    pub fn new(device: &wgpu::Device, size: Extent3d) -> Self {
-        let sampler =
-            Arc::new(device.create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter()));
-        let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
-            ["GBuffert Textures"]
-            0: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::NonFiltering); // Universal Sampler
-            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // World Pos
-            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Uint); // G-Buffer
-        }));
+    pub fn new(
+        device: &wgpu::Device,
+        size: Extent3d,
+        layout: &BindGroupLayout,
+        sampler: &Sampler,
+    ) -> Self {
         let (textures, bind_group) =
-            Self::create_textures_and_bind_groups(device, size, &sampler, &layout);
+            Self::create_textures_and_bind_groups(device, size, layout, sampler);
 
         Self {
             textures,
-            sampler,
-            layout,
             bind_group,
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32, device: &wgpu::Device) {
+    pub fn resize(
+        &mut self,
+        width: u32,
+        height: u32,
+        device: &wgpu::Device,
+        layout: &BindGroupLayout,
+        sampler: &Sampler,
+    ) {
         let size = Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
         (self.textures, self.bind_group) =
-            Self::create_textures_and_bind_groups(device, size, &self.sampler, &self.layout);
+            Self::create_textures_and_bind_groups(device, size, layout, sampler);
     }
 }
+
 pub fn create_g_buffer_image(
-    label: &str,
     device: &wgpu::Device,
     size: Extent3d,
     format: TextureFormat,
@@ -124,10 +132,7 @@ pub fn create_g_buffer_image(
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&Default::default());
     GBufferTexture {
-        label: label.to_string(),
-        size,
         image: Arc::new(UploadedImage { texture, view }),
-        format,
     }
 }
 
@@ -227,5 +232,60 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             pipeline_layout: render_pipeline_layout,
             bind_group_layouts,
         }
+    }
+}
+
+impl FromWorld for GBufferTextureBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        let device = &world.resource::<RenderState>().device;
+        let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
+            ["GBuffert Textures"]
+            0: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::NonFiltering); // Universal Sampler
+            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // World Pos
+            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Uint); // G-Buffer
+        }));
+
+        Self { layout }
+    }
+}
+
+fn sys_create_deferred_write_g_buffer(
+    mut commands: Commands,
+    q_camera: Query<(Entity, &RenderTargetSize), Without<GBufferTexturesBindGroup>>,
+    rs: Res<RenderState>,
+    bgl: Res<GBufferTextureBindGroupLayout>,
+    no_filter_sampler: Res<NoFilterSampler>,
+) {
+    for (id, size) in q_camera {
+        commands.entity(id).insert(GBufferTexturesBindGroup::new(
+            &rs.device,
+            Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            &bgl.layout,
+            &no_filter_sampler.0,
+        ));
+    }
+}
+
+fn sys_resize_g_buffer_texture(
+    q_camera: Query<(&RenderTargetSize, &mut GBufferTexturesBindGroup), Changed<RenderTargetSize>>,
+    rs: Res<RenderState>,
+    bgl: Res<GBufferTextureBindGroupLayout>,
+    no_filter_sampler: Res<NoFilterSampler>,
+) {
+    for (size, mut bg) in q_camera {
+        *bg.as_mut() = GBufferTexturesBindGroup::new(
+            &rs.device,
+            Extent3d {
+                width: size.width,
+                height: size.height,
+                depth_or_array_layers: 1,
+            },
+            &bgl.layout,
+            &no_filter_sampler.0,
+        );
     }
 }

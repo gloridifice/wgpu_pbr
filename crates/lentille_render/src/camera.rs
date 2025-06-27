@@ -298,8 +298,8 @@ pub struct RenderTarget {
 /// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
 #[derive(Component)]
 pub struct RenderTargetSize {
-    width: u32,
-    height: u32,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub enum TargetType {

@@ -66,15 +66,16 @@ pub fn sys_render_shadow_mapping_pass(
 
 pub fn sys_render_write_g_buffer_pass(
     ctx: InMut<RenderContext>,
-    g_buffer_textures: Res<GBufferTexturesBindGroup>,
     main_pipeline: Res<DeferredWriteGBufferPipeline>,
     default_material: Res<DefaultPBRMaterial>,
     mesh_renderers: Query<
         (&MeshRenderer, Option<&PBRMaterialOverride>),
         (With<Transform>, With<MainPassObject>),
     >,
+    q_camera: Query<&GBufferTexturesBindGroup>,
 ) {
     let InMut(RenderContext {
+        camera_id,
         encoder,
         camera_global_bind_group,
         depth_target,
@@ -85,7 +86,11 @@ pub fn sys_render_write_g_buffer_pass(
         return;
     };
 
-    let color_attachements = g_buffer_textures.color_attachments();
+    let Ok(g_buffer_gb) = q_camera.get(*camera_id) else {
+        return;
+    };
+
+    let color_attachements = g_buffer_gb.color_attachments();
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Write G Buffer Pass"),
         color_attachments: &color_attachements,
@@ -112,18 +117,23 @@ pub fn sys_render_write_g_buffer_pass(
 pub fn sys_render_main_pass(
     ctx: InMut<RenderContext>,
     main_pipeline: Res<DeferredComputePipeline>,
-    g_buffer_bind_group: Res<GBufferTexturesBindGroup>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
     skybox_pipeline: Res<SkyboxPipeline>,
     cube_vertex_buffer: Res<CubeVerticesBuffer>,
     default_material: Res<DefaultPBRMaterial>,
+    q_camera: Query<&GBufferTexturesBindGroup>,
 ) {
     let InMut(RenderContext {
+        camera_id,
         encoder,
         color_target,
         camera_global_bind_group,
         ..
     }) = ctx;
+
+    let Ok(g_buffer_bind_group) = q_camera.get(*camera_id) else {
+        return;
+    };
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Main Pass"),

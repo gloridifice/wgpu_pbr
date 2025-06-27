@@ -5,9 +5,9 @@ use std::sync::Arc;
 use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::cubemap::CubemapMatrixBindGroups;
 use crate::image::cubemap::load_cubemap_sliced;
-use crate::prelude::*;
 use crate::skybox::prefiltering::PrefilteringPipeline;
 use crate::utils::cube::CubeVerticesBuffer;
+use crate::{SCREEN_FORMAT, prelude::*};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
@@ -124,7 +124,7 @@ impl FromWorld for SkyboxPipeline {
                     module: &skybox_shader,
                     entry_point: Some("fs_main"),
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(rs.config.format.into())],
+                    targets: &[Some(SCREEN_FORMAT.into())],
                 }),
                 multiview: None,
                 cache: None,

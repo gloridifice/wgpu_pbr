@@ -11,7 +11,7 @@ use anyhow::anyhow;
 use bevy_ecs::world::World;
 use bevy_log::{error, info};
 use gltf::image::{Data, Format};
-use image::{ColorType, DynamicImage, Pixel};
+use image::{ColorType, DynamicImage};
 use png::Decoder;
 use wgpu::util::{DeviceExt, TextureDataOrder};
 use wgpu::{AddressMode, Extent3d, FilterMode, ShaderModule, TextureDescriptor, TextureUsages};
@@ -164,7 +164,6 @@ impl UploadedImageWithSampler {
         ));
 
         Ok(UploadedImageWithSampler {
-            size,
             texture,
             view,
             sampler,
@@ -231,7 +230,6 @@ impl UploadedImageWithSampler {
         let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
 
         Ok(UploadedImageWithSampler {
-            size,
             texture,
             view,
             sampler,
