@@ -10,6 +10,7 @@ use bevy_ecs::query::{Changed, Or};
 use bevy_ecs::system::{RunSystemOnce, Single};
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
+use lentille_core::window::PrimaryWinodw;
 use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
 
@@ -21,6 +22,14 @@ use crate::skybox::{DefaultSkybox, SkyboxSHBuffer};
 
 use super::transform::{Transform, WorldTransform};
 
+#[rustfmt::skip]
+pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
+    1.0, 0.0, 0.0, 0.0,
+    0.0, 1.0, 0.0, 0.0,
+    0.0, 0.0, 0.5, 0.5,
+    0.0, 0.0, 0.0, 1.0,
+);
+
 pub(crate) struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
@@ -28,7 +37,8 @@ impl Plugin for CameraPlugin {
         app.add_systems(
             PostUpdate,
             (
-                sys_update_camera_buffer,
+                sys_create_render_target,
+                sys_crate_or_update_camera_buffer,
                 sys_create_camera_global_bind_group,
             )
                 .chain(),
@@ -37,18 +47,12 @@ impl Plugin for CameraPlugin {
     }
 }
 
-#[derive(Component)]
-pub struct CameraBuffer {
-    pub buffer: Arc<wgpu::Buffer>,
-}
-
-#[derive(Component, Clone, Copy, Default)]
-pub struct ActiveCamera;
-
+/// Camera component
+/// todo add comments
 #[derive(Component, Clone)]
-#[require(Transform)]
+#[require(Transform, RenderTargetConfig)]
 pub struct Camera {
-    // Height / Width
+    /// Height / Width
     pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
@@ -56,6 +60,13 @@ pub struct Camera {
     pub view_proj: Matrix4<f32>,
 }
 
+/// Store wgpu buffer for gpu of camera's info
+#[derive(Component)]
+pub struct CameraBuffer {
+    pub buffer: Arc<wgpu::Buffer>,
+}
+
+/// Store global bind group for gpu
 #[derive(Component)]
 pub struct CameraGlobalBindGroup {
     /// 该值应该与 RenderTarget 的 is_current_color_a 值保持一致
@@ -65,6 +76,68 @@ pub struct CameraGlobalBindGroup {
     /// 对应 RenderTarget 的 color_b
     b: Arc<BindGroup>,
 }
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct CameraUniform {
+    pub view_proj: [[f32; 4]; 4],
+    pub position: [f32; 4],
+    pub direction: [f32; 4],
+    pub resolution: [f32; 2],
+}
+
+impl_pod_zeroable!(CameraUniform);
+
+#[derive(Debug, Clone)]
+pub struct RefreshCameraGlobalBindGroupCmd {
+    pub ids: Vec<Entity>,
+}
+
+#[derive(Default, Debug, Clone)]
+pub struct RefreshAllCameraGlobalBindGroupCmd;
+
+// -------- RenderTarget --------
+
+/// 这是一个用于延迟产生 RenderTarget 的结构体。
+/// 因为生成相机的时候主窗口可能不存在。
+#[derive(Default, Clone, Debug, Component)]
+pub enum RenderTargetConfig {
+    #[default]
+    PrimaryWindow,
+    Window(Entity),
+    Texture {
+        width: u32,
+        height: u32,
+        format: wgpu::TextureFormat,
+    },
+}
+
+/// RenderTarget 采用 PingPong 的方式，
+/// 在所有渲染阶段完成后会拷贝到 view 中
+#[derive(Component)]
+#[require(RenderTargetSize)]
+pub struct RenderTarget {
+    pub target_type: TargetType,
+    /// true = a, false = b
+    is_current_color_a: bool,
+    color_a: Arc<UploadedImage>,
+    color_b: Arc<UploadedImage>,
+    pub depth: Option<Arc<UploadedImage>>,
+}
+
+/// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
+#[derive(Component)]
+pub struct RenderTargetSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+pub enum TargetType {
+    WindowAndSurface(Entity),
+    Texture(Arc<UploadedImage>),
+}
+
+// ------- Impls -------
 
 impl CameraGlobalBindGroup {
     pub fn next(&mut self) -> Arc<BindGroup> {
@@ -124,227 +197,12 @@ impl CameraBuffer {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct CameraUniform {
-    pub view_proj: [[f32; 4]; 4],
-    pub position: [f32; 4],
-    pub direction: [f32; 4],
-    pub resolution: [f32; 2],
-}
-
-impl_pod_zeroable!(CameraUniform);
-
-#[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
-    0.0, 0.0, 0.0, 1.0,
-);
-
-pub fn sys_create_camera_global_bind_group(
-    mut commands: Commands,
-    q_camera: Query<Entity, (With<CameraBuffer>, Without<CameraGlobalBindGroup>)>,
-) {
-    if !q_camera.is_empty() {
-        commands.queue(RefreshCameraGlobalBindGroupCmd {
-            ids: q_camera.iter().collect(),
-        });
-    }
-}
-
-fn refresh_camera_global_bind_group_by_ids(
-    In(to_refresh): In<Vec<Entity>>,
-
-    mut commands: Commands,
-    q_camera_buffers: Query<(Entity, &CameraBuffer, &RenderTarget)>,
-    light: Res<LightUnifromBuffer>,
-    shadow_map: Res<ShadowMap>,
-    dfg: Res<DFGTexture>,
-    layout: Res<GlobalBindGroupLayout>,
-    rs: Res<RenderState>,
-    no_filter_sampler: Res<NoFilterSampler>,
-
-    default_skybox: Res<DefaultSkybox>,
-    skybox_sh: Res<SkyboxSHBuffer>,
-    skeybox: Query<&Skybox>,
-) {
-    let skybox_texture = skeybox
-        .single()
-        .ok()
-        .and_then(|it| it.texture.as_ref())
-        .unwrap_or(&default_skybox.texture);
-
-    let device = &rs.device;
-    for (id, camera, target) in q_camera_buffers
-        .iter()
-        .filter(|(id, _, _)| to_refresh.contains(&id))
-    {
-        let mut bind_groups = [0, 1]
-            .into_iter()
-            .map(|it| {
-                let image = if it == 0 {
-                    &target.color_a
-                } else {
-                    &target.color_b
-                };
-                let bind_group_desc = bg_descriptor! {
-                    ["Main PBR Global BindGroup"][&layout.0]
-                    0: camera.buffer.as_entire_binding();
-                    1: light.buffer.as_entire_binding();
-                    2: BindingResource::TextureView(&shadow_map.image.view);
-                    3: BindingResource::Sampler(&shadow_map.image.sampler);
-                    4: BindingResource::TextureView(&dfg.texture.view);
-                    5: BindingResource::TextureView(&skybox_texture.view);
-                    6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
-                    7: skybox_sh.buffer.as_entire_binding();
-                    8: BindingResource::TextureView(&image.view);
-                    9: BindingResource::Sampler(&no_filter_sampler.0);
-                };
-                Arc::new(device.create_bind_group(&bind_group_desc))
-            })
-            .collect::<Vec<_>>();
-
-        commands.entity(id).insert(CameraGlobalBindGroup {
-            is_current_b: false,
-            a: bind_groups.remove(0),
-            b: bind_groups.remove(0),
-        });
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RefreshCameraGlobalBindGroupCmd {
-    pub ids: Vec<Entity>,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct RefreshAllCameraGlobalBindGroupCmd;
-
-impl Command for RefreshCameraGlobalBindGroupCmd {
-    fn apply(self, world: &mut World) -> () {
-        world
-            .run_system_once_with(refresh_camera_global_bind_group_by_ids, self.ids)
-            .unwrap();
-    }
-}
-
-impl Command for RefreshAllCameraGlobalBindGroupCmd {
-    fn apply(self, world: &mut World) {
-        let entities = world
-            .query_filtered::<Entity, With<CameraBuffer>>()
-            .iter(world)
-            .collect::<Vec<_>>();
-        world
-            .run_system_once_with(refresh_camera_global_bind_group_by_ids, entities)
-            .unwrap();
-    }
-}
-
-pub fn sys_update_camera_buffer(
-    mut commands: Commands,
-    single: Single<
-        (
-            Entity,
-            &mut Camera,
-            &WorldTransform,
-            &RenderTargetSize,
-            Option<&CameraBuffer>,
-        ),
-        (Or<(Changed<Camera>, Changed<WorldTransform>)>,),
-    >,
-    rs: Res<RenderState>,
-) {
-    let (id, mut camera, transform, render_target_size, camera_buffer) = single.into_inner();
-
-    match camera_buffer {
-        Some(camera_buffer) => {
-            camera.view_proj = camera.build_view_projection_matrix(transform);
-
-            rs.queue.write_buffer(
-                &camera_buffer.buffer,
-                0,
-                bytemuck::cast_slice(&[camera.get_uniform(
-                    transform,
-                    [
-                        render_target_size.width as f32,
-                        render_target_size.height as f32,
-                    ],
-                )]),
-            );
-        }
-        None => {
-            commands.entity(id).insert(CameraBuffer::new(&rs.device));
-        }
-    };
-}
-
-// ========= RenderTarget ============
-
-/// RenderTarget 采用 PingPong 的方式，
-/// 在所有渲染阶段完成后会拷贝到 view 中
-#[derive(Component)]
-#[require(RenderTargetSize)]
-pub struct RenderTarget {
-    pub target_type: TargetType,
-    /// true = a, false = b
-    is_current_color_a: bool,
-    color_a: Arc<UploadedImage>,
-    color_b: Arc<UploadedImage>,
-    pub depth: Option<Arc<UploadedImage>>,
-}
-
-/// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
-#[derive(Component)]
-pub struct RenderTargetSize {
-    pub width: u32,
-    pub height: u32,
-}
-
-pub enum TargetType {
-    WindowAndSurface(Entity),
-    Texture(Arc<UploadedImage>),
-}
-
 impl Default for RenderTargetSize {
     fn default() -> Self {
         Self {
             width: 512,
             height: 512,
         }
-    }
-}
-
-/// 负责监控 `RenderTargetSize` 的变化并更新纹理
-pub fn sys_resize_render_target(
-    q_render_target: Query<(&mut RenderTarget, &RenderTargetSize), Changed<RenderTargetSize>>,
-    mut q_window_surface: Query<&mut SurfaceState>,
-    rs: Res<RenderState>,
-) {
-    for (mut target, size) in q_render_target {
-        let format = match &target.target_type {
-            TargetType::WindowAndSurface(entity) => {
-                let mut surface_state = q_window_surface
-                    .get_mut(*entity)
-                    .expect("SurfaceState not exists");
-                surface_state.config.width = size.width;
-                surface_state.config.height = size.height;
-                surface_state
-                    .surface
-                    .configure(&rs.device, &surface_state.config);
-                surface_state.config.format
-            }
-            TargetType::Texture(uploaded_image) => uploaded_image.texture.format(),
-        };
-
-        (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
-            size.width,
-            size.height,
-            format,
-            target.depth.is_some(),
-            &rs.device,
-        );
     }
 }
 
@@ -437,6 +295,210 @@ impl RenderTarget {
         }
     }
 }
+
+impl Command for RefreshCameraGlobalBindGroupCmd {
+    fn apply(self, world: &mut World) -> () {
+        world
+            .run_system_once_with(refresh_camera_global_bind_group_by_ids, self.ids)
+            .unwrap();
+    }
+}
+
+impl Command for RefreshAllCameraGlobalBindGroupCmd {
+    fn apply(self, world: &mut World) {
+        let entities = world
+            .query_filtered::<Entity, With<CameraBuffer>>()
+            .iter(world)
+            .collect::<Vec<_>>();
+        world
+            .run_system_once_with(refresh_camera_global_bind_group_by_ids, entities)
+            .unwrap();
+    }
+}
+
+// --------- Systems ---------
+
+/// 负责监控 `RenderTargetSize` 的变化并更新纹理
+pub fn sys_resize_render_target(
+    q_render_target: Query<
+        (&mut Camera, &mut RenderTarget, &RenderTargetSize),
+        Changed<RenderTargetSize>,
+    >,
+    mut q_window_surface: Query<&mut SurfaceState>,
+    rs: Res<RenderState>,
+) {
+    for (mut camera, mut target, size) in q_render_target {
+        camera.aspect = size.height as f32 / size.height as f32;
+        let format = match &target.target_type {
+            TargetType::WindowAndSurface(entity) => {
+                let mut surface_state = q_window_surface
+                    .get_mut(*entity)
+                    .expect("SurfaceState not exists");
+                surface_state.config.width = size.width;
+                surface_state.config.height = size.height;
+                surface_state
+                    .surface
+                    .configure(&rs.device, &surface_state.config);
+                surface_state.config.format
+            }
+            TargetType::Texture(uploaded_image) => uploaded_image.texture.format(),
+        };
+
+        (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
+            size.width,
+            size.height,
+            format,
+            target.depth.is_some(),
+            &rs.device,
+        );
+    }
+}
+
+fn sys_crate_or_update_camera_buffer(
+    mut commands: Commands,
+    q_camera: Query<
+        (
+            Entity,
+            &mut Camera,
+            &WorldTransform,
+            &RenderTargetSize,
+            Option<&CameraBuffer>,
+        ),
+        (Or<(Changed<Camera>, Changed<WorldTransform>)>,),
+    >,
+    rs: Res<RenderState>,
+) {
+    for (id, mut camera, transform, render_target_size, camera_buffer) in q_camera {
+        match camera_buffer {
+            Some(camera_buffer) => {
+                camera.view_proj = camera.build_view_projection_matrix(transform);
+
+                rs.queue.write_buffer(
+                    &camera_buffer.buffer,
+                    0,
+                    bytemuck::cast_slice(&[camera.get_uniform(
+                        transform,
+                        [
+                            render_target_size.width as f32,
+                            render_target_size.height as f32,
+                        ],
+                    )]),
+                );
+            }
+            None => {
+                commands.entity(id).insert(CameraBuffer::new(&rs.device));
+            }
+        };
+    }
+}
+
+fn sys_create_render_target(
+    mut commands: Commands,
+    q_camera: Query<(Entity, &RenderTargetConfig), Without<RenderTarget>>,
+    q_primary_window: Option<Single<&SurfaceState, With<PrimaryWinodw>>>,
+    q_window: Query<&SurfaceState, Without<PrimaryWinodw>>,
+    rs: Res<RenderState>,
+) {
+    let device = &rs.device;
+    for (id, config) in q_camera {
+        let render_target = match config {
+            RenderTargetConfig::PrimaryWindow => q_primary_window
+                .as_ref()
+                .map(|surface_state| RenderTarget::from_window(id, &surface_state, device)),
+            RenderTargetConfig::Window(entity) => q_window
+                .get(*entity)
+                .ok()
+                .map(|surface_state| RenderTarget::from_window(*entity, surface_state, device)),
+            RenderTargetConfig::Texture {
+                width,
+                height,
+                format,
+            } => Some(RenderTarget::new_texture_target(
+                *width, *height, *format, device,
+            )),
+        };
+
+        if let Some(render_target) = render_target {
+            commands
+                .entity(id)
+                .insert(render_target)
+                .remove::<RenderTargetConfig>();
+        }
+    }
+}
+
+pub fn sys_create_camera_global_bind_group(
+    mut commands: Commands,
+    q_camera: Query<Entity, (With<CameraBuffer>, Without<CameraGlobalBindGroup>)>,
+) {
+    if !q_camera.is_empty() {
+        commands.queue(RefreshCameraGlobalBindGroupCmd {
+            ids: q_camera.iter().collect(),
+        });
+    }
+}
+
+fn refresh_camera_global_bind_group_by_ids(
+    In(to_refresh): In<Vec<Entity>>,
+
+    mut commands: Commands,
+    q_camera_buffers: Query<(Entity, &CameraBuffer, &RenderTarget)>,
+    light: Res<LightUnifromBuffer>,
+    shadow_map: Res<ShadowMap>,
+    dfg: Res<DFGTexture>,
+    layout: Res<GlobalBindGroupLayout>,
+    rs: Res<RenderState>,
+    no_filter_sampler: Res<NoFilterSampler>,
+
+    default_skybox: Res<DefaultSkybox>,
+    skybox_sh: Res<SkyboxSHBuffer>,
+    skeybox: Query<&Skybox>,
+) {
+    let skybox_texture = skeybox
+        .single()
+        .ok()
+        .and_then(|it| it.texture.as_ref())
+        .unwrap_or(&default_skybox.texture);
+
+    let device = &rs.device;
+    for (id, camera, target) in q_camera_buffers
+        .iter()
+        .filter(|(id, _, _)| to_refresh.contains(&id))
+    {
+        let mut bind_groups = [0, 1]
+            .into_iter()
+            .map(|it| {
+                let image = if it == 0 {
+                    &target.color_a
+                } else {
+                    &target.color_b
+                };
+                let bind_group_desc = bg_descriptor! {
+                    ["Main PBR Global BindGroup"][&layout.0]
+                    0: camera.buffer.as_entire_binding();
+                    1: light.buffer.as_entire_binding();
+                    2: BindingResource::TextureView(&shadow_map.image.view);
+                    3: BindingResource::Sampler(&shadow_map.image.sampler);
+                    4: BindingResource::TextureView(&dfg.texture.view);
+                    5: BindingResource::TextureView(&skybox_texture.view);
+                    6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
+                    7: skybox_sh.buffer.as_entire_binding();
+                    8: BindingResource::TextureView(&image.view);
+                    9: BindingResource::Sampler(&no_filter_sampler.0);
+                };
+                Arc::new(device.create_bind_group(&bind_group_desc))
+            })
+            .collect::<Vec<_>>();
+
+        commands.entity(id).insert(CameraGlobalBindGroup {
+            is_current_b: false,
+            a: bind_groups.remove(0),
+            b: bind_groups.remove(0),
+        });
+    }
+}
+
+// --------- Target Creation Functions ---------
 
 pub fn create_color_render_target_image(
     width: u32,

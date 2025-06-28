@@ -13,15 +13,15 @@ use winit::{
 
 pub struct WindowPlugin;
 
-#[derive(Resource, Clone, Default)]
-pub struct MainWindow(pub Option<Arc<Window>>);
+#[derive(Component, Clone, Default, Debug)]
+pub struct PrimaryWinodw;
 
 #[derive(Component, Clone, Debug)]
 pub struct WinitWindow(pub Arc<Window>);
 
 impl Plugin for WindowPlugin {
     fn build(&self, app: &mut App) {
-        app.init_resource::<MainWindow>().set_runner(my_runner);
+        app.set_runner(my_runner);
     }
 }
 
@@ -58,12 +58,10 @@ impl ApplicationHandler for MyApplicationHandler {
                 .unwrap(),
         );
 
-        self.app
-            .insert_resource(MainWindow(Some(Arc::clone(&window))));
         let id = self
             .app
             .world_mut()
-            .spawn(WinitWindow(Arc::clone(&window)))
+            .spawn((WinitWindow(Arc::clone(&window)), PrimaryWinodw))
             .id();
 
         self.app.world_mut().trigger(MainWindowCreatedEvent {
@@ -92,11 +90,18 @@ impl ApplicationHandler for MyApplicationHandler {
         window_id: WindowId,
         event: WindowEvent,
     ) {
-        let window_arc = self.app.world_mut().resource::<MainWindow>().0.as_ref();
-        if window_arc.is_none() {
+        let world = &mut self.app.world_mut();
+        // Find the releated window for request redraw
+        let window_arc = world
+            .query::<&WinitWindow>()
+            .iter(world)
+            .find(|it| it.0.id() == window_id);
+
+        let Some(winit_window) = window_arc else {
             return;
-        }
-        let window = Arc::clone(window_arc.unwrap());
+        };
+
+        let window = Arc::clone(&winit_window.0);
 
         match event {
             //Update and Render

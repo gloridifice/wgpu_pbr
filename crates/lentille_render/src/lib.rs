@@ -92,7 +92,9 @@ impl Plugin for RenderPlugin {
             Last,
             (
                 FrameSets::Prepare,
+                FrameSets::PreDraw,
                 FrameSets::Draw,
+                FrameSets::PostDraw,
                 FrameSets::Present,
                 FrameSets::Cleanup,
             )
@@ -155,7 +157,9 @@ pub struct RenderPreparedStartup;
 pub enum FrameSets {
     /// Create RenderContext
     Prepare,
+    PreDraw,
     Draw,
+    PostDraw,
     /// Submit encoder and present output texture
     Present,
     Cleanup,

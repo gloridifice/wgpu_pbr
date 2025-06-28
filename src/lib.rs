@@ -9,7 +9,6 @@ use lentille_core::{
     window::WindowPlugin,
 };
 use lentille_render::{
-    camera::ActiveCamera,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
     skybox::{prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path, Skybox},
@@ -349,16 +348,11 @@ fn sys_startup_light_and_environment(world: &mut World) {
     let light_arrow_model =
         Arc::new(Model::load(AssetPath::new("models/arrow.glb"), world).unwrap());
 
-    let config = &world.resource::<RenderState>().config;
-    let aspect = config.width as f32 / config.height as f32;
-
     world.spawn((
         Camera {
-            aspect,
             fovy: 17.1,
-            ..Camera::new(aspect)
+            ..Camera::new(1.0)
         },
-        ActiveCamera,
         CameraController {
             row: -4.8,
             yaw: 0.0,

@@ -9,12 +9,15 @@ use egui::{
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
-    window::{MainWindow, WinitWindowEvent},
+    window::{PrimaryWinodw, WinitWindow, WinitWindowEvent},
 };
 use lentille_render::{
-    app_ext::AppExt, bindings::global_binding::RefreshGlobalBindGroupCmd, camera::Camera,
-    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup, prelude::*,
-    FrameRenderContext, FrameSets, RenderPreparedStartup,
+    app_ext::AppExt,
+    camera::{Camera, RenderTargetSize, TargetType},
+    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
+    prelude::*,
+    stage::RenderContext,
+    FrameSets, RenderPreparedStartup, SurfaceState,
 };
 
 use components::world_tree;
@@ -38,7 +41,7 @@ impl Plugin for EditorGuiPlugin {
     }
 }
 
-// Start ===== EguiRenderer plugin =====
+// ===== EguiRenderer plugin =====
 
 pub struct EguiRendererPlugin;
 
@@ -48,60 +51,68 @@ impl Plugin for EguiRendererPlugin {
             First,
             sys_begin_frame.run_if(resource_exists::<RenderState>),
         )
-        .add_systems(Last, sys_end_frame_and_draw.in_set(FrameSets::LastDraw))
+        .add_render_system_in_frame_set(FrameSets::Draw, sys_begin_frame)
+        .add_render_system_in_frame_set(FrameSets::PostDraw, sys_end_frame_and_draw)
         .init_render_resource::<EguiRenderer>()
         .add_observer(sys_handle_input);
     }
 }
 
-fn sys_begin_frame(mut egui_renderer: ResMut<EguiRenderer>, window: Res<MainWindow>) {
-    let Some(window) = window.0.as_ref() else {
-        return;
-    };
-    egui_renderer.begin_frame(window);
+/// Only for PrimaryWindow now!
+fn sys_begin_frame(
+    mut egui_renderer: ResMut<EguiRenderer>,
+    window: Single<&WinitWindow, With<PrimaryWinodw>>,
+) {
+    egui_renderer.begin_frame(&window.0);
 }
 
+/// Only for PrimaryWindow now!
 fn sys_end_frame_and_draw(
     mut egui_renderer: ResMut<EguiRenderer>,
     rs: Res<RenderState>,
-    mut render_context: ResMut<FrameRenderContext>,
-    window: Res<MainWindow>,
     egui_config: Res<EguiConfig>,
+    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWinodw>>,
 ) {
-    let Some(window) = window.0.as_ref() else {
-        return;
-    };
+    let (window, surface_state) = window.into_inner();
+
+    let mut encoder = rs
+        .device
+        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("Egui"),
+        });
 
     let screen_descriptor = ScreenDescriptor {
-        size_in_pixels: [rs.config.width, rs.config.height],
-        pixels_per_point: window.scale_factor() as f32 * egui_config.egui_scale_factor,
+        size_in_pixels: [surface_state.config.width, surface_state.config.height],
+        pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
-
-    let FrameRenderContext {
-        encoder,
-        output_view,
-        ..
-    } = render_context.as_mut();
 
     egui_renderer.end_frame_and_draw(
         &rs.device,
         &rs.queue,
-        encoder,
-        window,
-        &output_view,
+        &mut encoder,
+        &window.0,
+        &surface_state
+            .surface
+            .get_current_texture()
+            .unwrap()
+            .texture
+            .create_view(&Default::default()),
         screen_descriptor,
     );
+
+    rs.queue.submit(std::iter::once(encoder.finish()));
 }
 
 fn sys_handle_input(
     trigger: Trigger<WinitWindowEvent>,
     mut egui_renderer: ResMut<EguiRenderer>,
-    window: Res<MainWindow>,
+    q_window: Query<&WinitWindow>,
 ) {
-    let Some(window) = window.0.as_ref() else {
+    let Some(window) = q_window.iter().find(|it| it.0.id() == trigger.window_id) else {
         return;
     };
-    egui_renderer.handle_input(window, &trigger.window_event);
+
+    egui_renderer.handle_input(&window.0, &trigger.window_event);
 }
 
 // End ===== EguiRenderer plugin =====
@@ -129,7 +140,7 @@ struct TreeBehavior<'a> {
 }
 
 #[derive(Resource, Clone, Default)]
-struct RenderTargetEguiTexId(Option<Vec<egui::TextureId>>);
+struct RenderTargetEguiTexId(Option<egui::TextureId>);
 
 impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
     fn pane_ui(

@@ -1,11 +1,12 @@
 use bevy_ecs::prelude::Resource;
+use bevy_ecs::query::With;
 use bevy_ecs::world::FromWorld;
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
-use lentille_core::window::MainWindow;
-use lentille_render::RenderState;
+use lentille_core::window::{PrimaryWinodw, WinitWindow};
+use lentille_render::{RenderState, SCREEN_FORMAT};
 use winit::event::WindowEvent;
 use winit::window::Window;
 
@@ -18,15 +19,15 @@ pub struct EguiRenderer {
 
 impl FromWorld for EguiRenderer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+        let window = world
+            .query_filtered::<&WinitWindow, With<PrimaryWinodw>>()
+            .single(world)
+            .unwrap()
+            .0
+            .clone();
+
         let rs = world.resource::<RenderState>();
-        let window = world.resource::<MainWindow>();
-        Self::new(
-            &rs.device,
-            rs.config.format,
-            None,
-            1,
-            window.0.as_ref().unwrap(),
-        )
+        Self::new(&rs.device, SCREEN_FORMAT, None, 1, &window)
     }
 }
 

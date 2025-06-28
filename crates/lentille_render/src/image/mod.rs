@@ -11,6 +11,7 @@ pub struct UploadedImageWithSampler {
     pub sampler: Sampler,
 }
 
+#[derive(Debug)]
 pub struct UploadedImage {
     #[allow(unused)]
     pub texture: Texture,
