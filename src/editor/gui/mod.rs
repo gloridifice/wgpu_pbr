@@ -1,6 +1,6 @@
 use std::fs::{self};
 
-use bevy_app::{First, Last, Plugin, PreUpdate};
+use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
 use bevy_log::info;
 use egui::{
@@ -13,10 +13,8 @@ use lentille_core::{
 };
 use lentille_render::{
     app_ext::AppExt,
-    camera::{Camera, RenderTargetSize, TargetType},
-    defered_rendering::write_g_buffer_pipeline::GBufferTexturesBindGroup,
+    camera::{Camera, RenderTarget, RenderTargetSize, TargetType},
     prelude::*,
-    stage::RenderContext,
     FrameSets, RenderPreparedStartup, SurfaceState,
 };
 
@@ -34,10 +32,7 @@ impl Plugin for EditorGuiPlugin {
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
             .add_systems(RenderPreparedStartup, sys_setup_egui_visual)
-            .add_render_system_with_custom_schedule(
-                PreUpdate,
-                (sys_egui_tiles, sys_on_resize_render_target),
-            );
+            .add_systems(Update, (sys_egui_tiles, sys_on_resize_egui_target));
     }
 }
 
@@ -199,11 +194,8 @@ pub fn sys_egui_tiles(world: &mut World) {
         CentralPanel::default().show(ctx, |ui| {
             let ids = world.resource::<RenderTargetEguiTexId>();
             let size = ui.available_size();
-            if let Some(render_target_egui_tex_ids) = ids.0.as_ref() {
-                let main_view = ui.image(SizedTexture::new(
-                    render_target_egui_tex_ids[lentille_render::get_sampleable_target_index()],
-                    size,
-                ));
+            if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
+                let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
                 let mut input = world.resource_mut::<Input>();
                 for (ec, mc) in [
                     (PointerButton::Primary, CursorButton::Left),
@@ -219,7 +211,11 @@ pub fn sys_egui_tiles(world: &mut World) {
                     .map(|it| Vec2::new(it.x, it.y))
                     .unwrap_or(Vec2::zero());
             }
-            let mut target_size = world.resource_mut::<RenderTargetSize>();
+
+            let mut target_size = world
+                .query_filtered::<&mut RenderTargetSize, With<Camera>>()
+                .single_mut(world)
+                .unwrap();
             if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
                 target_size.height = size.x as u32;
                 target_size.width = size.y as u32;
@@ -248,45 +244,20 @@ fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
     ));
 }
 
-fn sys_on_resize_render_target(
-    mut commands: Commands,
-    target_size: Res<RenderTargetSize>,
-    render_state: Res<RenderState>,
-    mut color_target: ResMut<ColorRenderTarget>,
-    mut depth_target: ResMut<DepthRenderTarget>,
-    mut g_buffer_textures: ResMut<GBufferTexturesBindGroup>,
+fn sys_on_resize_egui_target(
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
     mut egui: ResMut<EguiRenderer>,
-    mut camera: Single<&mut Camera>,
+    camera: Single<&RenderTarget, Changed<RenderTarget>>,
+    rs: Res<RenderState>,
 ) {
-    if target_size.is_changed() {
-        let device = &render_state.device;
-        let config = &render_state.config;
-        let width = target_size.width;
-        let height = target_size.height;
-
-        color_target.update_images(width, height, device, config);
-        commands.queue(RefreshGlobalBindGroupCmd);
-        depth_target.0 = Some(lentille_render::create_depth_texture(
-            device, width, height, None,
+    let device = &rs.device;
+    if let TargetType::Texture(image) = &camera.target_type {
+        egui_tex_id.0 = Some(egui.renderer.register_native_texture(
+            device,
+            &image.view,
+            wgpu::FilterMode::Linear,
         ));
-
-        let vec = [0, 1]
-            .into_iter()
-            .map(|it| {
-                egui.renderer.register_native_texture(
-                    device,
-                    &color_target.ping_pong[it].as_ref().unwrap().view,
-                    wgpu::FilterMode::Linear,
-                )
-            })
-            .collect::<Vec<_>>();
-
-        egui_tex_id.0 = Some(vec);
-        camera.aspect = height as f32 / width as f32;
-
-        g_buffer_textures.resize(width, height, device);
-    };
+    }
 }
 
 fn create_tree() -> egui_tiles::Tree<Pane> {

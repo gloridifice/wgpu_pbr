@@ -1,6 +1,6 @@
 use bevy_app::{Plugin, Update};
 use bevy_ecs::prelude::*;
-use lentille_core::{input::Input, window::MainWindow};
+use lentille_core::{input::Input, window::WinitWindow};
 use winit::keyboard::KeyCode;
 
 use crate::control::camera::CameraContorlPlugin;
@@ -13,7 +13,7 @@ impl Plugin for ControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(CameraContorlPlugin)
             .init_resource::<ControlState>()
-            .add_systems(Update, (sys_control, sys_control_state));
+            .add_systems(Update, sys_input_implement);
     }
 }
 
@@ -27,27 +27,28 @@ impl Default for ControlState {
     }
 }
 
-pub fn sys_control(
+/// 软件输入监测，目前行为：
+///
+/// - ECS 键触发隐藏光标和出现光标
+pub fn sys_input_implement(
     mut commands: Commands,
     input: Res<Input>,
     mut control_state: ResMut<ControlState>,
 ) {
     if input.is_key_down(KeyCode::Escape) {
         control_state.is_focused = !control_state.is_focused;
-        commands.queue(|world: &mut World| {
-            world.run_system_cached(sys_control_state).unwrap();
-        });
+        commands.run_system_cached(sys_toggle_cursor);
     }
 }
 
-pub fn sys_control_state(control_state: ResMut<ControlState>, main_window: Res<MainWindow>) {
-    let Some(main_window) = main_window.0.as_ref() else {
-        return;
-    };
-    main_window.set_cursor_visible(!control_state.is_focused);
-    let _ = main_window.set_cursor_grab(if control_state.is_focused {
-        winit::window::CursorGrabMode::Locked
-    } else {
-        winit::window::CursorGrabMode::None
-    });
+/// 出现光标和隐藏光标
+pub fn sys_toggle_cursor(control_state: ResMut<ControlState>, q_window: Query<&WinitWindow>) {
+    for WinitWindow(window) in q_window {
+        window.set_cursor_visible(!control_state.is_focused);
+        let _ = window.set_cursor_grab(if control_state.is_focused {
+            winit::window::CursorGrabMode::Locked
+        } else {
+            winit::window::CursorGrabMode::None
+        });
+    }
 }
