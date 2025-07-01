@@ -14,9 +14,9 @@ use bevy_ecs::prelude::*;
 pub mod prefiltering;
 pub mod sh_coefficients;
 
-pub struct SkyBoxPlugin;
+pub(super) struct SkyBoxPlugin;
 
-impl Plugin for Skybox {
+impl Plugin for SkyBoxPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource::<SkyboxSHBuffer>()
             .init_render_resource_with_config::<DefaultSkybox>([

@@ -10,7 +10,7 @@
 }
 #import shadow
 #import global_bindings::{
-    camera, light, rendered_image, rendered_sampler, global
+    camera, light, rendered_image, rendered_sampler
 }
 #import material_bindings::{
     pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
@@ -135,7 +135,7 @@ fn fs_main(
 
     /// Blending
     let normal_ndc = normalize((camera.view_proj * vec4<f32>(normal, 1.0)).xyz);
-    let uv = frag_coord.xy / global.screen_resolution - normal_ndc.xy * 0.1;
+    let uv = frag_coord.xy / camera.screen_resolution - normal_ndc.xy * 0.1;
     let prev_color4 = textureSample(rendered_image, rendered_sampler, uv);
 
     let alpha = base_color4.a;

@@ -26,6 +26,7 @@ use crate::{
     light::LightPlugin,
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
     shadow_mapping::ShadowMappingPlugin,
+    skybox::SkyBoxPlugin,
     transform::TransformPlugin,
     transparent::TransparentPlugin,
 };
@@ -80,6 +81,7 @@ impl Plugin for RenderPlugin {
             LightPlugin,
             CameraPlugin,
             CubemapPlugin,
+            SkyBoxPlugin,
             BindingsPlugin,
             ShadowMappingPlugin,
             TransparentPlugin,

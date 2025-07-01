@@ -212,13 +212,14 @@ pub fn sys_egui_tiles(world: &mut World) {
                     .unwrap_or(Vec2::zero());
             }
 
-            let mut target_size = world
+            if let Ok(mut target_size) = world
                 .query_filtered::<&mut RenderTargetSize, With<Camera>>()
                 .single_mut(world)
-                .unwrap();
-            if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
-                target_size.height = size.x as u32;
-                target_size.width = size.y as u32;
+            {
+                if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
+                    target_size.height = size.x as u32;
+                    target_size.width = size.y as u32;
+                }
             }
         });
     });
