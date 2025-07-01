@@ -3,6 +3,8 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
 };
 
+use wgpu::naga::Type;
+
 /// 这是一个基于 [std::aney::TypeId] 的有向无环图。
 /// 它允许以任意类型的 `TypeId` 为索引，维护包含 T 类型的有向无环图。
 #[derive(Debug)]
@@ -89,84 +91,34 @@ impl<T: 'static> TypeIdGraph<T> {
     }
 
     /// 广度优先遍历迭代器
-    pub fn into_iter_bfs(self) -> BfsIterator<T> {
+    pub fn into_iter_bfs(mut self) -> std::vec::IntoIter<T> {
+        let vec = self.iter_id_bfs().collect::<Vec<_>>();
+        let vec = vec
+            .into_iter()
+            .filter_map(|it| self.nodes.remove(&it).flatten())
+            .collect::<Vec<_>>();
+        vec.into_iter()
+    }
+
+    pub fn iter_id_bfs(&self) -> BfsIterator<T> {
         BfsIterator::new(self)
     }
 
     /// 广度优先遍历
     pub fn bfs(&self, fun: impl Fn(&T)) {
-        let Self {
-            nodes,
-            edges,
-            parents,
-        } = self;
-        let mut queue = VecDeque::<TypeId>::new();
-        let mut visited = HashSet::<TypeId>::new();
-
-        for (id, value) in parents.iter() {
-            if value.is_empty() {
-                queue.push_back(*id);
-            }
-        }
-
-        while let Some(current) = queue.pop_front() {
-            if visited.contains(&current) {
-                continue;
-            }
-
-            visited.insert(current);
-
-            // Add neighbors to queue
-            if let Some(neighbors) = edges.get(&current) {
-                for &neighbor in neighbors {
-                    if !visited.contains(&neighbor) && nodes.contains_key(&neighbor) {
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-
-            // Remove and return the node data
-            if let Some(Some(data)) = nodes.get(&current) {
-                fun(data);
+        for id in self.iter_id_bfs() {
+            if let Some(Some(value)) = self.nodes.get(&id).as_ref() {
+                fun(value);
             }
         }
     }
 
     /// 广度优先遍历
     pub fn bfs_mut(&mut self, mut fun: impl FnMut(&mut T)) {
-        let Self {
-            nodes,
-            edges,
-            parents,
-        } = self;
-        let mut queue = VecDeque::<TypeId>::new();
-        let mut visited = HashSet::<TypeId>::new();
-
-        for (id, value) in parents.iter() {
-            if value.is_empty() {
-                queue.push_back(*id);
-            }
-        }
-
-        while let Some(current) = queue.pop_front() {
-            if visited.contains(&current) {
-                continue;
-            }
-
-            visited.insert(current);
-
-            // Add neighbors to queue
-            if let Some(neighbors) = edges.get(&current) {
-                for &neighbor in neighbors {
-                    if !visited.contains(&neighbor) && nodes.contains_key(&neighbor) {
-                        queue.push_back(neighbor);
-                    }
-                }
-            }
-
-            // Remove and return the node data
-            if let Some(Some(data)) = nodes.get_mut(&current) {
-                fun(data);
+        let vec = self.iter_id_bfs().collect::<Vec<_>>();
+        for id in vec {
+            if let Some(Some(value)) = self.nodes.get_mut(&id).as_mut() {
+                fun(value);
             }
         }
     }
@@ -201,14 +153,15 @@ pub fn before<L: 'static>() -> InsertConfig {
     InsertConfig::Before(TypeId::of::<L>())
 }
 
-pub struct BfsIterator<T> {
-    graph: TypeIdGraph<T>,
+pub struct BfsIterator<'a, T> {
+    graph: &'a TypeIdGraph<T>,
     queue: VecDeque<TypeId>,
     visited: HashSet<TypeId>,
+    in_degrees: HashMap<TypeId, usize>,
 }
 
-impl<T> BfsIterator<T> {
-    fn new(graph: TypeIdGraph<T>) -> Self {
+impl<'a, T> BfsIterator<'a, T> {
+    fn new(graph: &'a TypeIdGraph<T>) -> Self {
         let mut queue = VecDeque::new();
         let visited = HashSet::new();
 
@@ -218,16 +171,23 @@ impl<T> BfsIterator<T> {
             }
         }
 
+        let in_degrees = graph
+            .nodes
+            .iter()
+            .map(|(key, _)| (*key, graph.parents.get(key).map(|it| it.len()).unwrap_or(0)))
+            .collect::<HashMap<_, _>>();
+
         Self {
             graph,
             queue,
             visited,
+            in_degrees,
         }
     }
 }
 
-impl<T: 'static> Iterator for BfsIterator<T> {
-    type Item = (TypeId, T);
+impl<'a, T: 'static> Iterator for BfsIterator<'a, T> {
+    type Item = TypeId;
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(current) = self.queue.pop_front() {
@@ -239,20 +199,64 @@ impl<T: 'static> Iterator for BfsIterator<T> {
 
             // Add neighbors to queue
             if let Some(neighbors) = self.graph.edges.get(&current) {
-                for &neighbor in neighbors {
-                    if !self.visited.contains(&neighbor) && self.graph.nodes.contains_key(&neighbor)
+                for neighbor in neighbors {
+                    let in_degree = self.in_degrees.get_mut(neighbor).unwrap();
+                    *in_degree -= 1;
+                    if *in_degree == 0
+                        && !self.visited.contains(neighbor)
+                        && self.graph.nodes.contains_key(neighbor)
                     {
-                        self.queue.push_back(neighbor);
+                        self.queue.push_back(*neighbor);
                     }
                 }
             }
 
-            // Remove and return the node data
-            if let Some(Some(data)) = self.graph.nodes.remove(&current) {
-                return Some((current, data));
+            if self
+                .graph
+                .nodes
+                .get(&current)
+                .is_some_and(|it| it.is_some())
+            {
+                return Some(current);
             }
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    struct Foo0;
+    struct Foo1;
+    struct Foo2;
+    struct Foo3;
+    struct Foo4;
+
+    ///  0
+    /// 1 2
+    ///  3  4
+    #[test]
+    fn test_graph() {
+        let mut graph = TypeIdGraph::<i32>::new();
+        graph.insert_with_configs::<Foo3>(3, [after::<Foo1>(), after::<Foo2>()].into());
+        graph.insert_with_configs::<Foo0>(0, Vec::new());
+        // 4 依赖于 0 和 3，应该最后被遍历
+        graph.insert_with_configs::<Foo4>(4, [after::<Foo0>(), after::<Foo3>()].into());
+        graph.insert_with_configs::<Foo1>(1, [after::<Foo0>()].into());
+        graph.insert_with_configs::<Foo2>(2, [after::<Foo0>()].into());
+
+        let vec = graph.into_iter_bfs().collect::<Vec<_>>();
+        for i in &vec {
+            println!("{}", i);
+        }
+
+        assert_eq!(vec[0], 0);
+        assert_eq!(vec[1], 1);
+        assert_eq!(vec[2], 2);
+        assert_eq!(vec[3], 3);
+        assert_eq!(vec[4], 4);
     }
 }

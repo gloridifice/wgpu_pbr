@@ -92,7 +92,7 @@ impl FromWorld for DefaultPBRMaterial {
         let white_tex = &world.resource::<WhiteTexture>().0;
         let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
         let device = &world.resource::<RenderState>().device;
-        let main_pipeline = world.resource::<DeferredComputePipeline>();
+        let compute_pipeline = world.resource::<DeferredComputePipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
 
         let mat = UploadedPBRMaterial::from_gltf(
@@ -100,7 +100,7 @@ impl FromWorld for DefaultPBRMaterial {
             layout,
             white_tex,
             normal_default_tex,
-            Arc::clone(&main_pipeline.pipeline),
+            Arc::clone(&compute_pipeline.pipeline),
             &GltfMaterial {
                 base_color_texture: Some(Arc::clone(missing_tex)),
                 ..Default::default()

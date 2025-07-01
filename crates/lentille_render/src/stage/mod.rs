@@ -117,8 +117,8 @@ pub fn sys_render(
             let systems = stage.systems.clone();
             commands.queue(move |world: &mut World| {
                 let mut ctx = render_context;
-                for (_, system) in systems.into_iter_bfs() {
-                    world.run_system_with(system, &mut ctx);
+                for system in systems.into_iter_bfs() {
+                    world.run_system_with(system, &mut ctx).unwrap();
                 }
                 world
                     .resource::<RenderState>()

@@ -47,7 +47,7 @@ impl IntoIterator for ResourceGraph {
 
     fn into_iter(self) -> Self::IntoIter {
         let mut vec = Vec::new();
-        for (_, item) in self.0.into_iter_bfs() {
+        for item in self.0.into_iter_bfs() {
             vec.push(item);
         }
         vec.into_iter()

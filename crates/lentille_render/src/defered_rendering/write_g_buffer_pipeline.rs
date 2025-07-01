@@ -8,9 +8,9 @@ use bevy_app::{Plugin, Update};
 use bevy_ecs::prelude::*;
 use wgpu::RenderPassColorAttachment;
 
-pub struct WriteGBufferPipeline;
+pub struct WriteGBufferPlugin;
 
-impl Plugin for WriteGBufferPipeline {
+impl Plugin for WriteGBufferPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource::<GBufferTextureBindGroupLayout>()
             .add_systems(Update, sys_resize_g_buffer_texture);

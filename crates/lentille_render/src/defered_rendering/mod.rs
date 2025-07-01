@@ -6,7 +6,7 @@ use crate::{
         global_binding::GlobalBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
     },
     defered_rendering::write_g_buffer_pipeline::{
-        DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, GBufferTexturesBindGroup,
+        DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, WriteGBufferPlugin,
     },
     prelude::*,
 };
@@ -19,16 +19,17 @@ pub(crate) struct DeferredRenderingPlugin;
 
 impl Plugin for DeferredRenderingPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_render_resource_with_config::<DeferredWriteGBufferPipeline>([
-            after::<GlobalBindGroupLayout>(),
-            after::<GBufferTextureBindGroupLayout>(),
-        ])
-        .init_render_resource_with_config::<DeferredComputePipeline>([
-            after::<GBufferTexturesBindGroup>(),
-            after::<GlobalBindGroupLayout>(),
-            after::<PBRMaterialBindGroupLayout>(),
-            after::<DynamicLightBindGroup>(),
-        ]);
+        app.add_plugins(WriteGBufferPlugin)
+            .init_render_resource_with_config::<DeferredWriteGBufferPipeline>([
+                after::<GBufferTextureBindGroupLayout>(),
+                after::<GlobalBindGroupLayout>(),
+            ])
+            .init_render_resource_with_config::<DeferredComputePipeline>([
+                after::<GBufferTextureBindGroupLayout>(),
+                after::<GlobalBindGroupLayout>(),
+                after::<PBRMaterialBindGroupLayout>(),
+                after::<DynamicLightBindGroup>(),
+            ]);
     }
 }
 

@@ -84,8 +84,9 @@ impl Plugin for RenderPlugin {
             ShadowMappingPlugin,
             TransparentPlugin,
             DeferredRenderingPlugin,
-        ));
-        app.init_resource::<ShaderLoader>();
+        ))
+        .init_resource::<ShaderLoader>()
+        .init_resource::<RenderState>();
 
         // Configure RenderSets
         app.configure_sets(
