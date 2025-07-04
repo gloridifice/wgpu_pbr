@@ -1,4 +1,10 @@
 use bevy_app::Plugin;
+use bevy_ecs::{
+    observer::Trigger,
+    system::{Query, Res},
+};
+use lentille_core::window::{WinitWindow, WinitWindowResizeEvent};
+use lentille_render::{RenderState, SurfaceState};
 
 use crate::editor::gui::EditorGuiPlugin;
 
@@ -8,6 +14,26 @@ pub struct EditorPlugin;
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_plugins(EditorGuiPlugin);
+        app.add_plugins(EditorGuiPlugin)
+            .add_observer(sys_on_window_resized);
+    }
+}
+
+fn sys_on_window_resized(
+    event: Trigger<WinitWindowResizeEvent>,
+    mut q_windows: Query<(&WinitWindow, &mut SurfaceState)>,
+    rs: Res<RenderState>,
+) {
+    let WinitWindowResizeEvent {
+        window_id,
+        physical_size,
+    } = &*event;
+    if let Some((_, mut suface_state)) = q_windows
+        .iter_mut()
+        .find(|(window, _)| window.0.id() == *window_id)
+    {
+        suface_state.config.width = physical_size.width;
+        suface_state.config.height = physical_size.height;
+        suface_state.configure(&rs.device);
     }
 }

@@ -1,11 +1,38 @@
 use crate::{
     defered_rendering::DeferredComputePipeline, material::pbr::UploadedPBRMaterial, prelude::*,
 };
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
+
+pub(super) struct BaseAssetsPlugin;
+
+impl Plugin for BaseAssetsPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.init_render_resource::<WhiteTexture>()
+            .init_render_resource::<NormalDefaultTexture>()
+            .init_render_resource::<DFGTexture>()
+            .init_render_resource::<super::mipmap::DefaultMipmapGenShader>() //TODO move
+            .init_render_resource::<MissingTexture>()
+            .init_render_resource::<FullScreenVertexShader>()
+            .init_render_resource::<NoFilterSampler>()
+            .init_render_resource_with_config::<DefaultPBRMaterial>([
+                after::<MissingTexture>(),
+                after::<WhiteTexture>(),
+                after::<NormalDefaultTexture>(),
+                after::<DeferredComputePipeline>(),
+                after::<PBRMaterialBindGroupLayout>(),
+            ]);
+    }
+}
 
 #[derive(Resource, Clone)]
 pub struct FullScreenVertexShader {
     pub module: Arc<ShaderModule>,
+}
+
+#[derive(Resource)]
+pub struct DFGTexture {
+    pub texture: Arc<UploadedImageWithSampler>,
 }
 
 impl FromWorld for FullScreenVertexShader {
@@ -117,5 +144,21 @@ impl FromWorld for NoFilterSampler {
             .device
             .create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter());
         Self(Arc::new(sampler))
+    }
+}
+
+impl FromWorld for DFGTexture {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let texture = Arc::new(
+            UploadedImageWithSampler::load_from_path(
+                crate::asset::AssetPath::Assets("textures/ibl_brdf_lut.png".to_string()),
+                &rs.device,
+                &rs.queue,
+                wgpu::TextureFormat::Rgba8Unorm,
+            )
+            .unwrap(),
+        );
+        Self { texture }
     }
 }

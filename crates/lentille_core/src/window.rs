@@ -21,7 +21,11 @@ pub struct WinitWindow(pub Arc<Window>);
 
 impl Plugin for WindowPlugin {
     fn build(&self, app: &mut App) {
-        app.set_runner(my_runner);
+        app.add_event::<WinitDeviceEvent>()
+            .add_event::<WinitWindowEvent>()
+            .add_event::<PrimaryWindowCreatedEvent>()
+            .add_event::<WinitWindowResizeEvent>()
+            .set_runner(my_runner);
     }
 }
 
@@ -41,9 +45,27 @@ pub fn my_runner(app: App) -> AppExit {
 }
 
 #[derive(Event, Clone)]
-pub struct MainWindowCreatedEvent {
+pub struct PrimaryWindowCreatedEvent {
     pub id: Entity,
     pub window: Arc<Window>,
+}
+
+#[derive(Event)]
+pub struct WinitDeviceEvent {
+    pub device_event: winit::event::DeviceEvent,
+    pub device_id: winit::event::DeviceId,
+}
+
+#[derive(Event)]
+pub struct WinitWindowEvent {
+    pub window_id: winit::window::WindowId,
+    pub window_event: WindowEvent,
+}
+
+#[derive(Event)]
+pub struct WinitWindowResizeEvent {
+    pub window_id: WindowId,
+    pub physical_size: PhysicalSize<u32>,
 }
 
 pub struct MyApplicationHandler {
@@ -64,7 +86,7 @@ impl ApplicationHandler for MyApplicationHandler {
             .spawn((WinitWindow(Arc::clone(&window)), PrimaryWinodw))
             .id();
 
-        self.app.world_mut().trigger(MainWindowCreatedEvent {
+        self.app.world_mut().trigger(PrimaryWindowCreatedEvent {
             id,
             window: Arc::clone(&window),
         });
@@ -117,7 +139,7 @@ impl ApplicationHandler for MyApplicationHandler {
 
             // Reszie
             WindowEvent::Resized(physical_size) => {
-                self.app.world_mut().trigger(ResizeEvent {
+                self.app.world_mut().trigger(WinitWindowResizeEvent {
                     window_id,
                     physical_size,
                 });
@@ -125,22 +147,4 @@ impl ApplicationHandler for MyApplicationHandler {
             _ => {}
         }
     }
-}
-
-#[derive(Event)]
-pub struct WinitDeviceEvent {
-    pub device_event: winit::event::DeviceEvent,
-    pub device_id: winit::event::DeviceId,
-}
-
-#[derive(Event)]
-pub struct WinitWindowEvent {
-    pub window_id: winit::window::WindowId,
-    pub window_event: WindowEvent,
-}
-
-#[derive(Event)]
-pub struct ResizeEvent {
-    pub window_id: WindowId,
-    pub physical_size: PhysicalSize<u32>,
 }

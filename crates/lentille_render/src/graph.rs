@@ -3,8 +3,6 @@ use std::{
     collections::{HashMap, HashSet, VecDeque},
 };
 
-use wgpu::naga::Type;
-
 /// 这是一个基于 [std::aney::TypeId] 的有向无环图。
 /// 它允许以任意类型的 `TypeId` 为索引，维护包含 T 类型的有向无环图。
 #[derive(Debug)]

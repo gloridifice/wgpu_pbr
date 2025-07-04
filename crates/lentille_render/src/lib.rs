@@ -6,8 +6,7 @@ use std::{
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
-use defered_rendering::DeferredComputePipeline;
-use lentille_core::window::{MainWindowCreatedEvent, WinitWindow};
+use lentille_core::window::{PrimaryWindowCreatedEvent, WinitWindow};
 use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
@@ -18,6 +17,7 @@ use winit::{dpi::PhysicalSize, window::Window};
 
 use crate::{
     app_ext::AppExt,
+    base_assets::BaseAssetsPlugin,
     bindings::BindingsPlugin,
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
@@ -37,7 +37,6 @@ pub mod bindings;
 pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
-pub mod dfg;
 pub mod graph;
 pub mod image;
 pub mod light;
@@ -67,10 +66,10 @@ pub mod transparent;
 pub mod utils;
 
 // TODO 检查这个 format 的正确性
-#[cfg(target_os = "windows")]
+// #[cfg(target_os = "windows")]
 pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
-#[cfg(not(target_os = "windows"))]
-pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
+// #[cfg(not(target_os = "windows"))]
+// pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
 
 pub struct RenderPlugin;
 
@@ -85,6 +84,7 @@ impl Plugin for RenderPlugin {
             BindingsPlugin,
             ShadowMappingPlugin,
             TransparentPlugin,
+            BaseAssetsPlugin,
             DeferredRenderingPlugin,
         ))
         .init_resource::<ShaderLoader>()
@@ -105,15 +105,12 @@ impl Plugin for RenderPlugin {
                 .run_if(resource_exists::<RenderState>),
         );
 
-        app
-            // 初始化 RenderState 和初始化资源
-            .add_observer(sys_init_window);
+        // 初始化 RenderState 和初始化资源
+        app.add_observer(sys_init_window);
 
-        // Add frame render systems
         app.configure_render_stage::<OpaqueStage>([after::<PreStage>()])
             .configure_render_stage::<TransparentStage>([after::<OpaqueStage>()])
-            // 一般系统
-            .add_systems(Update, sys_refersh_global_bind_group)
+            .add_systems(Update, (sys_refersh_global_bind_group, sys_create_surface))
             .add_systems(
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,
@@ -122,20 +119,6 @@ impl Plugin for RenderPlugin {
             .add_frame_system::<OpaqueStage, _, _>(sys_render_write_g_buffer_pass, [])
             .add_frame_system::<OpaqueStage, _, _>(sys_render_main_pass, [])
             .add_frame_system::<TransparentStage, _, _>(sys_render_transparent, []);
-
-        app.init_render_resource::<WhiteTexture>()
-            .init_render_resource::<NormalDefaultTexture>()
-            .init_render_resource::<dfg::DFGTexture>()
-            .init_render_resource::<mipmap::DefaultMipmapGenShader>()
-            .init_render_resource::<MissingTexture>()
-            .init_render_resource::<FullScreenVertexShader>()
-            .init_render_resource_with_config::<DefaultPBRMaterial>([
-                after::<MissingTexture>(),
-                after::<WhiteTexture>(),
-                after::<NormalDefaultTexture>(),
-                after::<DeferredComputePipeline>(),
-                after::<PBRMaterialBindGroupLayout>(),
-            ]);
     }
 }
 
@@ -282,7 +265,13 @@ impl RenderState {
     }
 }
 
-fn sys_init_window(_event: Trigger<MainWindowCreatedEvent>, world: &mut World) {
+impl SurfaceState {
+    pub fn configure(&self, device: &wgpu::Device) {
+        self.surface.configure(device, &self.config);
+    }
+}
+
+fn sys_init_window(_event: Trigger<PrimaryWindowCreatedEvent>, world: &mut World) {
     // 初始化 Resource
     let mut graph = ResourceGraph::new();
     swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());

@@ -15,7 +15,7 @@ use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
 
 use crate::RenderState;
-use crate::dfg::DFGTexture;
+use crate::base_assets::DFGTexture;
 use crate::light::LightUnifromBuffer;
 use crate::shadow_mapping::ShadowMap;
 use crate::skybox::{DefaultSkybox, SkyboxSHBuffer};
@@ -236,6 +236,9 @@ impl RenderTarget {
         Arc<UploadedImage>,
         Option<Arc<UploadedImage>>,
     ) {
+        let width = width.max(1);
+        let height = height.max(1);
+
         let color_a = Arc::new(create_color_render_target_image(
             width, height, device, format,
         ));
@@ -331,26 +334,30 @@ pub fn sys_resize_render_target(
         camera.aspect = size.height as f32 / size.height as f32;
         let format = match &target.target_type {
             TargetType::WindowAndSurface(entity) => {
-                let mut surface_state = q_window_surface
+                q_window_surface
                     .get_mut(*entity)
-                    .expect("SurfaceState not exists");
-                surface_state.config.width = size.width;
-                surface_state.config.height = size.height;
-                surface_state
-                    .surface
-                    .configure(&rs.device, &surface_state.config);
-                surface_state.config.format
+                    .ok()
+                    .map(|mut surface_state| {
+                        surface_state.config.width = size.width;
+                        surface_state.config.height = size.height;
+                        surface_state
+                            .surface
+                            .configure(&rs.device, &surface_state.config);
+                        surface_state.config.format
+                    })
             }
-            TargetType::Texture(uploaded_image) => uploaded_image.texture.format(),
+            TargetType::Texture(uploaded_image) => Some(uploaded_image.texture.format()),
         };
 
-        (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
-            size.width,
-            size.height,
-            format,
-            target.depth.is_some(),
-            &rs.device,
-        );
+        if let Some(format) = format {
+            (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
+                size.width,
+                size.height,
+                format,
+                target.depth.is_some(),
+                &rs.device,
+            );
+        }
     }
 }
 
@@ -507,8 +514,8 @@ pub fn create_color_render_target_image(
     format: wgpu::TextureFormat,
 ) -> UploadedImage {
     let size = Extent3d {
-        width,
-        height,
+        width: width,
+        height: height,
         depth_or_array_layers: 1,
     };
     let desc = TextureDescriptor {

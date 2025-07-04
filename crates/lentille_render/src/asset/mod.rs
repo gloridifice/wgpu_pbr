@@ -118,7 +118,7 @@ impl<T> Assets<T> {
 
     pub fn remove_by_name(&mut self, name: &String) -> Option<Arc<T>> {
         let handle = self.name_map.remove(name);
-        handle.and_then(|it| self.map.remove(&it).map(|(name, value)| value))
+        handle.and_then(|it| self.map.remove(&it).map(|(_name, value)| value))
     }
 
     pub fn remove(&mut self, handle: &Handle<T>) -> Option<Arc<T>> {

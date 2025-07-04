@@ -81,21 +81,21 @@ fn sys_end_frame_and_draw(
         pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
 
+    let surface_texture = surface_state.surface.get_current_texture().unwrap();
+    let view = surface_texture.texture.create_view(&Default::default());
+
     egui_renderer.end_frame_and_draw(
         &rs.device,
         &rs.queue,
         &mut encoder,
         &window.0,
-        &surface_state
-            .surface
-            .get_current_texture()
-            .unwrap()
-            .texture
-            .create_view(&Default::default()),
+        &view,
         screen_descriptor,
     );
 
     rs.queue.submit(std::iter::once(encoder.finish()));
+
+    surface_texture.present();
 }
 
 fn sys_handle_input(

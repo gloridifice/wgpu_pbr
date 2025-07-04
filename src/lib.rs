@@ -9,11 +9,12 @@ use lentille_core::{
     window::WindowPlugin,
 };
 use lentille_render::{
+    camera::RenderTargetConfig,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
     skybox::{prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path, Skybox},
     utils::cube::CubeVerticesBuffer,
-    RenderPlugin, RenderPreparedStartup,
+    RenderPlugin, RenderPreparedStartup, SCREEN_FORMAT,
 };
 
 use crate::{
@@ -41,8 +42,9 @@ impl Plugin for WgpuPbrPlugin {
         app.add_systems(
             RenderPreparedStartup,
             (
-                sys_startup_light_and_environment,
-                sys_generate_dragons_scene,
+                sys_spawn_camera
+                // sys_startup_light_and_environment,
+                // sys_generate_dragons_scene,
             ),
         )
         .add_systems(Update, sys_update_rotation);
@@ -344,14 +346,16 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
     queue.apply(world);
 }
 
-fn sys_startup_light_and_environment(world: &mut World) {
-    let light_arrow_model =
-        Arc::new(Model::load(AssetPath::new("models/arrow.glb"), world).unwrap());
-
-    world.spawn((
+fn sys_spawn_camera(mut commands: Commands) {
+    commands.spawn((
         Camera {
             fovy: 17.1,
             ..Camera::new(1.0)
+        },
+        RenderTargetConfig::Texture {
+            width: 1600,
+            height: 900,
+            format: SCREEN_FORMAT,
         },
         CameraController {
             row: -4.8,
@@ -364,6 +368,11 @@ fn sys_startup_light_and_environment(world: &mut World) {
             .unwrap(),
         Name::new("相机"),
     ));
+}
+
+fn sys_startup_light_and_environment(world: &mut World) {
+    let light_arrow_model =
+        Arc::new(Model::load(AssetPath::new("models/arrow.glb"), world).unwrap());
 
     SpawnModelCmd {
         model: light_arrow_model.clone(),
