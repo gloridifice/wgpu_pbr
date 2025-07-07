@@ -1,10 +1,12 @@
 use std::sync::Arc;
 
 use crate::{
-    base_assets::NoFilterSampler, bindings::global_binding::GlobalBindGroupLayout,
-    camera::RenderTargetSize, prelude::*,
+    base_assets::NoFilterSampler,
+    bindings::global_binding::GlobalBindGroupLayout,
+    camera::{RenderTargetResizedEvent, RenderTargetSize},
+    prelude::*,
 };
-use bevy_app::{Plugin, Update};
+use bevy_app::{Plugin, PreUpdate};
 use bevy_ecs::prelude::*;
 use wgpu::RenderPassColorAttachment;
 
@@ -13,7 +15,8 @@ pub struct WriteGBufferPlugin;
 impl Plugin for WriteGBufferPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource::<GBufferTextureBindGroupLayout>()
-            .add_systems(Update, sys_resize_g_buffer_texture);
+            .add_systems(PreUpdate, sys_create_deferred_g_buffer)
+            .add_observer(sys_resize_g_buffer_texture);
     }
 }
 
@@ -249,7 +252,7 @@ impl FromWorld for GBufferTextureBindGroupLayout {
     }
 }
 
-fn sys_create_deferred_write_g_buffer(
+fn sys_create_deferred_g_buffer(
     mut commands: Commands,
     q_camera: Query<(Entity, &RenderTargetSize), Without<GBufferTexturesBindGroup>>,
     rs: Res<RenderState>,
@@ -271,17 +274,18 @@ fn sys_create_deferred_write_g_buffer(
 }
 
 fn sys_resize_g_buffer_texture(
-    q_camera: Query<(&RenderTargetSize, &mut GBufferTexturesBindGroup), Changed<RenderTargetSize>>,
+    event: Trigger<RenderTargetResizedEvent>,
+    q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
     no_filter_sampler: Res<NoFilterSampler>,
 ) {
-    for (size, mut bg) in q_camera {
+    for mut bg in q_camera {
         *bg.as_mut() = GBufferTexturesBindGroup::new(
             &rs.device,
             Extent3d {
-                width: size.width,
-                height: size.height,
+                width: event.new_width,
+                height: event.new_height,
                 depth_or_array_layers: 1,
             },
             &bgl.layout,

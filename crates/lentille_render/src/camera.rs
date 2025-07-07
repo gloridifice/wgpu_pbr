@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::base_assets::NoFilterSampler;
 use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::{SurfaceState, prelude::*};
-use bevy_app::{Plugin, PostUpdate, Update};
+use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
@@ -34,16 +34,17 @@ pub(crate) struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_systems(
-            PostUpdate,
-            (
-                sys_create_render_target,
-                sys_crate_or_update_camera_buffer,
-                sys_create_camera_global_bind_group,
+        app.add_event::<RenderTargetResizedEvent>()
+            .add_systems(
+                PostUpdate,
+                (
+                    sys_create_render_target,
+                    sys_crate_or_update_camera_buffer,
+                    sys_create_camera_global_bind_group,
+                )
+                    .chain(),
             )
-                .chain(),
-        )
-        .add_systems(Update, sys_resize_render_target);
+            .add_systems(PreUpdate, sys_resize_render_target);
     }
 }
 
@@ -83,7 +84,7 @@ pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
     pub position: [f32; 4],
     pub direction: [f32; 4],
-    pub resolution: [f32; 2],
+    pub resolution: [f32; 4],
 }
 
 impl_pod_zeroable!(CameraUniform);
@@ -126,7 +127,7 @@ pub struct RenderTarget {
 }
 
 /// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct RenderTargetSize {
     pub width: u32,
     pub height: u32,
@@ -135,6 +136,13 @@ pub struct RenderTargetSize {
 pub enum TargetType {
     WindowAndSurface(Entity),
     Texture(Arc<UploadedImage>),
+}
+
+#[derive(Event, Clone)]
+pub struct RenderTargetResizedEvent {
+    pub render_target_entity: Entity,
+    pub new_width: u32,
+    pub new_height: u32,
 }
 
 // ------- Impls -------
@@ -177,7 +185,7 @@ impl Camera {
             view_proj: self.build_view_projection_matrix(transform).into(),
             position: [pos.x, pos.y, pos.z, 1.],
             direction: [dir.x, dir.y, dir.z, 1.],
-            resolution,
+            resolution: [resolution[0], resolution[1], 0.0, 0.0],
         }
     }
 }
@@ -321,28 +329,29 @@ impl Command for RefreshAllCameraGlobalBindGroupCmd {
 
 // --------- Systems ---------
 
-/// 负责监控 `RenderTargetSize` 的变化并更新纹理
+/// Watch `RenderTargetSize`'s change and update textures
 pub fn sys_resize_render_target(
+    mut commands: Commands,
     q_render_target: Query<
-        (&mut Camera, &mut RenderTarget, &RenderTargetSize),
+        (Entity, &mut Camera, &mut RenderTarget, &RenderTargetSize),
         Changed<RenderTargetSize>,
     >,
     mut q_window_surface: Query<&mut SurfaceState>,
     rs: Res<RenderState>,
 ) {
-    for (mut camera, mut target, size) in q_render_target {
-        camera.aspect = size.height as f32 / size.height as f32;
+    for (id, mut camera, mut target, size) in q_render_target {
+        let height = size.height.max(1);
+        let width = size.width.max(1);
+        camera.aspect = width as f32 / height as f32;
         let format = match &target.target_type {
             TargetType::WindowAndSurface(entity) => {
                 q_window_surface
                     .get_mut(*entity)
                     .ok()
                     .map(|mut surface_state| {
-                        surface_state.config.width = size.width;
-                        surface_state.config.height = size.height;
-                        surface_state
-                            .surface
-                            .configure(&rs.device, &surface_state.config);
+                        surface_state.config.width = width;
+                        surface_state.config.height = height;
+                        surface_state.configure(&rs.device);
                         surface_state.config.format
                     })
             }
@@ -351,13 +360,19 @@ pub fn sys_resize_render_target(
 
         if let Some(format) = format {
             (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
-                size.width,
-                size.height,
+                width,
+                height,
                 format,
                 target.depth.is_some(),
                 &rs.device,
             );
         }
+
+        commands.trigger(RenderTargetResizedEvent {
+            render_target_entity: id,
+            new_width: width,
+            new_height: height,
+        });
     }
 }
 
@@ -522,7 +537,10 @@ pub fn create_color_render_target_image(
         label: Some("Render Target"),
         size,
         format,
-        usage: TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_SRC | TextureUsages::COPY_DST,
+        usage: TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_SRC
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT,
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,

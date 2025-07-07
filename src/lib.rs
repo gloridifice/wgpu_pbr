@@ -39,15 +39,8 @@ impl Plugin for WgpuPbrPlugin {
         ))
         .add_plugins((ControlPlugin, EditorPlugin));
 
-        app.add_systems(
-            RenderPreparedStartup,
-            (
-                sys_spawn_camera
-                // sys_startup_light_and_environment,
-                // sys_generate_dragons_scene,
-            ),
-        )
-        .add_systems(Update, sys_update_rotation);
+        app.add_systems(RenderPreparedStartup, sys_spawn_camera)
+            .add_systems(Update, sys_update_rotation);
     }
 }
 

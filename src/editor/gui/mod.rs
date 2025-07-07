@@ -42,14 +42,10 @@ pub struct EguiRendererPlugin;
 
 impl Plugin for EguiRendererPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_systems(
-            First,
-            sys_begin_frame.run_if(resource_exists::<RenderState>),
-        )
-        .add_render_system_in_frame_set(FrameSets::Draw, sys_begin_frame)
-        .add_render_system_in_frame_set(FrameSets::PostDraw, sys_end_frame_and_draw)
-        .init_render_resource::<EguiRenderer>()
-        .add_observer(sys_handle_input);
+        app.add_systems(First, sys_begin_frame)
+            .add_render_system_in_frame_set(FrameSets::Present, sys_end_frame_and_draw)
+            .init_render_resource::<EguiRenderer>()
+            .add_observer(sys_handle_input);
     }
 }
 

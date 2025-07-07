@@ -18,8 +18,7 @@ impl Plugin for StagePlugin {
             .add_render_system_in_frame_set(
                 FrameSets::Draw,
                 (sys_render, sys_copy_to_real_target).chain(),
-            )
-            .add_render_system_in_frame_set(FrameSets::Present, sys_present);
+            );
     }
 }
 
@@ -135,8 +134,8 @@ pub fn sys_copy_to_real_target(
     q_surface_state: Query<&SurfaceState>,
 ) {
     for target in q_render_target {
-        let current_colot = target.get_current_color();
-        let size = current_colot.texture.size();
+        let current_color = target.get_current_color();
+        let size = current_color.texture.size();
         let texture = match &target.target_type {
             TargetType::WindowAndSurface(entity) => {
                 let surface_state = q_surface_state.get(*entity).unwrap();
@@ -145,18 +144,11 @@ pub fn sys_copy_to_real_target(
             TargetType::Texture(uploaded_image) => &uploaded_image.texture,
         };
 
-        let mut encoder = rs.device.create_command_encoder(&Default::default());
-        lentille_wgpu_utils::copy_texture(&mut encoder, &current_colot.texture, texture, size);
-        rs.queue.submit(std::iter::once(encoder.finish()));
-    }
-}
-
-pub fn sys_present(q_surface_state: Query<&SurfaceState>) {
-    for surface_state in q_surface_state {
-        surface_state
-            .surface
-            .get_current_texture()
-            .unwrap()
-            .present();
+        // The size of current color may be different with surface size
+        if size == texture.size() {
+            let mut encoder = rs.device.create_command_encoder(&Default::default());
+            lentille_wgpu_utils::copy_texture(&mut encoder, &current_color.texture, texture, size);
+            rs.queue.submit(std::iter::once(encoder.finish()));
+        }
     }
 }

@@ -27,6 +27,7 @@ use crate::{
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
     shadow_mapping::ShadowMappingPlugin,
     skybox::SkyBoxPlugin,
+    stage::StagePlugin,
     transform::TransformPlugin,
     transparent::TransparentPlugin,
 };
@@ -76,6 +77,7 @@ pub struct RenderPlugin;
 impl Plugin for RenderPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins((
+            StagePlugin,
             TransformPlugin,
             LightPlugin,
             CameraPlugin,
@@ -99,7 +101,6 @@ impl Plugin for RenderPlugin {
                 FrameSets::Draw,
                 FrameSets::PostDraw,
                 FrameSets::Present,
-                FrameSets::Cleanup,
             )
                 .chain()
                 .run_if(resource_exists::<RenderState>),
@@ -146,9 +147,7 @@ pub enum FrameSets {
     PreDraw,
     Draw,
     PostDraw,
-    /// Submit encoder and present output texture
     Present,
-    Cleanup,
 }
 
 #[derive(Resource)]
