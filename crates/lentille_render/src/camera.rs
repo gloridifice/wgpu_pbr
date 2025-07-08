@@ -12,7 +12,7 @@ use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_core::window::PrimaryWinodw;
 use lentille_wgpu_utils::impl_pod_zeroable;
-use wgpu::{BindGroup, BufferDescriptor, TextureDimension};
+use wgpu::{BufferDescriptor, TextureDimension};
 
 use crate::RenderState;
 use crate::base_assets::DFGTexture;
@@ -37,12 +37,7 @@ impl Plugin for CameraPlugin {
         app.add_event::<RenderTargetResizedEvent>()
             .add_systems(
                 PostUpdate,
-                (
-                    sys_create_render_target,
-                    sys_crate_or_update_camera_buffer,
-                    sys_create_camera_global_bind_group,
-                )
-                    .chain(),
+                (sys_create_render_target, sys_crate_or_update_camera_buffer).chain(),
             )
             .add_systems(PreUpdate, sys_resize_render_target);
     }
@@ -65,17 +60,6 @@ pub struct Camera {
 #[derive(Component)]
 pub struct CameraBuffer {
     pub buffer: Arc<wgpu::Buffer>,
-}
-
-/// Store global bind group for gpu
-#[derive(Component)]
-pub struct CameraGlobalBindGroup {
-    /// 该值应该与 RenderTarget 的 is_current_color_a 值保持一致
-    is_current_b: bool,
-    /// 对应 RenderTarget 的 color_a
-    a: Arc<BindGroup>,
-    /// 对应 RenderTarget 的 color_b
-    b: Arc<BindGroup>,
 }
 
 #[repr(C)]
@@ -146,13 +130,6 @@ pub struct RenderTargetResizedEvent {
 }
 
 // ------- Impls -------
-
-impl CameraGlobalBindGroup {
-    pub fn next(&mut self) -> Arc<BindGroup> {
-        self.is_current_b = !self.is_current_b;
-        Arc::clone(if self.is_current_b { &self.b } else { &self.a })
-    }
-}
 
 impl FromWorld for CameraBuffer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
@@ -229,6 +206,14 @@ impl RenderTarget {
             &self.color_a
         } else {
             &self.color_b
+        })
+    }
+
+    pub fn get_attachment_color(&self) -> Arc<UploadedImage> {
+        Arc::clone(if self.is_current_color_a {
+            &self.color_b
+        } else {
+            &self.color_a
         })
     }
 
@@ -449,17 +434,6 @@ fn sys_create_render_target(
     }
 }
 
-pub fn sys_create_camera_global_bind_group(
-    mut commands: Commands,
-    q_camera: Query<Entity, (With<CameraBuffer>, Without<CameraGlobalBindGroup>)>,
-) {
-    if !q_camera.is_empty() {
-        commands.queue(RefreshCameraGlobalBindGroupCmd {
-            ids: q_camera.iter().collect(),
-        });
-    }
-}
-
 fn refresh_camera_global_bind_group_by_ids(
     In(to_refresh): In<Vec<Entity>>,
 
@@ -476,48 +450,6 @@ fn refresh_camera_global_bind_group_by_ids(
     skybox_sh: Res<SkyboxSHBuffer>,
     skeybox: Query<&Skybox>,
 ) {
-    let skybox_texture = skeybox
-        .single()
-        .ok()
-        .and_then(|it| it.texture.as_ref())
-        .unwrap_or(&default_skybox.texture);
-
-    let device = &rs.device;
-    for (id, camera, target) in q_camera_buffers
-        .iter()
-        .filter(|(id, _, _)| to_refresh.contains(&id))
-    {
-        let mut bind_groups = [0, 1]
-            .into_iter()
-            .map(|it| {
-                let image = if it == 0 {
-                    &target.color_a
-                } else {
-                    &target.color_b
-                };
-                let bind_group_desc = bg_descriptor! {
-                    ["Main PBR Global BindGroup"][&layout.0]
-                    0: camera.buffer.as_entire_binding();
-                    1: light.buffer.as_entire_binding();
-                    2: BindingResource::TextureView(&shadow_map.image.view);
-                    3: BindingResource::Sampler(&shadow_map.image.sampler);
-                    4: BindingResource::TextureView(&dfg.texture.view);
-                    5: BindingResource::TextureView(&skybox_texture.view);
-                    6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
-                    7: skybox_sh.buffer.as_entire_binding();
-                    8: BindingResource::TextureView(&image.view);
-                    9: BindingResource::Sampler(&no_filter_sampler.0);
-                };
-                Arc::new(device.create_bind_group(&bind_group_desc))
-            })
-            .collect::<Vec<_>>();
-
-        commands.entity(id).insert(CameraGlobalBindGroup {
-            is_current_b: false,
-            a: bind_groups.remove(0),
-            b: bind_groups.remove(0),
-        });
-    }
 }
 
 // --------- Target Creation Functions ---------

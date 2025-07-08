@@ -2,9 +2,14 @@ use std::any::{TypeId, type_name};
 
 use crate::{
     FrameSets, SurfaceState,
-    camera::{CameraGlobalBindGroup, RenderTarget, TargetType},
+    base_assets::{DFGTexture, NoFilterSampler},
+    bindings::global_binding::GlobalBindGroupLayout,
+    camera::{CameraBuffer, RenderTarget, TargetType},
     graph::{InsertConfig, TypeIdGraph},
+    light::LightUnifromBuffer,
     prelude::*,
+    shadow_mapping::ShadowMap,
+    skybox::{DefaultSkybox, SkyboxSHBuffer},
 };
 use bevy_app::Plugin;
 use bevy_ecs::{prelude::*, system::SystemId};
@@ -92,18 +97,54 @@ impl RenderStage {
 pub fn sys_render(
     mut commands: Commands,
     mut render_stage_manager: ResMut<RenderStageManager>,
-    mut q_camera: Query<(Entity, &mut RenderTarget, &mut CameraGlobalBindGroup)>,
+    mut q_camera: Query<(Entity, &CameraBuffer, &mut RenderTarget)>,
     rs: Res<RenderState>,
+
+    light: Res<LightUnifromBuffer>,
+    shadow_map: Res<ShadowMap>,
+    dfg: Res<DFGTexture>,
+    layout: Res<GlobalBindGroupLayout>,
+    no_filter_sampler: Res<NoFilterSampler>,
+
+    default_skybox: Res<DefaultSkybox>,
+    skybox_sh: Res<SkyboxSHBuffer>,
+    skeybox: Query<&Skybox>,
 ) {
-    for (camera_id, mut camera_target, mut camera_global_bind_group) in q_camera.iter_mut() {
+    for (camera_id, camera_buffer, mut camera_target) in q_camera.iter_mut() {
         render_stage_manager.stages.bfs_mut(|stage| {
             let color_target = camera_target.next();
+            let color_attachment = camera_target.get_attachment_color();
             let depth_target = camera_target.depth.clone();
-            let camera_global_bind_group = camera_global_bind_group.next();
 
             let encoder = rs.device.create_command_encoder(&CommandEncoderDescriptor {
                 label: Some(stage.name),
             });
+
+            let camera_global_bind_group = {
+                let skybox_texture = skeybox
+                    .single()
+                    .ok()
+                    .and_then(|it| it.texture.as_ref())
+                    .unwrap_or(&default_skybox.texture);
+
+                let device = &rs.device;
+
+                let bind_group_desc = bg_descriptor! {
+                    ["Main PBR Global BindGroup"][&layout.0]
+                    0: camera_buffer.buffer.as_entire_binding();
+                    1: light.buffer.as_entire_binding();
+                    2: BindingResource::TextureView(&shadow_map.image.view);
+                    3: BindingResource::Sampler(&shadow_map.image.sampler);
+                    4: BindingResource::TextureView(&dfg.texture.view);
+                    5: BindingResource::TextureView(&skybox_texture.view);
+                    6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
+                    7: skybox_sh.buffer.as_entire_binding();
+                    8: BindingResource::TextureView(&color_attachment.view);
+                    9: BindingResource::Sampler(&no_filter_sampler.0);
+                };
+
+                Arc::new(device.create_bind_group(&bind_group_desc))
+            };
 
             let render_context = RenderContext {
                 camera_id,

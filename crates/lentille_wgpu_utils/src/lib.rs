@@ -2,8 +2,7 @@ use wgpu::{
     BindGroupLayoutEntry, BindingType, ColorTargetState, Extent3d, Origin3d,
     PipelineCompilationOptions, PipelineLayout, RenderPassColorAttachment,
     RenderPipelineDescriptor, SamplerDescriptor, ShaderModule, ShaderStages, TextureDescriptor,
-    TextureFormat, TextureUsages, TextureView, VertexBufferLayout, VertexState,
-    util::{DeviceExt, TextureDataOrder},
+    TextureFormat, TextureView, VertexBufferLayout, VertexState,
 };
 
 pub mod bind_group_macro;

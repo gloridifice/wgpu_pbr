@@ -15,11 +15,11 @@ pub struct EditorPlugin;
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(EditorGuiPlugin)
-            .add_observer(sys_on_window_resized);
+            .add_observer(sys_on_winit_window_resized);
     }
 }
 
-fn sys_on_window_resized(
+fn sys_on_winit_window_resized(
     event: Trigger<WinitWindowResizeEvent>,
     mut q_windows: Query<(&WinitWindow, &mut SurfaceState)>,
     rs: Res<RenderState>,

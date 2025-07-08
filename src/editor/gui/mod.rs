@@ -13,7 +13,7 @@ use lentille_core::{
 };
 use lentille_render::{
     app_ext::AppExt,
-    camera::{Camera, RenderTarget, RenderTargetSize, TargetType},
+    camera::{Camera, RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
     FrameSets, RenderPreparedStartup, SurfaceState,
 };
@@ -32,7 +32,8 @@ impl Plugin for EditorGuiPlugin {
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
             .add_systems(RenderPreparedStartup, sys_setup_egui_visual)
-            .add_systems(Update, (sys_egui_tiles, sys_on_resize_egui_target));
+            .add_systems(Update, sys_egui_tiles)
+            .add_observer(sys_on_resize_scene_render_target);
     }
 }
 
@@ -213,8 +214,8 @@ pub fn sys_egui_tiles(world: &mut World) {
                 .single_mut(world)
             {
                 if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
-                    target_size.height = size.x as u32;
-                    target_size.width = size.y as u32;
+                    target_size.height = size.y as u32;
+                    target_size.width = size.x as u32;
                 }
             }
         });
@@ -241,14 +242,19 @@ fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
     ));
 }
 
-fn sys_on_resize_egui_target(
+fn sys_on_resize_scene_render_target(
+    event: Trigger<RenderTargetResizedEvent>,
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
+    q_camera: Query<&RenderTarget>,
     mut egui: ResMut<EguiRenderer>,
-    camera: Single<&RenderTarget, Changed<RenderTarget>>,
     rs: Res<RenderState>,
 ) {
     let device = &rs.device;
-    if let TargetType::Texture(image) = &camera.target_type {
+    if let Ok(RenderTarget {
+        target_type: TargetType::Texture(image),
+        ..
+    }) = &q_camera.get(event.render_target_entity)
+    {
         egui_tex_id.0 = Some(egui.renderer.register_native_texture(
             device,
             &image.view,
