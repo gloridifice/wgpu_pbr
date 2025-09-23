@@ -19,6 +19,7 @@ use crate::{
     app_ext::AppExt,
     base_assets::BaseAssetsPlugin,
     bindings::BindingsPlugin,
+    blit::BlitPlugin,
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
     defered_rendering::DeferredRenderingPlugin,
@@ -35,6 +36,7 @@ use crate::{
 pub mod asset;
 pub mod base_assets;
 pub mod bindings;
+pub mod blit;
 pub mod camera;
 pub mod cubemap;
 pub mod defered_rendering;
@@ -88,6 +90,7 @@ impl Plugin for RenderPlugin {
             TransparentPlugin,
             BaseAssetsPlugin,
             DeferredRenderingPlugin,
+            BlitPlugin,
         ))
         .init_resource::<ShaderLoader>()
         .init_resource::<RenderState>();
@@ -278,7 +281,7 @@ fn sys_init_window(_event: Trigger<PrimaryWindowCreatedEvent>, world: &mut World
         res(world);
     }
 
-    world.run_schedule(RenderPreparedStartup);
+    let _ = world.try_run_schedule(RenderPreparedStartup);
 }
 
 fn sys_create_surface(

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    base_assets::NoFilterSampler,
+    base_assets::NoFilterClampSampler,
     bindings::global_binding::GlobalBindGroupLayout,
     camera::{RenderTargetResizedEvent, RenderTargetSize},
     prelude::*,
@@ -257,7 +257,7 @@ fn sys_create_deferred_g_buffer(
     q_camera: Query<(Entity, &RenderTargetSize), Without<GBufferTexturesBindGroup>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
-    no_filter_sampler: Res<NoFilterSampler>,
+    no_filter_sampler: Res<NoFilterClampSampler>,
 ) {
     for (id, size) in q_camera {
         commands.entity(id).insert(GBufferTexturesBindGroup::new(
@@ -278,7 +278,7 @@ fn sys_resize_g_buffer_texture(
     q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
-    no_filter_sampler: Res<NoFilterSampler>,
+    no_filter_sampler: Res<NoFilterClampSampler>,
 ) {
     for mut bg in q_camera {
         *bg.as_mut() = GBufferTexturesBindGroup::new(

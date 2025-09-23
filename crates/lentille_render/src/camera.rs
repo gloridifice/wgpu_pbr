@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::base_assets::NoFilterSampler;
+use crate::base_assets::NoFilterClampSampler;
 use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
@@ -444,7 +444,7 @@ fn refresh_camera_global_bind_group_by_ids(
     dfg: Res<DFGTexture>,
     layout: Res<GlobalBindGroupLayout>,
     rs: Res<RenderState>,
-    no_filter_sampler: Res<NoFilterSampler>,
+    no_filter_sampler: Res<NoFilterClampSampler>,
 
     default_skybox: Res<DefaultSkybox>,
     skybox_sh: Res<SkyboxSHBuffer>,

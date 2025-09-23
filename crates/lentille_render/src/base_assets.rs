@@ -14,7 +14,7 @@ impl Plugin for BaseAssetsPlugin {
             .init_render_resource::<super::mipmap::DefaultMipmapGenShader>() //TODO move
             .init_render_resource::<MissingTexture>()
             .init_render_resource::<FullScreenVertexShader>()
-            .init_render_resource::<NoFilterSampler>()
+            .init_render_resource::<NoFilterClampSampler>()
             .init_render_resource_with_config::<DefaultPBRMaterial>([
                 after::<MissingTexture>(),
                 after::<WhiteTexture>(),
@@ -66,7 +66,10 @@ pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
 pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 
 #[derive(Resource, Clone)]
-pub struct NoFilterSampler(pub Arc<Sampler>);
+pub struct NoFilterClampSampler(pub Arc<Sampler>);
+
+#[derive(Resource, Clone)]
+pub struct LinearFilterClampSampler(pub Arc<Sampler>);
 
 impl FromWorld for WhiteTexture {
     fn from_world(world: &mut World) -> Self {
@@ -137,12 +140,31 @@ impl FromWorld for DefaultPBRMaterial {
     }
 }
 
-impl FromWorld for NoFilterSampler {
+impl FromWorld for NoFilterClampSampler {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let sampler = rs
             .device
             .create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter());
+        Self(Arc::new(sampler))
+    }
+}
+
+impl FromWorld for LinearFilterClampSampler {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let sampler = rs.device.create_sampler(&wgpu::SamplerDescriptor {
+            address_mode_u: wgpu::AddressMode::ClampToEdge,
+            address_mode_v: wgpu::AddressMode::ClampToEdge,
+            address_mode_w: wgpu::AddressMode::ClampToEdge,
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
+            compare: None,
+            lod_min_clamp: 0.0,
+            lod_max_clamp: 100.0,
+            ..Default::default()
+        });
         Self(Arc::new(sampler))
     }
 }

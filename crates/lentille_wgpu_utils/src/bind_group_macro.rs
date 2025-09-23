@@ -70,7 +70,7 @@ impl BGLEntry {
 
 /// ```
 /// bgl_entries!{
-///     1: frag => IntoBGLEntry::UniformBuffer()
+///     1: frag => BGLEntry::UniformBuffer()
 /// }
 /// ```
 #[macro_export]

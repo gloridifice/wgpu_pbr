@@ -248,7 +248,7 @@ pub fn primitive_triangle_list_default() -> wgpu::PrimitiveState {
 //     }
 // }
 
-pub fn copy_texture(
+pub fn copy_texture2d_to_texture2d_no_mip(
     encoder: &mut wgpu::CommandEncoder,
     source: &wgpu::Texture,
     target: &wgpu::Texture,

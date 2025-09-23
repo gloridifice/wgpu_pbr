@@ -2,7 +2,7 @@ use std::any::{TypeId, type_name};
 
 use crate::{
     FrameSets, SurfaceState,
-    base_assets::{DFGTexture, NoFilterSampler},
+    base_assets::{DFGTexture, NoFilterClampSampler},
     bindings::global_binding::GlobalBindGroupLayout,
     camera::{CameraBuffer, RenderTarget, TargetType},
     graph::{InsertConfig, TypeIdGraph},
@@ -104,7 +104,7 @@ pub fn sys_render(
     shadow_map: Res<ShadowMap>,
     dfg: Res<DFGTexture>,
     layout: Res<GlobalBindGroupLayout>,
-    no_filter_sampler: Res<NoFilterSampler>,
+    no_filter_sampler: Res<NoFilterClampSampler>,
 
     default_skybox: Res<DefaultSkybox>,
     skybox_sh: Res<SkyboxSHBuffer>,
@@ -188,7 +188,12 @@ pub fn sys_copy_to_real_target(
         // The size of current color may be different with surface size
         if size == texture.size() {
             let mut encoder = rs.device.create_command_encoder(&Default::default());
-            lentille_wgpu_utils::copy_texture(&mut encoder, &current_color.texture, texture, size);
+            lentille_wgpu_utils::copy_texture2d_to_texture2d_no_mip(
+                &mut encoder,
+                &current_color.texture,
+                texture,
+                size,
+            );
             rs.queue.submit(std::iter::once(encoder.finish()));
         }
     }

@@ -40,6 +40,7 @@ impl Plugin for WgpuPbrPlugin {
         .add_plugins((ControlPlugin, EditorPlugin));
 
         app.add_systems(RenderPreparedStartup, sys_spawn_camera)
+            .add_systems(Startup, sys_generate_dragons_scene)
             .add_systems(Update, sys_update_rotation);
     }
 }
@@ -116,7 +117,7 @@ fn generate_point_lights(
     });
 }
 
-fn sys_generate_dragons_scene(world: &mut World) {
+pub fn sys_generate_dragons_scene(world: &mut World) {
     let dragon_model = Arc::new(
         Model::load(AssetPath::new("models/DragonAttenuation/scene.gltf"), world).unwrap(),
     );
@@ -339,7 +340,7 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
     queue.apply(world);
 }
 
-fn sys_spawn_camera(mut commands: Commands) {
+pub fn sys_spawn_camera(mut commands: Commands) {
     commands.spawn((
         Camera {
             fovy: 17.1,
