@@ -21,11 +21,7 @@ pub struct WinitWindow(pub Arc<Window>);
 
 impl Plugin for WindowPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<WinitDeviceEvent>()
-            .add_event::<WinitWindowEvent>()
-            .add_event::<PrimaryWindowCreatedEvent>()
-            .add_event::<WinitWindowResizeEvent>()
-            .set_runner(my_runner);
+        app.set_runner(my_runner);
     }
 }
 
@@ -100,7 +96,7 @@ impl ApplicationHandler for MyApplicationHandler {
         device_id: winit::event::DeviceId,
         event: winit::event::DeviceEvent,
     ) {
-        self.app.world_mut().send_event(WinitDeviceEvent {
+        self.app.world_mut().trigger(WinitDeviceEvent {
             device_event: event.clone(),
             device_id,
         });

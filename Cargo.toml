@@ -28,9 +28,10 @@ naga_oil = "0.17.0"
 cgmath = "0.18.0"
 
 # bevy
-bevy_ecs = "0.16"
-bevy_app = "0.16"
-bevy_log = "0.16"
+bevy_ecs = "0.17"
+bevy_app = "0.17"
+bevy_log = "0.17"
+bevy_reflect = "0.17"
 
 [dependencies]
 bevy_app = { workspace = true }
@@ -43,7 +44,6 @@ rand = { workspace = true }
 color-backtrace = { version = "0.7" }
 
 tiny_bail = "0.4.3"
-bevy_reflect = "0.16"
 
 # egui
 egui = "0.31"

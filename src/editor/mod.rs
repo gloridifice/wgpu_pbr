@@ -1,6 +1,6 @@
 use bevy_app::Plugin;
 use bevy_ecs::{
-    observer::Trigger,
+    observer::On,
     system::{Query, Res},
 };
 use lentille_core::window::{WinitWindow, WinitWindowResizeEvent};
@@ -20,7 +20,7 @@ impl Plugin for EditorPlugin {
 }
 
 fn sys_on_winit_window_resized(
-    event: Trigger<WinitWindowResizeEvent>,
+    event: On<WinitWindowResizeEvent>,
     mut q_windows: Query<(&WinitWindow, &mut SurfaceState)>,
     rs: Res<RenderState>,
 ) {

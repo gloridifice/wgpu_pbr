@@ -4,7 +4,7 @@ use std::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel, world::DeferredWorld};
 use bevy_log::info;
 use lentille_core::window::{PrimaryWindowCreatedEvent, WinitWindow};
 use pollster::block_on;
@@ -273,15 +273,17 @@ impl SurfaceState {
     }
 }
 
-fn sys_init_window(_event: Trigger<PrimaryWindowCreatedEvent>, world: &mut World) {
+fn sys_init_window(_event: On<PrimaryWindowCreatedEvent>, mut commands: Commands) {
     // 初始化 Resource
     let mut graph = ResourceGraph::new();
     swap(&mut graph, &mut RENDER_RESOURCES_TO_ADD.lock().unwrap());
-    for res in graph {
-        res(world);
-    }
+    commands.queue(|world: &mut World| {
+        for res in graph {
+            res(world);
+        }
+    });
 
-    let _ = world.try_run_schedule(RenderPreparedStartup);
+    commands.run_schedule(RenderPreparedStartup);
 }
 
 fn sys_create_surface(

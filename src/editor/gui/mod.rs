@@ -102,7 +102,7 @@ fn sys_end_frame_and_draw(
 }
 
 fn sys_handle_input(
-    trigger: Trigger<WinitWindowEvent>,
+    trigger: On<WinitWindowEvent>,
     mut egui_renderer: ResMut<EguiRenderer>,
     q_window: Query<&WinitWindow>,
 ) {
