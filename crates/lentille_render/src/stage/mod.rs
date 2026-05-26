@@ -111,11 +111,11 @@ pub fn sys_render(
     skeybox: Query<&Skybox>,
 ) {
     for (camera_id, camera_buffer, mut camera_target) in q_camera.iter_mut() {
-        render_stage_manager.stages.bfs_mut(|stage| {
-            let color_target = camera_target.next();
-            let color_attachment = camera_target.get_attachment_color();
-            let depth_target = camera_target.depth.clone();
+        let color_target = camera_target.next();
+        let color_attachment = camera_target.get_attachment_color();
+        let depth_target = camera_target.depth.clone();
 
+        render_stage_manager.stages.bfs_mut(|stage| {
             let encoder = rs.device.create_command_encoder(&CommandEncoderDescriptor {
                 label: Some(stage.name),
             });
@@ -149,9 +149,9 @@ pub fn sys_render(
             let render_context = RenderContext {
                 camera_id,
                 encoder,
-                color_target,
+                color_target: Arc::clone(&color_target),
                 camera_global_bind_group,
-                depth_target,
+                depth_target: depth_target.clone(),
             };
 
             let systems = stage.systems.clone();

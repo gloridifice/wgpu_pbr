@@ -9,7 +9,7 @@ use egui::{
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
-    window::{PrimaryWinodw, WinitWindow, WinitWindowEvent},
+    window::{PrimaryWindow, WinitWindow, WinitWindowEvent},
 };
 use lentille_render::{
     app_ext::AppExt,
@@ -53,7 +53,7 @@ impl Plugin for EguiRendererPlugin {
 /// Only for PrimaryWindow now!
 fn sys_begin_frame(
     mut egui_renderer: ResMut<EguiRenderer>,
-    window: Single<&WinitWindow, With<PrimaryWinodw>>,
+    window: Single<&WinitWindow, With<PrimaryWindow>>,
 ) {
     egui_renderer.begin_frame(&window.0);
 }
@@ -63,7 +63,7 @@ fn sys_end_frame_and_draw(
     mut egui_renderer: ResMut<EguiRenderer>,
     rs: Res<RenderState>,
     egui_config: Res<EguiConfig>,
-    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWinodw>>,
+    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWindow>>,
 ) {
     let (window, surface_state) = window.into_inner();
 
@@ -78,7 +78,13 @@ fn sys_end_frame_and_draw(
         pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
 
-    let surface_texture = surface_state.surface.get_current_texture().unwrap();
+    let surface_texture = match surface_state.surface.get_current_texture() {
+        Ok(t) => t,
+        Err(e) => {
+            bevy_log::error!("Failed to acquire surface texture: {e}");
+            return;
+        }
+    };
     let view = surface_texture.texture.create_view(&Default::default());
 
     egui_renderer.end_frame_and_draw(
@@ -189,33 +195,36 @@ pub fn sys_egui_tiles(world: &mut World) {
             });
 
         CentralPanel::default().show(ctx, |ui| {
-            let ids = world.resource::<RenderTargetEguiTexId>();
             let size = ui.available_size();
-            if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
-                let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
-                let mut input = world.resource_mut::<Input>();
-                for (ec, mc) in [
-                    (PointerButton::Primary, CursorButton::Left),
-                    (PointerButton::Secondary, CursorButton::Right),
-                    (PointerButton::Middle, CursorButton::Middle),
-                ] {
-                    if main_view.clicked_by(ec) {
-                        input.down_cursor_buttons.insert(mc);
+            if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>() {
+                if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
+                    let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
+                    let mut input = world.resource_mut::<Input>();
+                    for (ec, mc) in [
+                        (PointerButton::Primary, CursorButton::Left),
+                        (PointerButton::Secondary, CursorButton::Right),
+                        (PointerButton::Middle, CursorButton::Middle),
+                    ] {
+                        if main_view.clicked_by(ec) {
+                            input.down_cursor_buttons.insert(mc);
+                        }
                     }
+                    input.cursor_position = main_view
+                        .hover_pos()
+                        .map(|it| Vec2::new(it.x, it.y))
+                        .unwrap_or(Vec2::zero());
                 }
-                input.cursor_position = main_view
-                    .hover_pos()
-                    .map(|it| Vec2::new(it.x, it.y))
-                    .unwrap_or(Vec2::zero());
             }
 
             if let Ok(mut target_size) = world
                 .query_filtered::<&mut RenderTargetSize, With<Camera>>()
                 .single_mut(world)
             {
-                if target_size.height != size.x as u32 || target_size.width != size.y as u32 {
-                    target_size.height = size.y as u32;
-                    target_size.width = size.x as u32;
+                let new_w = size.x as u32;
+                let new_h = size.y as u32;
+                if target_size.width != new_w || target_size.height != new_h {
+                    target_size.width = new_w;
+                    target_size.height = new_h;
                 }
             }
         });

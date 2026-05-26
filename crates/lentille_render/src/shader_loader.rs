@@ -18,7 +18,7 @@ impl ShaderLoader {
         let string = match fs::read_to_string(&final_path) {
             Ok(s) => s,
             Err(e) => {
-                panic!("Load Shader Failed: {} \n Err: {}", &final_path, e)
+                anyhow::bail!("Load Shader Failed: {} \n Err: {}", &final_path, e)
             }
         };
         let source = self
@@ -64,8 +64,7 @@ impl FromWorld for ShaderLoader {
                 let result = fs::read_to_string(path);
                 let Ok(shader_string) = result else {
                     error!("Failed to read file <{:?}>.", path);
-                    result.unwrap();
-                    panic!();
+                    continue;
                 };
                 match composer.add_composable_module(
                     naga_oil::compose::ComposableModuleDescriptor {

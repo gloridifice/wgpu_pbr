@@ -4,7 +4,7 @@ use bevy_log::LogPlugin;
 use lentille_core::{
     input::InputPlugin,
     time::TimePlugin,
-    window::{PrimaryWinodw, WindowPlugin, WinitWindow, WinitWindowResizeEvent},
+    window::{PrimaryWindow, WindowPlugin, WinitWindow, WinitWindowResizeEvent},
 };
 use lentille_render::{
     camera::{Camera, RenderTarget, RenderTargetSize},
@@ -43,7 +43,7 @@ fn sys_on_window_resize(
 
 fn sys_end_frame_and_present(
     rs: Res<RenderState>,
-    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWinodw>>,
+    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWindow>>,
     q_camera: Single<&RenderTarget, With<Camera>>,
 ) {
     let (_window, surface_state) = window.into_inner();

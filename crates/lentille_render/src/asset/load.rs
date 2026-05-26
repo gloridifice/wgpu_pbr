@@ -219,7 +219,7 @@ impl UploadedImageWithSampler {
                 format: wgpu::TextureFormat::Rgba16Float,
                 usage: wgpu::TextureUsages::TEXTURE_BINDING
                     | wgpu::TextureUsages::COPY_DST
-                    | wgpu::TextureUsages::COPY_DST,
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             },
             Default::default(),

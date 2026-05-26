@@ -10,9 +10,9 @@ use winit::keyboard::KeyCode;
 
 use crate::control::ControlState;
 
-pub struct CameraContorlPlugin;
+pub struct CameraControlPlugin;
 
-impl Plugin for CameraContorlPlugin {
+impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_resource::<CameraConfig>()
             .add_systems(Update, sys_update_camera_control);

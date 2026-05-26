@@ -61,12 +61,12 @@ impl MeshRenderer {
         primitive: &UploadedPrimitive,
         override_material: Option<&PBRMaterialOverride>,
     ) -> bool {
-        primitive.material.as_ref().is_some_and(|it| {
-            it.alpha_mode == AlphaMode::Opaque
-                && override_material.is_none_or(|it| {
-                    it.material
+        primitive.material.as_ref().is_none_or(|mat| {
+            mat.alpha_mode == AlphaMode::Opaque
+                && override_material.is_none_or(|ove| {
+                    ove.material
                         .alpha_mode
-                        .is_none_or(|it| it == AlphaMode::Opaque)
+                        .is_none_or(|am| am == AlphaMode::Opaque)
                 })
         })
     }

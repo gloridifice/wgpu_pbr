@@ -48,7 +48,7 @@ impl Color {
     }
 
     pub fn with_alpha(mut self, a: f32) -> Self {
-        self.vec4.z = a;
+        self.vec4.w = a;
         self
     }
 

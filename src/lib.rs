@@ -2,8 +2,7 @@ use std::sync::Arc;
 
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::RunSystemOnce, world::CommandQueue};
-use bevy_log::LogPlugin;
-use lentille_core::{
+use bevy_log::LogPlugin;use lentille_core::{
     input::InputPlugin,
     time::{Time, TimePlugin},
     window::WindowPlugin,
@@ -40,7 +39,7 @@ impl Plugin for WgpuPbrPlugin {
         .add_plugins((ControlPlugin, EditorPlugin));
 
         app.add_systems(RenderPreparedStartup, sys_spawn_camera)
-            .add_systems(Startup, sys_generate_dragons_scene)
+            .add_systems(Startup, sys_generate_plane_scene)
             .add_systems(Update, sys_update_rotation);
     }
 }
@@ -117,170 +116,79 @@ fn generate_point_lights(
     });
 }
 
-pub fn sys_generate_dragons_scene(world: &mut World) {
-    let dragon_model = Arc::new(
-        Model::load(AssetPath::new("models/DragonAttenuation/scene.gltf"), world).unwrap(),
-    );
-    let plane_model = Arc::new(Model::load(AssetPath::new("models/plane.glb"), world).unwrap());
+// Commented out — requires models/DragonAttenuation/scene.gltf (not in repo)
+// pub fn sys_generate_dragons_scene(world: &mut World) { ... }
 
-    generate_point_lights(world, 12., 8., 2., 20, 1., 1.);
+fn create_procedural_plane_model(size: f32) -> Model {
+    let half = size / 2.0;
+    let vertices = vec![
+        Vertex {
+            position: [-half, 0.0, -half],
+            normal: [0.0, 1.0, 0.0],
+            tangent: [1.0, 0.0, 0.0],
+            color: [1.0; 4],
+            tex_coord: [0.0, 0.0],
+        },
+        Vertex {
+            position: [half, 0.0, -half],
+            normal: [0.0, 1.0, 0.0],
+            tangent: [1.0, 0.0, 0.0],
+            color: [1.0; 4],
+            tex_coord: [1.0, 0.0],
+        },
+        Vertex {
+            position: [half, 0.0, half],
+            normal: [0.0, 1.0, 0.0],
+            tangent: [1.0, 0.0, 0.0],
+            color: [1.0; 4],
+            tex_coord: [1.0, 1.0],
+        },
+        Vertex {
+            position: [-half, 0.0, half],
+            normal: [0.0, 1.0, 0.0],
+            tangent: [1.0, 0.0, 0.0],
+            color: [1.0; 4],
+            tex_coord: [0.0, 1.0],
+        },
+    ];
+    let indices: Vec<u32> = vec![0, 1, 2, 0, 2, 3];
+    let mesh = Mesh {
+        vertices,
+        indices: indices.clone(),
+        primitives: vec![Primitive {
+            indices_start: 0,
+            indices_num: indices.len() as u32,
+            material: None,
+        }],
+    };
+    Model { meshes: vec![mesh] }
+}
+
+pub fn sys_generate_plane_scene(world: &mut World) {
+    let plane_model = Arc::new(create_procedural_plane_model(24.0));
+
+    generate_point_lights(world, 10., 5., 10., 10, 0.5, 1.5);
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
-    let count = 5;
-    for i in 0..count {
-        let value = (i as f32) / (count - 1) as f32;
-        let mut transform = TransformBuilder::default()
-            .position(Vec3::new(i as f32 * 2.5, 0., 0.))
-            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
-            .scale(Vec3::new_unit(0.3))
-            .build()
-            .unwrap();
 
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                transform.clone(),
-                Name::new(format!("龙模型 No_{}", i)),
-                RotationObject { speed: 0.5 },
-            ),
-            child_bundle: (
-                CastShadow,
-                MainPassObject,
-                PBRMaterial {
-                    metallic: Some(value),
-                    ..Default::default()
-                },
-            ),
-        });
-
-        transform.position.y += 3.0;
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                transform,
-                Name::new(format!("龙模型 No_{}", i)),
-                RotationObject { speed: 0.5 },
-            ),
-            child_bundle: (
-                CastShadow,
-                MainPassObject,
-                PBRMaterial {
-                    reflectance: Some(value),
-                    ..Default::default()
-                },
-            ),
-        });
-    }
-
-    for i in 0..count {
-        let value = (i as f32) / (count - 1) as f32;
-        let mut transform = TransformBuilder::default()
-            .position(Vec3::new(i as f32 * 2.5, -4., 0.))
-            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
-            .scale(Vec3::new_unit(0.3))
-            .build()
-            .unwrap();
-
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                transform.clone(),
-                RotationObject { speed: 0.5 },
-                Name::new(format!("透明龙模型 No_{}", i)),
-            ),
-            child_bundle: (
-                PBRMaterial {
-                    color: Some(Color::WHITE.with_alpha(0.0)),
-                    metallic: Some(value),
-                    alpha_mode: Some(AlphaMode::Blend),
-                    ..Default::default()
-                },
-                MainPassObject,
-            ),
-        });
-
-        transform.position.y -= 3.0;
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (transform, Name::new(format!("透明龙模型 No_{}", i))),
-            child_bundle: (
-                PBRMaterial {
-                    color: Some(Color::WHITE.with_alpha(0.0)),
-                    reflectance: Some(value),
-                    alpha_mode: Some(AlphaMode::Blend),
-                    ..Default::default()
-                },
-                MainPassObject,
-            ),
-        });
-    }
-
-    // Colored transparent
-    for i in 0..count {
-        let value = (i as f32) / (count - 1) as f32;
-        let mut transform = TransformBuilder::default()
-            .position(Vec3::new(i as f32 * 2.5, -10., 0.))
-            .rotation(Euler::new(Deg(90.), Deg(0.), Deg(-30.)).into())
-            .scale(Vec3::new_unit(0.3))
-            .build()
-            .unwrap();
-
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                transform.clone(),
-                RotationObject { speed: 0.5 },
-                Name::new(format!("透明龙模型 No_{}", i)),
-            ),
-            child_bundle: (
-                PBRMaterial {
-                    color: Some(random_color().with_alpha(value)),
-                    metallic: Some(value),
-                    alpha_mode: Some(AlphaMode::Blend),
-                    ..Default::default()
-                },
-                MainPassObject,
-            ),
-        });
-
-        transform.position.y -= 3.0;
-        commands.queue(SpawnModelCmd {
-            model: dragon_model.clone(),
-            parent_bundle: (
-                transform,
-                Name::new(format!("透明龙模型 No_{}", i)),
-                RotationObject { speed: 0.5 },
-            ),
-            child_bundle: (
-                PBRMaterial {
-                    color: Some(random_color().with_alpha(value)),
-                    reflectance: Some(value),
-                    alpha_mode: Some(AlphaMode::Blend),
-                    ..Default::default()
-                },
-                MainPassObject,
-            ),
-        });
-    }
-
-    // commands.queue(SpawnModelCmd {
-    //     model: plane_model.clone(),
-    //     parent_bundle: (
-    //         TransformBuilder::default()
-    //             .position(Vec3::new_y(-1.0))
-    //             .build()
-    //             .unwrap(),
-    //         Name::new("平面".to_string()),
-    //     ),
-    //     child_bundle: (
-    //         CastShadow,
-    //         MainPassObject,
-    //         PBRMaterial {
-    //             ..Default::default()
-    //         },
-    //     ),
-    // });
+    commands.queue(SpawnModelCmd {
+        model: plane_model,
+        parent_bundle: (
+            Transform::with_position(Vec3::new(0.0, -0.1, 0.0)),
+            Name::new("地面"),
+        ),
+        child_bundle: (
+            CastShadow,
+            MainPassObject,
+            PBRMaterial {
+                color: Some(Color::new(0.7, 0.7, 0.7, 1.0)),
+                roughness: Some(0.8),
+                metallic: Some(0.05),
+                ..Default::default()
+            },
+        ),
+    });
 
     queue.apply(world);
 }
@@ -290,7 +198,13 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
 
     generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
 
-    let model = Arc::new(Model::load(model_asset_path, world).unwrap());
+    let model = match Model::load(model_asset_path, world) {
+        Ok(model) => Arc::new(model),
+        Err(e) => {
+            bevy_log::error!("Failed to load model: {e}");
+            return;
+        }
+    };
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
@@ -314,13 +228,16 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
 fn sys_generate_unreal_vr_room_scene(world: &mut World) {
     generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
 
-    let bistro_model = Arc::new(
-        Model::load(
-            AssetPath::new("models/sony_tc-510-2_tape_recorder/scene.gltf"),
-            world,
-        )
-        .unwrap(),
-    );
+    let bistro_model = match Model::load(
+        AssetPath::new("models/sony_tc-510-2_tape_recorder/scene.gltf"),
+        world,
+    ) {
+        Ok(model) => Arc::new(model),
+        Err(e) => {
+            bevy_log::error!("Failed to load bistro model: {e}");
+            return;
+        }
+    };
 
     let mut queue = CommandQueue::from_world(world);
     let mut commands = Commands::new(&mut queue, world);
@@ -343,7 +260,7 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
 pub fn sys_spawn_camera(mut commands: Commands) {
     commands.spawn((
         Camera {
-            fovy: 17.1,
+            fovy: 50.0,
             ..Camera::new(1.0)
         },
         RenderTargetConfig::Texture {
@@ -352,12 +269,12 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             format: SCREEN_FORMAT,
         },
         CameraController {
-            row: -4.8,
-            yaw: 0.0,
+            row: 0.0,
+            yaw: -25.0,
         },
         TransformBuilder::default()
-            .position(Vec3::new(2.5, 0.6, 31.1))
-            .rotation(Euler::new(Deg(0.0), Deg(-4.0), Deg(0.0)).into())
+            .position(Vec3::new(0.0, 9.0, 17.0))
+            .rotation(Euler::new(Deg(-25.0), Deg(0.0), Deg(0.0)).into())
             .build()
             .unwrap(),
         Name::new("相机"),
@@ -365,8 +282,13 @@ pub fn sys_spawn_camera(mut commands: Commands) {
 }
 
 fn sys_startup_light_and_environment(world: &mut World) {
-    let light_arrow_model =
-        Arc::new(Model::load(AssetPath::new("models/arrow.glb"), world).unwrap());
+    let light_arrow_model = match Model::load(AssetPath::new("models/arrow.glb"), world) {
+        Ok(model) => Arc::new(model),
+        Err(e) => {
+            bevy_log::error!("Failed to load arrow model: {e}");
+            return;
+        }
+    };
 
     SpawnModelCmd {
         model: light_arrow_model.clone(),

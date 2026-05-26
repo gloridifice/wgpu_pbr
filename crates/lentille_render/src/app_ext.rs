@@ -1,8 +1,8 @@
 use bevy_app::Last;
-use bevy_ecs::{prelude::*, schedule::ScheduleLabel, system::ScheduleSystem};
+use bevy_ecs::{prelude::*, system::ScheduleSystem};
 
 use crate::{
-    FrameSets, RenderState,
+    FrameSets,
     graph::InsertConfig,
     resource::RENDER_RESOURCES_TO_ADD,
     stage::{RenderContext, RenderStageManager},
@@ -24,19 +24,6 @@ pub trait AppExt {
         configs: impl Into<Vec<InsertConfig>>,
     ) -> &mut Self;
 
-    #[deprecated]
-    fn add_render_system<M>(
-        &mut self,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self;
-
-    #[deprecated]
-    fn add_render_system_with_custom_schedule<M>(
-        &mut self,
-        schedule: impl ScheduleLabel,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self;
-
     fn add_render_system_in_frame_set<M>(
         &mut self,
         set: FrameSets,
@@ -52,25 +39,6 @@ pub trait AppExt {
 }
 
 impl AppExt for bevy_app::App {
-    fn add_render_system<M>(
-        &mut self,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self {
-        self.main_mut()
-            .add_systems(Last, systems.run_if(resource_exists::<RenderState>));
-        self
-    }
-
-    fn add_render_system_with_custom_schedule<M>(
-        &mut self,
-        schedule: impl ScheduleLabel,
-        systems: impl IntoScheduleConfigs<ScheduleSystem, M>,
-    ) -> &mut Self {
-        self.main_mut()
-            .add_systems(schedule, systems.run_if(resource_exists::<RenderState>));
-        self
-    }
-
     fn init_render_resource<T: Resource + FromWorld>(&mut self) -> &mut Self {
         RENDER_RESOURCES_TO_ADD.lock().unwrap().insert::<T>();
         self

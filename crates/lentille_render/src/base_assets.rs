@@ -1,5 +1,5 @@
 use crate::{
-    defered_rendering::DeferredComputePipeline, material::pbr::UploadedPBRMaterial, prelude::*,
+    deferred_rendering::DeferredComputePipeline, material::pbr::UploadedPBRMaterial, prelude::*,
 };
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;

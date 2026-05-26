@@ -28,12 +28,12 @@ fn sys_on_winit_window_resized(
         window_id,
         physical_size,
     } = &*event;
-    if let Some((_, mut suface_state)) = q_windows
+    if let Some((_, mut surface_state)) = q_windows
         .iter_mut()
         .find(|(window, _)| window.0.id() == *window_id)
     {
-        suface_state.config.width = physical_size.width;
-        suface_state.config.height = physical_size.height;
-        suface_state.configure(&rs.device);
+        surface_state.config.width = physical_size.width;
+        surface_state.config.height = physical_size.height;
+        surface_state.configure(&rs.device);
     }
 }

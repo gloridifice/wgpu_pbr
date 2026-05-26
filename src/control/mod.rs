@@ -3,7 +3,7 @@ use bevy_ecs::prelude::*;
 use lentille_core::{input::Input, window::WinitWindow};
 use winit::keyboard::KeyCode;
 
-use crate::control::camera::CameraContorlPlugin;
+use crate::control::camera::CameraControlPlugin;
 
 pub(crate) mod camera;
 
@@ -11,7 +11,7 @@ pub struct ControlPlugin;
 
 impl Plugin for ControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_plugins(CameraContorlPlugin)
+        app.add_plugins(CameraControlPlugin)
             .init_resource::<ControlState>()
             .add_systems(Update, sys_input_implement);
     }

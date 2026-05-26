@@ -2,14 +2,13 @@ use std::cmp::Ordering;
 
 use crate::{
     MainPassObject,
-    camera::{Camera, RefreshAllCameraGlobalBindGroupCmd},
-    defered_rendering::{
+    deferred_rendering::{
         DeferredComputePipeline,
         write_g_buffer_pipeline::{DeferredWriteGBufferPipeline, GBufferTexturesBindGroup},
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
-    skybox::{Skybox, SkyboxPipeline},
+    skybox::SkyboxPipeline,
     stage::RenderContext,
     transparent::TransparentPipeline,
     utils::cube::CubeVerticesBuffer,
@@ -221,14 +220,5 @@ pub fn sys_render_transparent(
         render_pass.set_bind_group(0, Some(camera_global_bind_group.as_ref()), &[]);
         render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
         renderer.draw_transparent(&mut render_pass, default_material.0.clone(), pbr_override);
-    }
-}
-
-pub fn sys_refersh_global_bind_group(
-    mut commands: Commands,
-    q_skybox: Query<&Skybox, Changed<Skybox>>,
-) {
-    if q_skybox.single().is_ok() {
-        commands.queue(RefreshAllCameraGlobalBindGroupCmd);
     }
 }

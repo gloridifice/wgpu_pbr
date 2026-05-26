@@ -5,7 +5,7 @@ use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
 use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
 use egui_winit::State;
-use lentille_core::window::{PrimaryWinodw, WinitWindow};
+use lentille_core::window::{PrimaryWindow, WinitWindow};
 use lentille_render::{RenderState, SCREEN_FORMAT};
 use winit::event::WindowEvent;
 use winit::window::Window;
@@ -20,7 +20,7 @@ pub struct EguiRenderer {
 impl FromWorld for EguiRenderer {
     fn from_world(world: &mut bevy_ecs::world::World) -> Self {
         let window = world
-            .query_filtered::<&WinitWindow, With<PrimaryWinodw>>()
+            .query_filtered::<&WinitWindow, With<PrimaryWindow>>()
             .single(world)
             .unwrap()
             .0

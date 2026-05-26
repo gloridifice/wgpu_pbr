@@ -5,7 +5,7 @@ use crate::{
     bindings::{
         global_binding::GlobalBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
     },
-    defered_rendering::write_g_buffer_pipeline::{
+    deferred_rendering::write_g_buffer_pipeline::{
         DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, WriteGBufferPlugin,
     },
     prelude::*,

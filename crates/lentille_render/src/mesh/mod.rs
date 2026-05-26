@@ -5,7 +5,7 @@ use wgpu::util::DeviceExt;
 use crate::material::pbr::UploadedPBRMaterial;
 
 use super::{
-    NormalDefaultTexture, WhiteTexture, defered_rendering::DeferredComputePipeline, prelude::*,
+    NormalDefaultTexture, WhiteTexture, deferred_rendering::DeferredComputePipeline, prelude::*,
 };
 use bevy_ecs::prelude::*;
 

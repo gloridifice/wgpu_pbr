@@ -14,7 +14,7 @@ use winit::{
 pub struct WindowPlugin;
 
 #[derive(Component, Clone, Default, Debug)]
-pub struct PrimaryWinodw;
+pub struct PrimaryWindow;
 
 #[derive(Component, Clone, Debug)]
 pub struct WinitWindow(pub Arc<Window>);
@@ -83,7 +83,7 @@ impl ApplicationHandler for MyApplicationHandler {
         let id = self
             .app
             .world_mut()
-            .spawn((WinitWindow(Arc::clone(&window)), PrimaryWinodw))
+            .spawn((WinitWindow(Arc::clone(&window)), PrimaryWindow))
             .id();
 
         self.app.world_mut().trigger(PrimaryWindowCreatedEvent {
@@ -126,25 +126,35 @@ impl ApplicationHandler for MyApplicationHandler {
         let window = Arc::clone(&winit_window.0);
 
         match event {
-            //Update and Render
             WindowEvent::RedrawRequested => {
+                self.app.world_mut().trigger(WinitWindowEvent {
+                    window_id,
+                    window_event: WindowEvent::RedrawRequested,
+                });
                 self.app.update();
                 window.request_redraw();
             }
 
-            // Close / Exit
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
 
-            // Reszie
             WindowEvent::Resized(physical_size) => {
                 self.app.world_mut().trigger(WinitWindowResizeEvent {
                     window_id,
                     physical_size,
                 });
+                self.app.world_mut().trigger(WinitWindowEvent {
+                    window_id,
+                    window_event: WindowEvent::Resized(physical_size),
+                });
             }
-            _ => {}
+            other => {
+                self.app.world_mut().trigger(WinitWindowEvent {
+                    window_id,
+                    window_event: other,
+                });
+            }
         }
     }
 }

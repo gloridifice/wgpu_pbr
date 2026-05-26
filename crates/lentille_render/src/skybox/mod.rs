@@ -117,7 +117,7 @@ impl FromWorld for SkyboxPipeline {
                 depth_stencil: None,
                 multisample: wgpu::MultisampleState {
                     count: 1,
-                    mask: 0,
+                    mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
                 fragment: Some(wgpu::FragmentState {

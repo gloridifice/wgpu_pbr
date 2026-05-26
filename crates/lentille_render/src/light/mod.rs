@@ -106,8 +106,8 @@ pub fn sys_update_dynamic_lights(
         Or<(Changed<PointLight>, Changed<WorldTransform>)>,
     >,
 ) {
-    for (id, light, transfrom) in q_lights.iter() {
-        dynamic_lights.point_lights.insert(id, light.raw(transfrom));
+    for (id, light, transform) in q_lights.iter() {
+        dynamic_lights.point_lights.insert(id, light.raw(transform));
     }
 }
 

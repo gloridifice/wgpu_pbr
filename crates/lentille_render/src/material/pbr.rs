@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{defered_rendering::DeferredComputePipeline, prelude::*};
+use crate::{deferred_rendering::DeferredComputePipeline, prelude::*};
 use bevy_ecs::prelude::*;
 
 use super::UploadedMaterial;

@@ -61,7 +61,7 @@ impl Default for WorldTransform {
         Self {
             position: Vec3::zero(),
             rotation: Quat::identity(),
-            scale: Vec3::zero(),
+            scale: Vec3::one(),
         }
     }
 }
@@ -162,7 +162,7 @@ impl WorldTransform {
         self.rotation * Vec3::new_x(-1.)
     }
 
-    const MIN_SACLE: f32 = 0.0001;
+    const MIN_SCALE: f32 = 0.0001;
 
     pub fn model_normal_matrix(&self) -> (Mat4, Mat3) {
         let translation = Matrix4::from_translation(self.position);
@@ -170,9 +170,9 @@ impl WorldTransform {
         let rotation = Matrix4::from(self.rotation);
         #[rustfmt::skip]
         let scale_t = Matrix3::new(
-            1. / self.scale.x.max(Self::MIN_SACLE), 0.0, 0.0,
-            0.0, 1. / self.scale.y.max(Self::MIN_SACLE), 0.0,
-            0.0, 0.0, 1. / self.scale.z.max(Self::MIN_SACLE)
+            1. / self.scale.x.max(Self::MIN_SCALE), 0.0, 0.0,
+            0.0, 1. / self.scale.y.max(Self::MIN_SCALE), 0.0,
+            0.0, 0.0, 1. / self.scale.z.max(Self::MIN_SCALE)
         );
         let model_matrix = translation * rotation * scale;
         let normal_matrix = Matrix3::from_cols(

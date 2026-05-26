@@ -22,7 +22,7 @@ use crate::{
     blit::BlitPlugin,
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
-    defered_rendering::DeferredRenderingPlugin,
+    deferred_rendering::DeferredRenderingPlugin,
     graph::after,
     light::LightPlugin,
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
@@ -39,7 +39,7 @@ pub mod bindings;
 pub mod blit;
 pub mod camera;
 pub mod cubemap;
-pub mod defered_rendering;
+pub mod deferred_rendering;
 pub mod graph;
 pub mod image;
 pub mod light;
@@ -114,7 +114,7 @@ impl Plugin for RenderPlugin {
 
         app.configure_render_stage::<OpaqueStage>([after::<PreStage>()])
             .configure_render_stage::<TransparentStage>([after::<OpaqueStage>()])
-            .add_systems(Update, (sys_refersh_global_bind_group, sys_create_surface))
+            .add_systems(Update, sys_create_surface)
             .add_systems(
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,

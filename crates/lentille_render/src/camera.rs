@@ -1,24 +1,18 @@
 use std::sync::Arc;
 
-use crate::base_assets::NoFilterClampSampler;
-use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::component::Component;
 use bevy_ecs::prelude::*;
 use bevy_ecs::query::{Changed, Or};
-use bevy_ecs::system::{RunSystemOnce, Single};
+use bevy_ecs::system::Single;
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
-use lentille_core::window::PrimaryWinodw;
+use lentille_core::window::PrimaryWindow;
 use lentille_wgpu_utils::impl_pod_zeroable;
 use wgpu::{BufferDescriptor, TextureDimension};
 
 use crate::RenderState;
-use crate::base_assets::DFGTexture;
-use crate::light::LightUnifromBuffer;
-use crate::shadow_mapping::ShadowMap;
-use crate::skybox::{DefaultSkybox, SkyboxSHBuffer};
 
 use super::transform::{Transform, WorldTransform};
 
@@ -37,7 +31,7 @@ impl Plugin for CameraPlugin {
         app.add_event::<RenderTargetResizedEvent>()
             .add_systems(
                 PostUpdate,
-                (sys_create_render_target, sys_crate_or_update_camera_buffer).chain(),
+                (sys_create_render_target, sys_create_or_update_camera_buffer).chain(),
             )
             .add_systems(PreUpdate, sys_resize_render_target);
     }
@@ -72,14 +66,6 @@ pub struct CameraUniform {
 }
 
 impl_pod_zeroable!(CameraUniform);
-
-#[derive(Debug, Clone)]
-pub struct RefreshCameraGlobalBindGroupCmd {
-    pub ids: Vec<Entity>,
-}
-
-#[derive(Default, Debug, Clone)]
-pub struct RefreshAllCameraGlobalBindGroupCmd;
 
 // -------- RenderTarget --------
 
@@ -292,26 +278,6 @@ impl RenderTarget {
     }
 }
 
-impl Command for RefreshCameraGlobalBindGroupCmd {
-    fn apply(self, world: &mut World) -> () {
-        world
-            .run_system_once_with(refresh_camera_global_bind_group_by_ids, self.ids)
-            .unwrap();
-    }
-}
-
-impl Command for RefreshAllCameraGlobalBindGroupCmd {
-    fn apply(self, world: &mut World) {
-        let entities = world
-            .query_filtered::<Entity, With<CameraBuffer>>()
-            .iter(world)
-            .collect::<Vec<_>>();
-        world
-            .run_system_once_with(refresh_camera_global_bind_group_by_ids, entities)
-            .unwrap();
-    }
-}
-
 // --------- Systems ---------
 
 /// Watch `RenderTargetSize`'s change and update textures
@@ -351,6 +317,14 @@ pub fn sys_resize_render_target(
                 target.depth.is_some(),
                 &rs.device,
             );
+            if let TargetType::Texture(ref mut uploaded_image) = target.target_type {
+                *uploaded_image = Arc::new(create_color_render_target_image(
+                    width,
+                    height,
+                    &rs.device,
+                    format,
+                ));
+            }
         }
 
         commands.trigger(RenderTargetResizedEvent {
@@ -361,7 +335,7 @@ pub fn sys_resize_render_target(
     }
 }
 
-fn sys_crate_or_update_camera_buffer(
+fn sys_create_or_update_camera_buffer(
     mut commands: Commands,
     q_camera: Query<
         (
@@ -393,7 +367,20 @@ fn sys_crate_or_update_camera_buffer(
                 );
             }
             None => {
-                commands.entity(id).insert(CameraBuffer::new(&rs.device));
+                camera.view_proj = camera.build_view_projection_matrix(transform);
+                let buffer = CameraBuffer::new(&rs.device);
+                rs.queue.write_buffer(
+                    &buffer.buffer,
+                    0,
+                    bytemuck::cast_slice(&[camera.get_uniform(
+                        transform,
+                        [
+                            render_target_size.width as f32,
+                            render_target_size.height as f32,
+                        ],
+                    )]),
+                );
+                commands.entity(id).insert(buffer);
             }
         };
     }
@@ -402,54 +389,55 @@ fn sys_crate_or_update_camera_buffer(
 fn sys_create_render_target(
     mut commands: Commands,
     q_camera: Query<(Entity, &RenderTargetConfig), Without<RenderTarget>>,
-    q_primary_window: Option<Single<&SurfaceState, With<PrimaryWinodw>>>,
-    q_window: Query<&SurfaceState, Without<PrimaryWinodw>>,
+    q_primary_window: Option<Single<&SurfaceState, With<PrimaryWindow>>>,
+    q_window: Query<&SurfaceState, Without<PrimaryWindow>>,
     rs: Res<RenderState>,
 ) {
     let device = &rs.device;
     for (id, config) in q_camera {
-        let render_target = match config {
+        let make_result: Option<(RenderTarget, u32, u32)> = match config {
             RenderTargetConfig::PrimaryWindow => q_primary_window
                 .as_ref()
-                .map(|surface_state| RenderTarget::from_window(id, &surface_state, device)),
+                .map(|surface_state| {
+                    (
+                        RenderTarget::from_window(id, &surface_state, device),
+                        surface_state.config.width,
+                        surface_state.config.height,
+                    )
+                }),
             RenderTargetConfig::Window(entity) => q_window
                 .get(*entity)
                 .ok()
-                .map(|surface_state| RenderTarget::from_window(*entity, surface_state, device)),
+                .map(|surface_state| {
+                    (
+                        RenderTarget::from_window(*entity, surface_state, device),
+                        surface_state.config.width,
+                        surface_state.config.height,
+                    )
+                }),
             RenderTargetConfig::Texture {
                 width,
                 height,
                 format,
-            } => Some(RenderTarget::new_texture_target(
-                *width, *height, *format, device,
+            } => Some((
+                RenderTarget::new_texture_target(*width, *height, *format, device),
+                *width,
+                *height,
             )),
         };
 
-        if let Some(render_target) = render_target {
+        if let Some((render_target, width, height)) = make_result {
             commands
                 .entity(id)
-                .insert(render_target)
+                .insert((render_target, RenderTargetSize { width, height }))
                 .remove::<RenderTargetConfig>();
+            commands.trigger(RenderTargetResizedEvent {
+                render_target_entity: id,
+                new_width: width,
+                new_height: height,
+            });
         }
     }
-}
-
-fn refresh_camera_global_bind_group_by_ids(
-    In(to_refresh): In<Vec<Entity>>,
-
-    mut commands: Commands,
-    q_camera_buffers: Query<(Entity, &CameraBuffer, &RenderTarget)>,
-    light: Res<LightUnifromBuffer>,
-    shadow_map: Res<ShadowMap>,
-    dfg: Res<DFGTexture>,
-    layout: Res<GlobalBindGroupLayout>,
-    rs: Res<RenderState>,
-    no_filter_sampler: Res<NoFilterClampSampler>,
-
-    default_skybox: Res<DefaultSkybox>,
-    skybox_sh: Res<SkyboxSHBuffer>,
-    skeybox: Query<&Skybox>,
-) {
 }
 
 // --------- Target Creation Functions ---------

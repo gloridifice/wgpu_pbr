@@ -50,7 +50,8 @@ impl FromWorld for BlitShader {
 
                 @fragment
                 fn fs_main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
-                    let uv = frag_coord.xy / vec2<f32>(screen_width, screen_height);
+                    let dims = vec2<f32>(textureDimensions(myTex, 0));
+                    let uv = frag_coord.xy / dims;
                     return textureSample(myTex, mySampler, uv);
                 }
             "#

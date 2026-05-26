@@ -20,7 +20,7 @@ fn color_rgba(ui: &mut Ui, color: &mut Color) -> egui::Response {
     let mut c: Color32 = Color32::from_rgba_unmultiplied(
         (color.r() * 255.0) as u8,
         (color.g() * 255.0) as u8,
-        (color.g() * 255.0) as u8,
+        (color.b() * 255.0) as u8,
         (color.a() * 255.0) as u8,
     );
     let ret = ui.color_edit_button_srgba(&mut c);
