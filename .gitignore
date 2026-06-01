@@ -2,3 +2,7 @@ target
 .DS_Store
 assets/models
 assets/textures/hdr
+
+.idea
+.vs
+.vscode

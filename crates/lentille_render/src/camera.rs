@@ -28,8 +28,7 @@ pub(crate) struct CameraPlugin;
 
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_event::<RenderTargetResizedEvent>()
-            .add_systems(
+        app.add_systems(
                 PostUpdate,
                 (sys_create_render_target, sys_create_or_update_camera_buffer).chain(),
             )

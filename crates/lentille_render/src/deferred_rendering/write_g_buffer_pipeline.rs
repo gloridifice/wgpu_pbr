@@ -274,7 +274,7 @@ fn sys_create_deferred_g_buffer(
 }
 
 fn sys_resize_g_buffer_texture(
-    event: Trigger<RenderTargetResizedEvent>,
+    event: On<RenderTargetResizedEvent>,
     q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,

@@ -87,6 +87,8 @@ impl ApplicationHandler for MyApplicationHandler {
             window: Arc::clone(&window),
         });
 
+        self.app.update();
+
         window.request_redraw();
     }
 

@@ -28,10 +28,10 @@ naga_oil = "0.17.0"
 cgmath = "0.18.0"
 
 # bevy
-bevy_ecs = "0.17"
-bevy_app = "0.17"
-bevy_log = "0.17"
-bevy_reflect = "0.17"
+bevy_ecs = "0.18"
+bevy_app = "0.18"
+bevy_log = "0.18"
+bevy_reflect = "0.18"
 
 [dependencies]
 bevy_app = { workspace = true }

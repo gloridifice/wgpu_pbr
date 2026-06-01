@@ -4,7 +4,7 @@ use std::{
 };
 
 use bevy_app::prelude::*;
-use bevy_ecs::{prelude::*, schedule::ScheduleLabel, world::DeferredWorld};
+use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use lentille_core::window::{PrimaryWindowCreatedEvent, WinitWindow};
 use pollster::block_on;
@@ -281,9 +281,8 @@ fn sys_init_window(_event: On<PrimaryWindowCreatedEvent>, mut commands: Commands
         for res in graph {
             res(world);
         }
+        world.run_schedule(RenderPreparedStartup);
     });
-
-    commands.run_schedule(RenderPreparedStartup);
 }
 
 fn sys_create_surface(

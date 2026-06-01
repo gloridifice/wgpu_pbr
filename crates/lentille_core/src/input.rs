@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::prelude::*;
 use winit::{
-    event::{DeviceEvent, ElementState, KeyEvent, WindowEvent},
+    event::{DeviceEvent, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
@@ -82,7 +82,7 @@ impl Input {
         self.down_cursor_buttons.contains(&button)
     }
 
-    fn sys_on_window_input(event: Trigger<WinitWindowEvent>, mut input: ResMut<Input>) {
+    fn sys_on_window_input(event: On<WinitWindowEvent>, mut input: ResMut<Input>) {
         let event = &event.window_event;
         if let WindowEvent::KeyboardInput {
             event:
@@ -94,24 +94,21 @@ impl Input {
             ..
         } = event
         {
-            match *state {
-                ElementState::Pressed => {
-                    if !input.is_key_hold(*key) {
-                        input.down_keys.insert(*key);
-                    }
-                    input.hold_keys.insert(*key);
+            if state.is_pressed() {
+                if !input.is_key_hold(*key) {
+                    input.down_keys.insert(*key);
                 }
-                ElementState::Released => {
-                    if input.is_key_hold(*key) {
-                        input.up_keys.insert(*key);
-                    }
-                    input.hold_keys.remove(&key);
+                input.hold_keys.insert(*key);
+            } else {
+                if input.is_key_hold(*key) {
+                    input.up_keys.insert(*key);
                 }
+                input.hold_keys.remove(key);
             };
         };
     }
 
-    fn sys_on_device_input(event: Trigger<WinitDeviceEvent>, mut input: ResMut<Input>) {
+    fn sys_on_device_input(event: On<WinitDeviceEvent>, mut input: ResMut<Input>) {
         if let DeviceEvent::MouseMotion { ref delta } = event.device_event {
             input.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
         }

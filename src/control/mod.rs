@@ -1,5 +1,5 @@
 use bevy_app::{Plugin, Update};
-use bevy_ecs::prelude::*;
+use bevy_ecs::{prelude::*, system::RunSystemOnce};
 use lentille_core::{input::Input, window::WinitWindow};
 use winit::keyboard::KeyCode;
 
@@ -37,7 +37,9 @@ pub fn sys_input_implement(
 ) {
     if input.is_key_down(KeyCode::Escape) {
         control_state.is_focused = !control_state.is_focused;
-        commands.run_system_cached(sys_toggle_cursor);
+        commands.queue(|world: &mut World| {
+            world.run_system_once(sys_toggle_cursor).unwrap();
+        });
     }
 }
 

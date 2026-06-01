@@ -252,7 +252,7 @@ fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
 }
 
 fn sys_on_resize_scene_render_target(
-    event: Trigger<RenderTargetResizedEvent>,
+    event: On<RenderTargetResizedEvent>,
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
     q_camera: Query<&RenderTarget>,
     mut egui: ResMut<EguiRenderer>,
