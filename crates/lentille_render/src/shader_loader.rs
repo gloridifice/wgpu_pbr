@@ -1,34 +1,41 @@
-use std::{borrow::Cow, fs};
+use std::{borrow::Cow, fs, path::Path};
 
 use bevy_ecs::prelude::*;
-use bevy_log::error;
-use naga_oil::compose::Composer;
+use wesl::{StandardResolver, Wesl};
 use wgpu::ShaderSource;
 
 use crate::{RenderState, asset::AssetPath};
 
 #[derive(Resource)]
 pub struct ShaderLoader {
-    pub composer: Composer,
+    pub root: String,
+    pub wesl: Wesl<StandardResolver>,
 }
 
 impl ShaderLoader {
-    pub fn load_source(&mut self, path: AssetPath) -> anyhow::Result<wgpu::ShaderSource<'static>> {
+    // map "assets/shader/aaa.wesl" to this "package::aaa"
+    fn handle_wesl_package_path(&self, path: &AssetPath) -> anyhow::Result<String> {
         let final_path = path.final_path();
-        let string = match fs::read_to_string(&final_path) {
-            Ok(s) => s,
-            Err(e) => {
-                anyhow::bail!("Load Shader Failed: {} \n Err: {}", &final_path, e)
-            }
-        };
+        let relative = &final_path[self.root.len()..];
+        let relative = relative.trim_start_matches(['/', '\\']);
+        let path = Path::new(relative);
+        let file_stem = path.with_extension("");
+        let components: Vec<&str> = file_stem
+            .components()
+            .map(|c| c.as_os_str().to_str().unwrap())
+            .collect();
+        Ok(format!("package::{}", components.join("::")))
+    }
+
+    pub fn load_source(&mut self, path: AssetPath) -> anyhow::Result<wgpu::ShaderSource<'static>> {
         let source = self
-            .composer
-            .make_naga_module(naga_oil::compose::NagaModuleDescriptor {
-                source: &string,
-                file_path: &final_path,
-                ..Default::default()
-            })?;
-        Ok(ShaderSource::Naga(Cow::Owned(source)))
+            .wesl
+            .compile(&self.handle_wesl_package_path(&path)?.parse()?)?
+            .to_string();
+
+        let shader_source = ShaderSource::Wgsl(Cow::Owned(source));
+
+        Ok(shader_source)
     }
 
     pub fn load_module_by_world(
@@ -52,34 +59,9 @@ impl ShaderLoader {
 
 impl FromWorld for ShaderLoader {
     fn from_world(_world: &mut World) -> Self {
-        let mut composer = Composer::default();
-        let mut add_folder = |path: AssetPath| {
-            let paths = fs::read_dir(path.final_path()).unwrap();
-            for path in paths {
-                let path = &path.unwrap().path();
-                let valid = path.is_file() && path.to_str().unwrap().ends_with(".wgsl");
-                if !valid {
-                    continue;
-                }
-                let result = fs::read_to_string(path);
-                let Ok(shader_string) = result else {
-                    error!("Failed to read file <{:?}>.", path);
-                    continue;
-                };
-                match composer.add_composable_module(
-                    naga_oil::compose::ComposableModuleDescriptor {
-                        source: &shader_string,
-                        file_path: path.to_str().unwrap(),
-                        ..Default::default()
-                    },
-                ) {
-                    Ok(_) => {}
-                    Err(e) => println!("? -> {e:#?}"),
-                }
-            }
-        };
-        add_folder(AssetPath::Assets("shaders/libs/primary".to_string()));
-        add_folder(AssetPath::Assets("shaders/libs/".to_string()));
-        Self { composer }
+        let root = "assets/shaders".to_string();
+        let wesl = Wesl::new(&root);
+
+        Self { root, wesl }
     }
 }

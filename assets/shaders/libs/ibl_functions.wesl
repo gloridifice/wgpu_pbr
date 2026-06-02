@@ -1,9 +1,7 @@
-#define_import_path ibl_functions
-
-#import global_bindings::{
+import package::libs::primary::global_bindings::{
     env_cubemap, env_cubemap_sampler, dfg_lut, env_sh_coefficients,
-}
-#import pbr_type::PBRSurface
+};
+import package::libs::primary::pbr_type::PBRSurface;
 
 
 fn irradiance_sh(normal: vec3<f32>) -> vec3<f32>{

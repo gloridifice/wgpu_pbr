@@ -1,5 +1,3 @@
-#define_import_path global_bindings
-
 // Global -----
 struct CameraUniform {
     view_proj: mat4x4<f32>,

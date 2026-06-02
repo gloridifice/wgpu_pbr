@@ -1,23 +1,24 @@
-#import vertex::{VertexInput}
-#import pbr_type::{ StandardMaterial, PBRSurface }
-#import pbr_type
-#import pbr_functions
-#import pbr_functions::{
+import package::libs::vertex::{ VertexInput };
+import package::libs::primary::pbr_type::{ StandardMaterial, PBRSurface };
+import package::libs::primary::pbr_type;
+import package::libs::pbr_functions;
+import package::libs::pbr_functions::{
     pow2,
-}
-#import light_bindings::{
-    PointLight, point_lights
-}
-#import shadow
-#import global_bindings::{
-    camera, light, rendered_image, rendered_sampler
-}
-#import material_bindings::{
+};
+import package::libs::light_bindings::{
+    PointLight, point_lights,
+};
+import package::libs::shadow;
+import package::libs::primary::global_bindings::{
+    camera, light, rendered_image, rendered_sampler,
+};
+import package::libs::primary::material_bindings::{
     pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
-}
-#import object_bindings::{
-    transform
-}
+};
+import package::libs::primary::object_bindings::{
+    transform,
+};
+import package::libs::ibl_functions;
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,

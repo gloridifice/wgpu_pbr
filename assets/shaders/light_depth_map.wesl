@@ -1,4 +1,4 @@
-#import vertex::{VertexInput}
+import package::libs::vertex::{ VertexInput };
 
 struct TransformUniform {
     model: mat4x4<f32>,

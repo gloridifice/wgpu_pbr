@@ -1,5 +1,3 @@
-#define_import_path material_bindings
-
 struct InputPBRMaterial {
     color: vec4<f32>,
     metallic: f32,

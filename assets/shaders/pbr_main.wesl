@@ -1,18 +1,18 @@
-#import vertex::{ FullscreenV2F }
-#import pbr_type::{ PBRSurface, unpack_g_buffer }
-#import global_bindings::{
+import package::libs::vertex::{ FullscreenV2F };
+import package::libs::primary::pbr_type::{ PBRSurface, unpack_g_buffer };
+import package::libs::primary::global_bindings::{
     camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler,
     env_cubemap, env_cubemap_sampler,
-}
-#import ibl_functions
-#import pbr_functions
-#import pbr_functions::{
-    pow2
-}
-#import shadow
-#import light_bindings::{
-    PointLight, point_lights
-}
+};
+import package::libs::ibl_functions;
+import package::libs::pbr_functions;
+import package::libs::pbr_functions::{
+    pow2,
+};
+import package::libs::shadow;
+import package::libs::light_bindings::{
+    PointLight, point_lights,
+};
 
 @group(1) @binding(0) var g_samp: sampler;
 @group(1) @binding(1) var world_pos_tex: texture_2d<f32>;

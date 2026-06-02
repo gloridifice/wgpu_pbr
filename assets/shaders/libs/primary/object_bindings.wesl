@@ -1,5 +1,3 @@
-#define_import_path object_bindings
-
 struct TransformUniform {
     model: mat4x4<f32>,
     normal: mat3x3<f32>,

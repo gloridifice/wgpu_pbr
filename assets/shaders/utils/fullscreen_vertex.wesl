@@ -1,4 +1,4 @@
-#import vertex::{FullscreenV2F}
+import package::libs::vertex::{ FullscreenV2F };
 
 @vertex
 fn vs_main(

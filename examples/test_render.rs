@@ -7,9 +7,9 @@ use lentille_core::{
     window::{PrimaryWindow, WindowPlugin, WinitWindow, WinitWindowResizeEvent},
 };
 use lentille_render::{
-    camera::{Camera, RenderTarget, RenderTargetSize},
-    prelude::{copy_texture2d_to_texture2d_no_mip, AppExt},
     RenderPlugin, RenderState, SurfaceState,
+    camera::{Camera, RenderTarget, RenderTargetSize},
+    prelude::{AppExt, copy_texture2d_to_texture2d_no_mip},
 };
 
 fn main() {
@@ -32,7 +32,7 @@ fn main() {
 }
 
 fn sys_on_window_resize(
-    event: Trigger<WinitWindowResizeEvent>,
+    event: On<WinitWindowResizeEvent>,
     q_camera: Single<(&mut RenderTargetSize), With<Camera>>,
 ) {
     let (mut target_size) = q_camera.into_inner();

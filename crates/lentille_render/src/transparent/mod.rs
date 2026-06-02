@@ -32,7 +32,7 @@ impl FromWorld for TransparentPipeline {
     fn from_world(world: &mut World) -> Self {
         let mut shader = world.resource_mut::<ShaderLoader>();
         let shader_source = shader
-            .load_source(AssetPath::new_shader_wgsl("transparent_pbr_main.wgsl"))
+            .load_source(AssetPath::new_shader_wgsl("transparent_pbr_main"))
             .unwrap();
 
         let rs = world.resource::<RenderState>();

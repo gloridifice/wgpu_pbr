@@ -58,8 +58,8 @@ impl AssetPath {
     /// Start with `assets/shaders/`
     pub fn new_shader_wgsl(path: &str) -> Self {
         let mut path = path.to_string();
-        if !path.ends_with(".wgsl") {
-            path.push_str(".wgsl");
+        if !path.ends_with(".wesl") {
+            path.push_str(".wesl");
         };
         AssetPath::Assets(format!("shaders/{}", path))
     }

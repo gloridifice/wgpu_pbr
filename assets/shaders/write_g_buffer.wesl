@@ -1,15 +1,15 @@
-#import vertex::{VertexInput}
-#import pbr_type::{ StandardMaterial, PBRSurface }
-#import pbr_type
-#import global_bindings::{
-    camera, light
-}
-#import material_bindings::{
+import package::libs::vertex::{ VertexInput };
+import package::libs::primary::pbr_type::{ StandardMaterial, PBRSurface };
+import package::libs::primary::pbr_type;
+import package::libs::primary::global_bindings::{
+    camera, light,
+};
+import package::libs::primary::material_bindings::{
     pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
-}
-#import object_bindings::{
+};
+import package::libs::primary::object_bindings::{
     transform,
-}
+};
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,

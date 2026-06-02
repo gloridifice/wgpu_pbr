@@ -1,7 +1,7 @@
-#import global_bindings::{
+import package::libs::primary::global_bindings::{
     camera, env_cubemap, env_cubemap_sampler,
-}
-#import vertex::{ CubeVertexInput }
+};
+import package::libs::vertex::{ CubeVertexInput };
 
 struct V2F {
     @builtin(position) clip_position: vec4<f32>,

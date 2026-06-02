@@ -1,5 +1,3 @@
-#define_import_path pbr_type
-
 struct StandardMaterial {
     base_color: vec4<f32>,
     emissive: vec4<f32>,

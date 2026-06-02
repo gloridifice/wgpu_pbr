@@ -15,7 +15,7 @@ impl FromWorld for DefaultMipmapGenShader {
         Self {
             shader: Arc::new(
                 ShaderModule::load(
-                    crate::asset::AssetPath::Assets("shaders/postprocessing/blit.wgsl".to_string()),
+                    crate::asset::AssetPath::Assets("shaders/postprocessing/blit.wesl".to_string()),
                     world,
                 )
                 .unwrap(),

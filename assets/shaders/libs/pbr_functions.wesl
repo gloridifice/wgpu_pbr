@@ -1,6 +1,4 @@
-#define_import_path pbr_functions
-
-#import pbr_type
+import package::libs::primary::pbr_type;
 
 const PI: f32 = radians(180.0);
 

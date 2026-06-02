@@ -1,4 +1,4 @@
-#import vertex::CubemapVertexOutput
+import package::libs::vertex::CubemapVertexOutput;
 
 struct Uniform {
     roughness: f32,

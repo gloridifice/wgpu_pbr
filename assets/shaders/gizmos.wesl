@@ -1,4 +1,4 @@
-#import vertex::{VertexInput}
+import package::libs::vertex::{VertexInput};
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -13,8 +13,7 @@ struct TransformUniform {
 }
 
 struct MaterialUnifrom {
-    color: vec4<f32>
-}
+    color: vec4<f32>}
 
 @group(0) @binding(0)
 var<uniform> camera: CameraUniform;

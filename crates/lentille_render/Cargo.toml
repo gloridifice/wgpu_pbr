@@ -18,6 +18,7 @@ winit = { workspace = true }
 uuid = { workspace = true }
 half = { workspace = true }
 pollster = { workspace = true }
+wesl = { workspace = true }
 
 png = "0.17.16"
 image = "0.25.4"

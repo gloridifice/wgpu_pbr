@@ -1,5 +1,3 @@
-#define_import_path light_bindings
-
 struct PointLight {
     color: vec4<f32>,
     position: vec4<f32>,

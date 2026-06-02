@@ -1,4 +1,4 @@
-#import vertex::{ CubeVertexInput, CubemapVertexOutput }
+import package::libs::vertex::{ CubeVertexInput, CubemapVertexOutput };
 
 @group(1) @binding(0) var samp: sampler;
 @group(1) @binding(1) var tex: texture_2d<f32>;
