@@ -1,6 +1,9 @@
 use bevy_app::{Plugin, Update};
 use bevy_ecs::{prelude::*, system::RunSystemOnce};
-use lentille_core::{input::Input, window::WinitWindow};
+use lentille_core::{
+    input::Input,
+    window::{PrimaryWindowCreatedEvent, WinitWindow},
+};
 use winit::keyboard::KeyCode;
 
 use crate::control::camera::CameraControlPlugin;
@@ -13,7 +16,8 @@ impl Plugin for ControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(CameraControlPlugin)
             .init_resource::<ControlState>()
-            .add_systems(Update, sys_input_implement);
+            .add_systems(Update, sys_input_implement)
+            .add_observer(sys_startup_toggle_cursor);
     }
 }
 
@@ -53,4 +57,13 @@ pub fn sys_toggle_cursor(control_state: ResMut<ControlState>, q_window: Query<&W
             winit::window::CursorGrabMode::None
         });
     }
+}
+
+fn sys_startup_toggle_cursor(
+    _event: On<PrimaryWindowCreatedEvent>,
+    mut commands: Commands,
+) {
+    commands.queue(|world: &mut World| {
+        world.run_system_once(sys_toggle_cursor).unwrap();
+    });
 }

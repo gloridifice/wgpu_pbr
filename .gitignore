@@ -1,7 +1,6 @@
 target
 .DS_Store
-assets/models
-assets/textures/hdr
+./**/.DS_Store
 
 .idea
 .vs

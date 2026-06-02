@@ -1,5 +1,6 @@
 use bevy_app::{Plugin, Update};
 use bevy_ecs::prelude::*;
+use bevy_log::info;
 use lentille_core::{input::Input, time::Time};
 use lentille_math::*;
 use lentille_render::{
@@ -73,7 +74,7 @@ pub fn sys_update_camera_control(
         if input.is_key_hold(KeyCode::ShiftLeft) {
             move_vec += Vec3::new(0.0, -1.0, 0.0);
         } else {
-            move_vec += Vec3::new(0.0, 1.0, 1.0);
+            move_vec += Vec3::new(0.0, 1.0, 0.0);
         }
     }
     let delta_time_sec = time.delta_time.as_secs_f32();

@@ -2,22 +2,23 @@ use std::sync::Arc;
 
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, system::RunSystemOnce, world::CommandQueue};
-use bevy_log::LogPlugin;use lentille_core::{
+use bevy_log::LogPlugin;
+use lentille_core::{
     input::InputPlugin,
     time::{Time, TimePlugin},
     window::WindowPlugin,
 };
 use lentille_render::{
+    RenderPlugin, RenderPreparedStartup, SCREEN_FORMAT,
     camera::RenderTargetConfig,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
-    skybox::{prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path, Skybox},
+    skybox::{Skybox, prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path},
     utils::cube::CubeVerticesBuffer,
-    RenderPlugin, RenderPreparedStartup, SCREEN_FORMAT,
 };
 
 use crate::{
-    control::{camera::CameraController, ControlPlugin},
+    control::{ControlPlugin, camera::CameraController},
     editor::EditorPlugin,
 };
 
@@ -84,7 +85,7 @@ fn random_color() -> Color {
     let a = rand::random::<f32>();
     let g = (1. - r) * a;
     let b = (1. - r) - g;
-    return Color::new(r, g, b, 1.0);
+    Color::new(r, g, b, 1.0)
 }
 
 fn generate_point_lights(
@@ -189,6 +190,17 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             },
         ),
     });
+
+    world
+        .run_system_once_with(
+            sys_generate_single_model,
+            (
+                AssetPath::new("models/stanford_dragon_pbr.glb"),
+                "Dragon".to_string(),
+                1.0,
+            ),
+        )
+        .unwrap();
 
     queue.apply(world);
 }
