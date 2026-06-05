@@ -59,11 +59,8 @@ pub fn sys_toggle_cursor(control_state: ResMut<ControlState>, q_window: Query<&W
     }
 }
 
-fn sys_startup_toggle_cursor(
-    _event: On<PrimaryWindowCreatedEvent>,
-    mut commands: Commands,
-) {
+fn sys_startup_toggle_cursor(_event: On<PrimaryWindowCreatedEvent>, mut commands: Commands) {
     commands.queue(|world: &mut World| {
-        world.run_system_once(sys_toggle_cursor).unwrap();
+        // world.run_system_once(sys_toggle_cursor).unwrap();
     });
 }

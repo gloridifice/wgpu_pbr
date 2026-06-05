@@ -36,12 +36,14 @@ fn property_grid(ui: &mut Ui, id_source: impl std::hash::Hash, contents: impl Fn
 }
 
 pub fn vec3_values_ui(ui: &mut Ui, vec3: &mut Vec3, default_value: Vec3) {
-    if ui.button("↺").clicked() {
-        *vec3 = default_value;
-    }
-    value(ui, &mut vec3.x);
-    value(ui, &mut vec3.y);
-    value(ui, &mut vec3.z);
+    ui.horizontal(|ui| {
+        if ui.button("↺").clicked() {
+            *vec3 = default_value;
+        }
+        value(ui, &mut vec3.x);
+        value(ui, &mut vec3.y);
+        value(ui, &mut vec3.z);
+    });
 }
 
 pub fn vec3_ui(ui: &mut Ui, label: &str, vec3: &mut Vec3, default_value: Vec3) {
