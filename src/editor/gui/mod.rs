@@ -9,6 +9,7 @@ use egui::{
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
+    time::Time,
     window::{PrimaryWindow, WinitWindow, WinitWindowEvent},
 };
 use lentille_render::{
@@ -153,6 +154,24 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
             }
             Pane::ControlPanel => {
                 egui::ScrollArea::vertical().show(ui, |ui| {
+                    if let Some(time) = self.world.get_resource::<Time>() {
+                        ui.horizontal(|ui| {
+                            ui.label("FPS:");
+                            ui.colored_label(
+                                egui::Color32::LIGHT_GREEN,
+                                format!("{:.1}", time.fps),
+                            );
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Frame:");
+                            ui.colored_label(
+                                egui::Color32::LIGHT_GREEN,
+                                format!("{:.2} ms", time.frame_time_ms),
+                            );
+                        });
+                        ui.separator();
+                    }
+
                     let id_root = self
                         .world
                         .query::<(Entity, &Transform)>()

@@ -40,7 +40,10 @@ impl Plugin for WgpuPbrPlugin {
         .add_plugins((ControlPlugin, EditorPlugin));
 
         app.add_systems(RenderPreparedStartup, sys_spawn_camera)
-            .add_systems(Startup, sys_generate_plane_scene)
+            .add_systems(
+                Startup,
+                (sys_generate_plane_scene, sys_startup_light_and_environment),
+            )
             .add_systems(Update, sys_update_rotation);
     }
 }
@@ -197,7 +200,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             (
                 AssetPath::new("models/stanford_dragon_pbr.glb"),
                 "Dragon".to_string(),
-                1.0,
+                0.05,
             ),
         )
         .unwrap();
@@ -226,7 +229,6 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
         parent_bundle: (
             TransformBuilder::default()
                 .scale(Vec3::one() * scale)
-                .rotation(Quat::from_angle_x(Deg(90.0)))
                 .build()
                 .unwrap(),
             Name::new(name),
@@ -294,41 +296,40 @@ pub fn sys_spawn_camera(mut commands: Commands) {
 }
 
 fn sys_startup_light_and_environment(world: &mut World) {
-    let light_arrow_model = match Model::load(AssetPath::new("models/arrow.glb"), world) {
-        Ok(model) => Arc::new(model),
-        Err(e) => {
-            bevy_log::error!("Failed to load arrow model: {e}");
-            return;
+    world.spawn((
+        TransformBuilder::default()
+            .position(Vec3::new(0., 4., 5.))
+            .rotation(Quat::from_angle_x(Deg(-45.)))
+            .build()
+            .unwrap(),
+        ParallelLight::default(),
+        Name::new("平行光源"),
+    ));
+
+    // Optionally spawn arrow model to visualize light direction
+    if let Ok(light_arrow_model) = Model::load(AssetPath::new("models/arrow.glb"), world) {
+        SpawnModelCmd {
+            model: Arc::new(light_arrow_model),
+            parent_bundle: Transform::default(),
+            child_bundle: (MainPassObject,),
         }
-    };
-
-    SpawnModelCmd {
-        model: light_arrow_model.clone(),
-        parent_bundle: (
-            TransformBuilder::default()
-                .position(Vec3::new(0., 4., 5.))
-                .rotation(Quat::from_angle_x(Deg(-45.)))
-                .build()
-                .unwrap(),
-            ParallelLight::default(),
-            Name::new("平行光源"),
-        ),
-        child_bundle: (MainPassObject,),
+        .apply(world);
     }
-    .apply(world);
 
-    let skybox_image_path = AssetPath::new("textures/hdr/warm_restaurant_night_4k.hdr");
-    // let skybox_image_path = AssetPath::new("textures/hdr/golden_gate_hills_4k.hdr");
-    let skybox_image = world
-        .run_system_once_with(sys_load_hdir_and_prefiler, skybox_image_path.clone())
-        .unwrap();
-    world
-        .run_system_once_with(sys_update_skybox_sh_from_path, skybox_image_path)
-        .unwrap();
-
-    world.spawn(Skybox {
-        texture: Some(skybox_image),
-    });
+    // Optionally load HDR skybox; fall back to default cubemap if missing
+    let skybox_image_path = AssetPath::new("textures/skybox/sky_110_2k.png");
+    if let Ok(skybox_image) =
+        world.run_system_once_with(sys_load_hdir_and_prefiler, skybox_image_path.clone())
+    {
+        if world
+            .run_system_once_with(sys_update_skybox_sh_from_path, skybox_image_path)
+            .is_ok()
+        {
+            world.spawn(Skybox {
+                texture: Some(skybox_image),
+            });
+        }
+    }
 }
 
 pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> UploadedImage {

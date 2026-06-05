@@ -200,7 +200,10 @@ pub fn sys_render_transparent(
         })],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &depth_target.view,
-            depth_ops: None,
+            depth_ops: Some(wgpu::Operations {
+                load: wgpu::LoadOp::Load,
+                store: wgpu::StoreOp::Store,
+            }),
             stencil_ops: None,
         }),
         occlusion_query_set: None,

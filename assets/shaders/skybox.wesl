@@ -1,7 +1,7 @@
 import package::libs::primary::global_bindings::{
     camera, env_cubemap, env_cubemap_sampler,
 };
-import package::libs::vertex::{ CubeVertexInput };
+import package::libs::vertex::{CubeVertexInput};
 
 struct V2F {
     @builtin(position) clip_position: vec4<f32>,
@@ -11,7 +11,7 @@ struct V2F {
 @vertex
 fn vs_main(
     in: CubeVertexInput
-) -> V2F{
+) -> V2F {
     var o: V2F;
     let mat4 = camera.view_proj;
     let camViewProj3x3 = mat3x3(mat4[0].xyz, mat4[1].xyz, mat4[2].xyz);
@@ -22,6 +22,6 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: V2F) -> @location(0) vec4<f32> {
-    return textureSampleLevel(env_cubemap, env_cubemap_sampler, normalize(in.local_position), 0.0);
+    return textureSampleLevel(env_cubemap, env_cubemap_sampler, in.local_position, 0.0);
     // return vec4<f32>(in.local_position.xyz / 2.0 + 0.5, 1.0);
 }

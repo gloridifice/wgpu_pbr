@@ -1,0 +1,7 @@
+- [ ] Fix artifact of cubemap skybox;
+- [x] Frame rate display;
+- [x] Disable v sync and show frame rate on egui;
+- [ ] Allow user to import metallic, roughness texture;
+- [ ] Improve egui alignment on world inspector;
+- [ ] Fix parallel light shadow map artifact;
+- [ ] Implement easy cascade shadow mapping;
