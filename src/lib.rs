@@ -233,7 +233,16 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
                 .unwrap(),
             Name::new(name),
         ),
-        child_bundle: (CastShadow, MainPassObject),
+        child_bundle: (
+            CastShadow,
+            MainPassObject,
+            PBRMaterial {
+                color: Some(Color::new(0.7, 0.7, 0.7, 1.0)),
+                roughness: Some(0.8),
+                metallic: Some(0.05),
+                ..Default::default()
+            },
+        ),
     });
 
     queue.apply(world);

@@ -1,6 +1,7 @@
-- [ ] Fix artifact of cubemap skybox;
 - [x] Frame rate display;
 - [x] Disable v sync and show frame rate on egui;
+- [ ] Tracing why launch software is so slow;
+- [ ] Fix artifact of cubemap skybox;
 - [ ] Allow user to import metallic, roughness texture;
 - [ ] Improve egui alignment on world inspector;
 - [ ] Fix parallel light shadow map artifact;

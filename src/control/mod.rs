@@ -16,8 +16,7 @@ impl Plugin for ControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(CameraControlPlugin)
             .init_resource::<ControlState>()
-            .add_systems(Update, sys_input_implement)
-            .add_observer(sys_startup_toggle_cursor);
+            .add_systems(Update, sys_input_implement);
     }
 }
 
@@ -57,10 +56,4 @@ pub fn sys_toggle_cursor(control_state: ResMut<ControlState>, q_window: Query<&W
             winit::window::CursorGrabMode::None
         });
     }
-}
-
-fn sys_startup_toggle_cursor(_event: On<PrimaryWindowCreatedEvent>, mut commands: Commands) {
-    commands.queue(|world: &mut World| {
-        // world.run_system_once(sys_toggle_cursor).unwrap();
-    });
 }
