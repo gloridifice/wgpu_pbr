@@ -5,6 +5,9 @@ use std::any::type_name;
 
 use crate::control::camera::CameraController;
 
+pub mod depth_to_rgba;
+pub mod texture_preview;
+
 fn value(ui: &mut Ui, v: &mut f32) {
     ui.add_sized([40.0, 20.0], DragValue::new(v).max_decimals(1).speed(0.05));
 }

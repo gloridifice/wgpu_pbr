@@ -4,8 +4,10 @@ use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
 use bevy_log::info;
 use egui::{
-    epaint::text::InsertFontFamily, load::SizedTexture, CentralPanel, PointerButton, Visuals,
+    CentralPanel, Color32, LayerId, PointerButton, ScrollArea, UiBuilder, Visuals,
+    epaint::text::InsertFontFamily, load::SizedTexture,
 };
+use egui_tiles::{Container, Shares};
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
@@ -13,13 +15,17 @@ use lentille_core::{
     window::{PrimaryWindow, WinitWindow, WinitWindowEvent},
 };
 use lentille_render::{
+    FrameSets, RenderPreparedStartup, SurfaceState,
     app_ext::AppExt,
     camera::{Camera, RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
-    FrameSets, RenderPreparedStartup, SurfaceState,
+    shadow_mapping::CascadeShadowMapping,
 };
 
-use components::world_tree;
+use components::{
+    depth_to_rgba::DepthToRgbaConverter,
+    world_tree,
+};
 
 use crate::egui_renderer::EguiRenderer;
 
@@ -130,12 +136,15 @@ impl Default for EguiConfig {
 }
 
 pub enum Pane {
-    MainView,
-    ControlPanel,
+    RightPanel,
+    Scene,
+    WorldPanel,
 }
 
 struct TreeBehavior<'a> {
     world: &'a mut World,
+    egui_renderer: &'a mut EguiRenderer,
+    device: *const wgpu::Device,
 }
 
 #[derive(Resource, Clone, Default)]
@@ -148,13 +157,50 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
         _tile_id: egui_tiles::TileId,
         pane: &mut Pane,
     ) -> egui_tiles::UiResponse {
+        let Self {
+            world,
+            egui_renderer,
+            device,
+        } = self;
         match pane {
-            Pane::MainView => {
-                ui.label("Main View");
+            Pane::RightPanel => {
+                let device: &wgpu::Device = unsafe { &**device };
+
+                ScrollArea::vertical().show(ui, |ui| {
+                    ui.colored_label(Color32::LIGHT_YELLOW, "CSM Depth Layers");
+                    ui.separator();
+
+                    if let Some(mut converter) =
+                        world.get_resource_mut::<DepthToRgbaConverter>()
+                    {
+                        for (i, output) in converter.outputs_mut().iter_mut().enumerate() {
+                            ui.collapsing(format!("Cascade {}", i), |ui| {
+                                ui.label(format!(
+                                    "Depth format: {:?}",
+                                    output.original_format
+                                ));
+                                output.preview.show_view(
+                                    ui,
+                                    &mut egui_renderer.renderer,
+                                    device,
+                                    &output.rgba_view,
+                                    wgpu::Extent3d {
+                                        width: output.width,
+                                        height: output.height,
+                                        depth_or_array_layers: 1,
+                                    },
+                                    wgpu::TextureFormat::Rgba8Unorm,
+                                );
+                            });
+                        }
+                    } else {
+                        ui.colored_label(Color32::GRAY, "No depth data available");
+                    }
+                });
             }
-            Pane::ControlPanel => {
+            Pane::WorldPanel => {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    if let Some(time) = self.world.get_resource::<Time>() {
+                    if let Some(time) = world.get_resource::<Time>() {
                         ui.horizontal(|ui| {
                             ui.label("FPS:");
                             ui.colored_label(
@@ -172,10 +218,9 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                         ui.separator();
                     }
 
-                    let id_root = self
-                        .world
+                    let id_root = world
                         .query::<(Entity, &Transform)>()
-                        .iter(self.world)
+                        .iter(world)
                         .filter_map(|(id, trans)| {
                             if trans.parent.is_none() {
                                 Some(id)
@@ -186,9 +231,44 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                         .collect::<Vec<_>>();
 
                     for id in id_root.into_iter() {
-                        world_tree(ui, id, self.world);
+                        world_tree(ui, id, world);
                     }
                 });
+            }
+            Pane::Scene => {
+                let size = ui.available_size();
+                if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>() {
+                    if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
+                        let main_view =
+                            ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
+                        let mut input = world.resource_mut::<Input>();
+                        for (ec, mc) in [
+                            (PointerButton::Primary, CursorButton::Left),
+                            (PointerButton::Secondary, CursorButton::Right),
+                            (PointerButton::Middle, CursorButton::Middle),
+                        ] {
+                            if main_view.clicked_by(ec) {
+                                input.down_cursor_buttons.insert(mc);
+                            }
+                        }
+                        input.cursor_position = main_view
+                            .hover_pos()
+                            .map(|it| Vec2::new(it.x, it.y))
+                            .unwrap_or(Vec2::zero());
+                    }
+                }
+
+                if let Ok(mut target_size) = world
+                    .query_filtered::<&mut RenderTargetSize, With<Camera>>()
+                    .single_mut(world)
+                {
+                    let new_w = size.x as u32;
+                    let new_h = size.y as u32;
+                    if target_size.width != new_w || target_size.height != new_h {
+                        target_size.width = new_w;
+                        target_size.height = new_h;
+                    }
+                }
             }
         };
         egui_tiles::UiResponse::None
@@ -196,57 +276,81 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
 
     fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
         match pane {
-            Pane::MainView => "Main View".into(),
-            Pane::ControlPanel => "Control Panel".into(),
+            Pane::RightPanel => "CSM Preview".into(),
+            Pane::WorldPanel => "Control Panel".into(),
+            Pane::Scene => "Scene".into(),
         }
     }
 }
 
 pub fn sys_egui_tiles(world: &mut World) {
+    // If CSM exists, convert every depth layer to RGBA so egui can display
+    // them (depth-format textures cannot be sampled by egui_wgpu directly).
+    if world.contains_resource::<CascadeShadowMapping>() {
+        convert_csm_depth_to_rgba(world);
+    }
+
     let mut tree = create_tree();
-    world.resource_scope(|world, egui: Mut<EguiRenderer>| {
-        let ctx = egui.context();
-        egui::SidePanel::left("left_side_panel")
-            .default_width(256.)
-            .show(ctx, |ui| {
-                let mut behavior = TreeBehavior { world };
-                tree.ui(&mut behavior, ui);
-            });
 
-        CentralPanel::default().show(ctx, |ui| {
-            let size = ui.available_size();
-            if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>() {
-                if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
-                    let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
-                    let mut input = world.resource_mut::<Input>();
-                    for (ec, mc) in [
-                        (PointerButton::Primary, CursorButton::Left),
-                        (PointerButton::Secondary, CursorButton::Right),
-                        (PointerButton::Middle, CursorButton::Middle),
-                    ] {
-                        if main_view.clicked_by(ec) {
-                            input.down_cursor_buttons.insert(mc);
-                        }
-                    }
-                    input.cursor_position = main_view
-                        .hover_pos()
-                        .map(|it| Vec2::new(it.x, it.y))
-                        .unwrap_or(Vec2::zero());
-                }
-            }
+    // Snapshot a raw pointer to the device — RenderState lives forever,
+    // so this pointer is valid for the lifetime of the app.
+    let device_ptr: *const wgpu::Device = {
+        let rs = world.resource::<RenderState>();
+        &rs.device as *const wgpu::Device
+    };
 
-            if let Ok(mut target_size) = world
-                .query_filtered::<&mut RenderTargetSize, With<Camera>>()
-                .single_mut(world)
-            {
-                let new_w = size.x as u32;
-                let new_h = size.y as u32;
-                if target_size.width != new_w || target_size.height != new_h {
-                    target_size.width = new_w;
-                    target_size.height = new_h;
-                }
-            }
+    world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
+        let mut ui = {
+            let ctx = egui.context();
+            egui::Ui::new(
+                ctx.clone(),
+                egui::Id::new("ui"),
+                UiBuilder::new()
+                    .layer_id(LayerId::background())
+                    .max_rect(ctx.content_rect()),
+            )
+        };
+
+        // Scene view
+        CentralPanel::default().show_inside(&mut ui, |ui| {
+            let mut behavior = TreeBehavior {
+                world,
+                egui_renderer: &mut *egui,
+                device: device_ptr,
+            };
+            tree.ui(&mut behavior, ui);
         });
+    });
+}
+
+fn convert_csm_depth_to_rgba(world: &mut World) {
+    // Lazily create the converter resource on first use.
+    if !world.contains_resource::<DepthToRgbaConverter>() {
+        let converter = {
+            let rs = world.resource::<RenderState>();
+            DepthToRgbaConverter::new(&rs.device)
+        };
+        world.insert_resource(converter);
+    }
+
+    world.resource_scope(|world, mut converter: Mut<DepthToRgbaConverter>| {
+        let csm = world.resource::<CascadeShadowMapping>();
+        let rs = world.resource::<RenderState>();
+
+        let depth_views: Vec<&wgpu::TextureView> =
+            csm.layers.iter().map(|l| l.view.as_ref()).collect();
+
+        let size = csm.shadow_maps.size();
+        let format = csm.shadow_maps.format();
+
+        converter.convert(
+            &rs.device,
+            &rs.queue,
+            &depth_views,
+            size.width,
+            size.height,
+            format,
+        );
     });
 }
 
@@ -294,15 +398,24 @@ fn sys_on_resize_scene_render_target(
 fn create_tree() -> egui_tiles::Tree<Pane> {
     let mut tiles = egui_tiles::Tiles::default();
 
-    let mut left_tabs_id_vec = vec![];
-    let control_pane = tiles.insert_pane(Pane::ControlPanel);
-    let main_view_pane = tiles.insert_pane(Pane::MainView);
-    left_tabs_id_vec.push(tiles.insert_vertical_tile(vec![control_pane]));
-    left_tabs_id_vec.push(tiles.insert_vertical_tile(vec![main_view_pane]));
+    let left_pane = tiles.insert_pane(Pane::WorldPanel);
+    let scene_pane = tiles.insert_pane(Pane::Scene);
+    let right_pane = tiles.insert_pane(Pane::RightPanel);
 
-    let left_tabs = tiles.insert_tab_tile(left_tabs_id_vec);
+    let children = vec![left_pane, scene_pane, right_pane];
 
-    let root = tiles.insert_horizontal_tile(vec![left_tabs]);
+    let mut shares = Shares::default();
+    shares.set_share(left_pane, 1.0);
+    shares.set_share(scene_pane, 2.0);
+    shares.set_share(right_pane, 1.0);
+
+    let linear_container = Container::Linear(egui_tiles::Linear {
+        children,
+        dir: egui_tiles::LinearDir::Horizontal,
+        shares,
+    });
+
+    let root = tiles.insert_container(linear_container);
 
     egui_tiles::Tree::new("main_tree", root, tiles)
 }
