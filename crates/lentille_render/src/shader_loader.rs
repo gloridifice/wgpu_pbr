@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fs, path::Path};
+use std::{borrow::Cow, path::Path};
 
 use bevy_ecs::prelude::*;
 use wesl::{StandardResolver, Wesl};

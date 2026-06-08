@@ -119,6 +119,7 @@ impl Plugin for RenderPlugin {
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,
             )
+            .add_frame_system::<PreStage, _, _>(sys_render_cascade_shadow_mapping_pass, [])
             .add_frame_system::<PreStage, _, _>(sys_render_shadow_mapping_pass, [])
             .add_frame_system::<OpaqueStage, _, _>(sys_render_write_g_buffer_pass, [])
             .add_frame_system::<OpaqueStage, _, _>(sys_render_main_pass, [])

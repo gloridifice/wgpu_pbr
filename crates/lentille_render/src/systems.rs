@@ -8,6 +8,7 @@ use crate::{
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
+    shadow_mapping::{CascadeShadowMapping, LayerContext},
     skybox::SkyboxPipeline,
     stage::RenderContext,
     transparent::TransparentPipeline,
@@ -26,6 +27,44 @@ const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
     b: 0.157,
     a: 1.0,
 };
+
+pub fn sys_render_cascade_shadow_mapping_pass(
+    mut ctx: InMut<RenderContext>,
+    csm: Res<CascadeShadowMapping>,
+    mesh_renderers: Query<&MeshRenderer, With<CastShadow>>,
+) {
+    let encoder = &mut ctx.encoder;
+
+    for i in 0..csm.levels {
+        let LayerContext {
+            view,
+            mat_bind_group,
+            ..
+        } = &csm.layers[i];
+
+        let mut csm_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Shadow Mapping Light Depth Render Pass"),
+            multiview_mask: None,
+            color_attachments: &[],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                view: view.as_ref(),
+                stencil_ops: None,
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
+
+        csm_pass.set_pipeline(&csm.pipeline);
+        csm_pass.set_bind_group(0, Some(mat_bind_group.as_ref()), &[]);
+        for mesh_renderer in mesh_renderers.iter() {
+            mesh_renderer.draw(&mut csm_pass);
+        }
+    }
+}
 
 pub fn sys_render_shadow_mapping_pass(
     mut ctx: InMut<RenderContext>,
