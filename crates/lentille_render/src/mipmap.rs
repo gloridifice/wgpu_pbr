@@ -61,7 +61,7 @@ pub fn generate_mip_map(
         },
         depth_stencil: None,
         multisample: wgpu::MultisampleState::default(),
-        multiview: None,
+        multiview_mask: None,
         cache: None,
     });
     let bind_group_layout = pipeline.get_bind_group_layout(0);
@@ -73,7 +73,7 @@ pub fn generate_mip_map(
         address_mode_w: wgpu::AddressMode::ClampToEdge,
         mag_filter: wgpu::FilterMode::Linear,
         min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         ..Default::default()
     });
 
@@ -111,9 +111,11 @@ pub fn generate_mip_map(
 
         let mut rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: None,
+            multiview_mask: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: &views[target_mip],
                 resolve_target: None,
+                depth_slice: None,
                 ops: wgpu::Operations {
                     load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                     store: wgpu::StoreOp::Store,

@@ -169,9 +169,9 @@ impl FromWorld for DeferredWriteGBufferPipeline {
                 label: Some("Write G-Buffer Layout"),
                 bind_group_layouts: &bind_group_layouts
                     .iter()
-                    .map(|it| it.as_ref())
+                    .map(|it| Some(it.as_ref()))
                     .collect::<Vec<_>>(),
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         let targets = [
@@ -214,8 +214,8 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(wgpu::CompareFunction::Less),
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -225,7 +225,7 @@ impl FromWorld for DeferredWriteGBufferPipeline {
                 alpha_to_coverage_enabled: false,
             },
             // relate with array layers
-            multiview: None,
+            multiview_mask: None,
             // cache allows wgpu to cache shader compilation data. Only really useful for Android build targets.
             cache: None,
         });

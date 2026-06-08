@@ -1,5 +1,5 @@
-import package::libs::vertex::{ FullscreenV2F };
-import package::libs::primary::pbr_type::{ PBRSurface, unpack_g_buffer };
+import package::libs::vertex::{FullscreenV2F};
+import package::libs::primary::pbr_type::{PBRSurface, unpack_g_buffer};
 import package::libs::primary::global_bindings::{
     camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler,
     env_cubemap, env_cubemap_sampler,
@@ -18,7 +18,6 @@ import package::libs::light_bindings::{
 @group(1) @binding(1) var world_pos_tex: texture_2d<f32>;
 @group(1) @binding(2) var g_buffer_tex: texture_2d<u32>;
 
-
 @fragment
 fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
@@ -26,15 +25,14 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
 
     let surface: PBRSurface = unpack_g_buffer(g_buffer);
 
-    if(all(surface.normal == vec3f(0.0))) {
+    if all(surface.normal == vec3f(0.0)) {
         discard;
     }
 
     let metallic = surface.material.metallic;
     let base_color = surface.material.base_color.xyz;
 
-    let f0: vec3<f32> =
-        vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
+    let f0: vec3<f32> = vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
 
     var surface_color = vec3<f32>(0.0);
@@ -73,12 +71,12 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
 
     /// + Image based Lighting
     let ibl = ibl_functions::evaluate_ibl(
-                        surface.normal,
-                        surface.normal,
-                        base_color,
-                        f0,
-                        surface.material.perceptual_roughness
-                    );
+        surface.normal,
+        surface.normal,
+        base_color,
+        f0,
+        surface.material.perceptual_roughness
+    );
 
     surface_color += ibl;
 

@@ -80,9 +80,9 @@ fn sys_end_frame_and_draw(
     };
 
     let surface_texture = match surface_state.surface.get_current_texture() {
-        Ok(t) => t,
-        Err(e) => {
-            bevy_log::error!("Failed to acquire surface texture: {e}");
+        wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
+        status => {
+            bevy_log::error!("Failed to acquire surface texture: {:?}", status);
             return;
         }
     };

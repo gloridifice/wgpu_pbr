@@ -49,7 +49,14 @@ fn sys_end_frame_and_present(
     let (_window, surface_state) = window.into_inner();
     let render_target = q_camera.into_inner();
 
-    let current_texture = surface_state.surface.get_current_texture().unwrap();
+    let current_texture = match surface_state.surface.get_current_texture() {
+        wgpu::CurrentSurfaceTexture::Success(surface_texture)
+        | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
+        _ => {
+            return;
+        }
+    };
+
     if render_target.get_current_color().texture.size() != current_texture.texture.size() {
         return;
     }

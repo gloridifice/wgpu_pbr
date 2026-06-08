@@ -90,8 +90,8 @@ impl FromWorld for SkyboxPipeline {
         let pipeline_layout = Arc::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("Skybox"),
-                bind_group_layouts: &[&global_bind_group.0],
-                push_constant_ranges: &[],
+                bind_group_layouts: &[Some(&global_bind_group.0)],
+                immediate_size: 0,
             },
         ));
         let cube_vertex_layout = super::utils::cube::cube_vertex_layout();
@@ -126,7 +126,7 @@ impl FromWorld for SkyboxPipeline {
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                     targets: &[Some(SCREEN_FORMAT.into())],
                 }),
-                multiview: None,
+                multiview_mask: None,
                 cache: None,
             }),
         );

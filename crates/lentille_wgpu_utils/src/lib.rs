@@ -42,6 +42,7 @@ pub fn render_pass_color_attachment(
     RenderPassColorAttachment {
         view,
         resolve_target: None,
+        depth_slice: None,
         ops: wgpu::Operations {
             load: match load_color {
                 Some(color) => wgpu::LoadOp::Clear(color),
@@ -78,7 +79,7 @@ pub fn sampler_desc_no_filter() -> SamplerDescriptor<'static> {
         address_mode_w: wgpu::AddressMode::ClampToEdge,
         mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::FilterMode::Nearest,
+        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
         compare: None,
         lod_min_clamp: 0.0,
         lod_max_clamp: 100.0,
@@ -123,7 +124,7 @@ pub fn full_screen_pipeline_desc<'a>(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
         }),
-        multiview: None,
+        multiview_mask: None,
         cache: None,
     }
 }
@@ -166,7 +167,7 @@ pub fn no_depth_stencil_pipeline_desc<'a>(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
         }),
-        multiview: None,
+        multiview_mask: None,
         cache: None,
     }
 }

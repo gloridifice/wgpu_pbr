@@ -67,9 +67,9 @@ impl FromWorld for DeferredComputePipeline {
                 label: Some("PBR Main Pipeline"),
                 bind_group_layouts: &bind_group_layouts
                     .iter()
-                    .map(|it| it.as_ref())
+                    .map(|it| Some(it.as_ref()))
                     .collect::<Vec<_>>(),
-                push_constant_ranges: &[],
+                immediate_size: 0,
             });
 
         let render_pipeline =

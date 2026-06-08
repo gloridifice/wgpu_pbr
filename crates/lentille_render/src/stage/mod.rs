@@ -177,15 +177,26 @@ pub fn sys_copy_to_real_target(
     for target in q_render_target {
         let current_color = target.get_current_color();
         let size = current_color.texture.size();
-        let texture = match &target.target_type {
+        let mut surface_texture_storage: Option<wgpu::SurfaceTexture> = None;
+        let texture: &wgpu::Texture = match &target.target_type {
             TargetType::WindowAndSurface(entity) => {
                 let surface_state = q_surface_state.get(*entity).unwrap();
-                &surface_state.surface.get_current_texture().unwrap().texture
+                match surface_state.surface.get_current_texture() {
+                    wgpu::CurrentSurfaceTexture::Success(st)
+                    | wgpu::CurrentSurfaceTexture::Suboptimal(st) => {
+                        surface_texture_storage = Some(st);
+                        // Safe: surface_texture_storage outlives this reference via let binding
+                        &surface_texture_storage.as_ref().unwrap().texture
+                    }
+                    status => {
+                        bevy_log::warn!("Failed to get current surface texture: {:?}", status);
+                        continue;
+                    }
+                }
             }
             TargetType::Texture(uploaded_image) => &uploaded_image.texture,
         };
 
-        // The size of current color may be different with surface size
         if size == texture.size() {
             let mut encoder = rs.device.create_command_encoder(&Default::default());
             lentille_wgpu_utils::copy_texture2d_to_texture2d_no_mip(

@@ -11,6 +11,7 @@ use crate::{
 
 const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
 
+#[derive(Component)]
 pub struct PrefilteringPipeline {
     pub pipeline: Arc<RenderPipeline>,
     #[allow(unused)]
@@ -49,8 +50,8 @@ impl PrefilteringPipeline {
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: LABEL,
-            bind_group_layouts: &[&matrix_bind_group_layout.layout, &bg_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&matrix_bind_group_layout.layout), Some(&bg_layout)],
+            immediate_size: 0,
         });
 
         let vert_shader = world.resource::<CubemapVertexShader>();
@@ -85,7 +86,7 @@ impl PrefilteringPipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(format.into())],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -119,8 +120,8 @@ impl FromWorld for PrefilteringPipeline {
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: LABEL,
-            bind_group_layouts: &[&matrix_bind_group_layout.layout, &bg_layout],
-            push_constant_ranges: &[],
+            bind_group_layouts: &[Some(&matrix_bind_group_layout.layout), Some(&bg_layout)],
+            immediate_size: 0,
         });
 
         let vert_shader = world.resource::<CubemapVertexShader>();
@@ -155,7 +156,7 @@ impl FromWorld for PrefilteringPipeline {
                 compilation_options: Default::default(),
                 targets: &[Some(TextureFormat::Rgba8UnormSrgb.into())],
             }),
-            multiview: None,
+            multiview_mask: None,
             cache: None,
         });
 
@@ -257,9 +258,11 @@ pub fn prefilter(
             });
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Prefiltering"),
+                multiview_mask: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &target,
                     resolve_target: None,
+                    depth_slice: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
                         store: wgpu::StoreOp::Store,
