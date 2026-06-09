@@ -1,6 +1,11 @@
 # Wgpu PBR
+
 A realtime PBR renderer project for personal learning. Now it's in progress.
 ![cover](readme/cover.gif)
+
+- Column major
+- Right hand
+- Y-up
 
 Powered by
 
@@ -11,6 +16,7 @@ Powered by
 - [egui](https://github.com/emilk/egui): An easy-to-use GUI in pure Rust.
 
 ## Roadmap
+
 - [x] Transform & Camera & Phong pipeline
 - [x] Directional light shadow mapping
 - [x] Normal mapping
@@ -24,6 +30,10 @@ Powered by
 - [x] Transparent pipeline
   - [x] Transparent pass (separate specular and diffuse)
   - [x] Screenspace refraction effect
+- [x] Multi-camera
+- [ ] Simple gizmo system
+- [ ] Cascade shadow mapping (CSM)
+- [ ] WESL & Shader cache
 - [ ] Forward+ pipeline
   - [ ] Material pattern
   - [ ] Light filtering
@@ -33,7 +43,12 @@ Powered by
 ## Screenshot
 
 ![reflectance_metallic](readme/reflectance_metallic.jpg)
+
 - row 0: Solid | reflectance: 0.0 -> 1.0
 - row 1: Solid | metallic: 0.0 -> 1.0
 - row 2: Transparent | metaliic: 0.0 -> 1.0
 - row 3: Transparent | reflectance: 0.0 -> 1.0
+
+## License
+
+[LICENSE.md](./LICENSE.md)

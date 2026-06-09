@@ -227,6 +227,7 @@ pub fn sys_render_transparent(
         color_target,
         camera_global_bind_group,
         depth_target,
+        ..
     }) = ctx;
 
     let Some(depth_target) = depth_target.as_ref() else {

@@ -5,6 +5,7 @@ use crate::{
     base_assets::{DFGTexture, NoFilterClampSampler},
     bindings::global_binding::GlobalBindGroupLayout,
     camera::{CameraBuffer, RenderTarget, TargetType},
+    gizmo::{GizmoPrimitive, GIZMO_BUFFER},
     graph::{InsertConfig, TypeIdGraph},
     light::LightUnifromBuffer,
     prelude::*,
@@ -42,6 +43,7 @@ pub struct RenderContext {
     pub color_target: Arc<UploadedImage>,
     pub camera_global_bind_group: Arc<BindGroup>,
     pub depth_target: Option<Arc<UploadedImage>>,
+    pub gizmo_primitives: Arc<Vec<GizmoPrimitive>>,
 }
 
 type FrameSystemId = SystemId<InMut<'static, RenderContext>>;
@@ -110,6 +112,15 @@ pub fn sys_render(
     skybox_sh: Res<SkyboxSHBuffer>,
     skeybox: Query<&Skybox>,
 ) {
+    let gizmo_primitives = {
+        let mut buf = GIZMO_BUFFER.lock().unwrap();
+        if buf.is_empty() {
+            Arc::new(Vec::new())
+        } else {
+            Arc::new(buf.drain(..).collect())
+        }
+    };
+
     for (camera_id, camera_buffer, mut camera_target) in q_camera.iter_mut() {
         let color_target = camera_target.next();
         let color_attachment = camera_target.get_attachment_color();
@@ -152,6 +163,7 @@ pub fn sys_render(
                 color_target: Arc::clone(&color_target),
                 camera_global_bind_group,
                 depth_target: depth_target.clone(),
+                gizmo_primitives: Arc::clone(&gizmo_primitives),
             };
 
             let systems = stage.systems.clone();

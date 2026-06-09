@@ -245,6 +245,7 @@ pub fn sys_render_gizmo_pass(
         color_target,
         camera_global_bind_group: _,
         depth_target,
+        gizmo_primitives,
     }) = ctx;
 
     let camera_buffer = match q_camera_buffer.get(*camera_id) {
@@ -252,16 +253,13 @@ pub fn sys_render_gizmo_pass(
         Err(_) => return,
     };
 
-    let mut gfx = GIZMO_BUFFER.lock().unwrap();
-    if gfx.is_empty() {
+    if gizmo_primitives.is_empty() {
         return;
     }
-    let primitives: Vec<GizmoPrimitive> = gfx.drain(..).collect();
-    drop(gfx);
 
-    let mut vertices: Vec<GizmoLineVertex> = Vec::with_capacity(primitives.len() * 2);
+    let mut vertices: Vec<GizmoLineVertex> = Vec::with_capacity(gizmo_primitives.len() * 2);
 
-    for p in &primitives {
+    for p in gizmo_primitives.iter() {
         match p {
             GizmoPrimitive::Line { start, end, color } => {
                 let c = color.into_array();
