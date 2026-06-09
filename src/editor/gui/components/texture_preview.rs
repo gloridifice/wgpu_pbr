@@ -8,6 +8,7 @@ pub struct TexturePreview {
     egui_tex_id: Option<egui::TextureId>,
     cached_view: Option<wgpu::TextureView>,
     cached_layer: u32,
+    size: Option<egui::Vec2>,
 }
 
 impl TexturePreview {
@@ -16,7 +17,13 @@ impl TexturePreview {
             egui_tex_id: None,
             cached_view: None,
             cached_layer: 0,
+            size: None,
         }
+    }
+
+    pub fn size(&mut self, width: f32, height: f32) -> &mut Self {
+        self.size = Some(Vec2::new(width, height));
+        self
     }
 
     /// Invalidate all cached state. Next show call will re-register the texture.
@@ -50,11 +57,13 @@ impl TexturePreview {
 
                 ui.add_space(4.0);
 
-                let available = ui.available_size();
-                let display_size = fit_size(
-                    [texture_size.width as f32, texture_size.height as f32],
-                    available,
-                );
+                let display_size = self.size.unwrap_or_else(|| {
+                    let available = ui.available_size();
+                    fit_size(
+                        [texture_size.width as f32, texture_size.height as f32],
+                        available,
+                    )
+                });
 
                 if display_size.x < 1.0 || display_size.y < 1.0 {
                     return;
@@ -107,10 +116,7 @@ impl TexturePreview {
                     ui.horizontal(|ui| {
                         ui.label("Layer:");
                         if ui
-                            .add_enabled(
-                                self.cached_layer > 0,
-                                egui::Button::new("◀"),
-                            )
+                            .add_enabled(self.cached_layer > 0, egui::Button::new("◀"))
                             .clicked()
                         {
                             self.cached_layer = self.cached_layer.saturating_sub(1);
@@ -142,10 +148,7 @@ impl TexturePreview {
                 ui.add_space(4.0);
 
                 let available = ui.available_size();
-                let display_size = fit_size(
-                    [size.width as f32, size.height as f32],
-                    available,
-                );
+                let display_size = fit_size([size.width as f32, size.height as f32], available);
 
                 if display_size.x < 1.0 || display_size.y < 1.0 {
                     return;
@@ -153,8 +156,7 @@ impl TexturePreview {
 
                 // Rebuild the view when the layer changes.
                 if self.cached_view.is_none() {
-                    self.cached_view =
-                        Some(create_single_layer_view(texture, self.cached_layer));
+                    self.cached_view = Some(create_single_layer_view(texture, self.cached_layer));
                 }
 
                 if let Some(ref view) = self.cached_view {
@@ -183,7 +185,10 @@ impl TexturePreview {
         });
         ui.horizontal(|ui| {
             ui.label("Size:");
-            ui.colored_label(Color32::LIGHT_BLUE, format!("{}x{}", size.width, size.height));
+            ui.colored_label(
+                Color32::LIGHT_BLUE,
+                format!("{}x{}", size.width, size.height),
+            );
             if size.depth_or_array_layers > 1 {
                 ui.colored_label(
                     Color32::LIGHT_BLUE,
@@ -205,12 +210,10 @@ pub fn texture_preview_image(
     texture_view: &wgpu::TextureView,
     texture_size: [u32; 2],
 ) {
-    let tex_id =
-        renderer.register_native_texture(device, texture_view, wgpu::FilterMode::Linear);
+    let tex_id = renderer.register_native_texture(device, texture_view, wgpu::FilterMode::Linear);
 
     let available = ui.available_size();
-    let display_size =
-        fit_size([texture_size[0] as f32, texture_size[1] as f32], available);
+    let display_size = fit_size([texture_size[0] as f32, texture_size[1] as f32], available);
 
     if display_size.x >= 1.0 && display_size.y >= 1.0 {
         ui.image(SizedTexture::new(tex_id, display_size));

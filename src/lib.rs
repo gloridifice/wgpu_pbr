@@ -155,7 +155,7 @@ fn create_procedural_plane_model(size: f32) -> Model {
             tex_coord: [0.0, 1.0],
         },
     ];
-    let indices: Vec<u32> = vec![0, 1, 2, 0, 2, 3];
+    let indices: Vec<u32> = vec![2, 1, 0, 3, 2, 0];
     let mesh = Mesh {
         vertices,
         indices: indices.clone(),

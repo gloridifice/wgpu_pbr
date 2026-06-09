@@ -20,8 +20,8 @@ use super::transform::{Transform, WorldTransform};
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
-    0.0, 0.0, 0.0, 1.0,
+    0.0, 0.0, 0.5, 0.0,
+    0.0, 0.0, 0.5, 1.0,
 );
 
 pub(crate) struct CameraPlugin;
@@ -29,10 +29,10 @@ pub(crate) struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_systems(
-                PostUpdate,
-                (sys_create_render_target, sys_create_or_update_camera_buffer).chain(),
-            )
-            .add_systems(PreUpdate, sys_resize_render_target);
+            PostUpdate,
+            (sys_create_render_target, sys_create_or_update_camera_buffer).chain(),
+        )
+        .add_systems(PreUpdate, sys_resize_render_target);
     }
 }
 
@@ -318,10 +318,7 @@ pub fn sys_resize_render_target(
             );
             if let TargetType::Texture(ref mut uploaded_image) = target.target_type {
                 *uploaded_image = Arc::new(create_color_render_target_image(
-                    width,
-                    height,
-                    &rs.device,
-                    format,
+                    width, height, &rs.device, format,
                 ));
             }
         }
@@ -395,25 +392,20 @@ fn sys_create_render_target(
     let device = &rs.device;
     for (id, config) in q_camera {
         let make_result: Option<(RenderTarget, u32, u32)> = match config {
-            RenderTargetConfig::PrimaryWindow => q_primary_window
-                .as_ref()
-                .map(|surface_state| {
-                    (
-                        RenderTarget::from_window(id, &surface_state, device),
-                        surface_state.config.width,
-                        surface_state.config.height,
-                    )
-                }),
-            RenderTargetConfig::Window(entity) => q_window
-                .get(*entity)
-                .ok()
-                .map(|surface_state| {
-                    (
-                        RenderTarget::from_window(*entity, surface_state, device),
-                        surface_state.config.width,
-                        surface_state.config.height,
-                    )
-                }),
+            RenderTargetConfig::PrimaryWindow => q_primary_window.as_ref().map(|surface_state| {
+                (
+                    RenderTarget::from_window(id, &surface_state, device),
+                    surface_state.config.width,
+                    surface_state.config.height,
+                )
+            }),
+            RenderTargetConfig::Window(entity) => q_window.get(*entity).ok().map(|surface_state| {
+                (
+                    RenderTarget::from_window(*entity, surface_state, device),
+                    surface_state.config.width,
+                    surface_state.config.height,
+                )
+            }),
             RenderTargetConfig::Texture {
                 width,
                 height,

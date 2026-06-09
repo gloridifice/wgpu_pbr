@@ -19,12 +19,13 @@ use lentille_render::{
     app_ext::AppExt,
     camera::{Camera, RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
-    shadow_mapping::CascadeShadowMapping,
+    shadow_mapping::ShadowMap,
+    shadow_mapping::csm::CascadeShadowMapping,
 };
 
 use components::{
-    depth_to_rgba::DepthToRgbaConverter,
-    world_tree,
+    depth_to_rgba::CsmDepthToRgbaConverter, depth_to_rgba::DepthToRgbaConverter,
+    texture_preview::TexturePreview, world_tree,
 };
 
 use crate::egui_renderer::EguiRenderer;
@@ -150,6 +151,17 @@ struct TreeBehavior<'a> {
 #[derive(Resource, Clone, Default)]
 struct RenderTargetEguiTexId(Option<egui::TextureId>);
 
+/// Cached state for previewing the single [`ShadowMap`] depth texture.
+#[derive(Resource)]
+struct ShadowMapPreviewState {
+    converter: DepthToRgbaConverter,
+    rgba_tex: Option<wgpu::Texture>,
+    rgba_view: Option<wgpu::TextureView>,
+    preview: TexturePreview,
+    width: u32,
+    height: u32,
+}
+
 impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
     fn pane_ui(
         &mut self,
@@ -167,19 +179,41 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                 let device: &wgpu::Device = unsafe { &**device };
 
                 ScrollArea::vertical().show(ui, |ui| {
+                    // --- ShadowMap single preview ---
+                    if let Some(mut state) = world.get_resource_mut::<ShadowMapPreviewState>() {
+                        let sw = state.width;
+                        let sh = state.height;
+                        let rgba_view = state.rgba_view.take();
+                        if let Some(ref rgba_view) = rgba_view {
+                            ui.collapsing("ShadowMap", |ui| {
+                                state.preview.show_view(
+                                    ui,
+                                    &mut egui_renderer.renderer,
+                                    device,
+                                    rgba_view,
+                                    wgpu::Extent3d {
+                                        width: sw,
+                                        height: sh,
+                                        depth_or_array_layers: 1,
+                                    },
+                                    wgpu::TextureFormat::Rgba8Unorm,
+                                );
+                            });
+                            ui.separator();
+                        }
+                        state.rgba_view = rgba_view;
+                    }
+
+                    // --- CSM cascade layers ---
                     ui.colored_label(Color32::LIGHT_YELLOW, "CSM Depth Layers");
                     ui.separator();
 
-                    if let Some(mut converter) =
-                        world.get_resource_mut::<DepthToRgbaConverter>()
+                    if let Some(mut converter) = world.get_resource_mut::<CsmDepthToRgbaConverter>()
                     {
                         for (i, output) in converter.outputs_mut().iter_mut().enumerate() {
                             ui.collapsing(format!("Cascade {}", i), |ui| {
-                                ui.label(format!(
-                                    "Depth format: {:?}",
-                                    output.original_format
-                                ));
-                                output.preview.show_view(
+                                ui.label(format!("Depth format: {:?}", output.original_format));
+                                output.preview.size(128., 128.).show_view(
                                     ui,
                                     &mut egui_renderer.renderer,
                                     device,
@@ -284,8 +318,11 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
 }
 
 pub fn sys_egui_tiles(world: &mut World) {
-    // If CSM exists, convert every depth layer to RGBA so egui can display
-    // them (depth-format textures cannot be sampled by egui_wgpu directly).
+    // Convert depth textures to RGBA so egui can display them
+    // (depth-format textures cannot be sampled by egui_wgpu directly).
+    if world.contains_resource::<ShadowMap>() {
+        convert_shadow_map_depth_to_rgba(world);
+    }
     if world.contains_resource::<CascadeShadowMapping>() {
         convert_csm_depth_to_rgba(world);
     }
@@ -325,15 +362,15 @@ pub fn sys_egui_tiles(world: &mut World) {
 
 fn convert_csm_depth_to_rgba(world: &mut World) {
     // Lazily create the converter resource on first use.
-    if !world.contains_resource::<DepthToRgbaConverter>() {
+    if !world.contains_resource::<CsmDepthToRgbaConverter>() {
         let converter = {
             let rs = world.resource::<RenderState>();
-            DepthToRgbaConverter::new(&rs.device)
+            CsmDepthToRgbaConverter::new(&rs.device)
         };
         world.insert_resource(converter);
     }
 
-    world.resource_scope(|world, mut converter: Mut<DepthToRgbaConverter>| {
+    world.resource_scope(|world, mut converter: Mut<CsmDepthToRgbaConverter>| {
         let csm = world.resource::<CascadeShadowMapping>();
         let rs = world.resource::<RenderState>();
 
@@ -351,6 +388,80 @@ fn convert_csm_depth_to_rgba(world: &mut World) {
             size.height,
             format,
         );
+    });
+}
+
+fn convert_shadow_map_depth_to_rgba(world: &mut World) {
+    if !world.contains_resource::<ShadowMap>() {
+        return;
+    }
+
+    if !world.contains_resource::<ShadowMapPreviewState>() {
+        let converter = {
+            let rs = world.resource::<RenderState>();
+            DepthToRgbaConverter::new(&rs.device)
+        };
+        world.insert_resource(ShadowMapPreviewState {
+            converter,
+            rgba_tex: None,
+            rgba_view: None,
+            preview: TexturePreview::new(),
+            width: 0,
+            height: 0,
+        });
+    }
+
+    world.resource_scope(|world, mut state: Mut<ShadowMapPreviewState>| {
+        let shadow_map = world.resource::<ShadowMap>();
+        let rs = world.resource::<RenderState>();
+        let device = &rs.device;
+        let queue = &rs.queue;
+
+        let tex = &shadow_map.image.texture;
+        let size = tex.size();
+        let w = size.width;
+        let h = size.height;
+
+        if state
+            .rgba_tex
+            .as_ref()
+            .map_or(true, |t| t.size().width != w || t.size().height != h)
+        {
+            let out_tex = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("shadow_map depth_to_rgba output"),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let out_view = out_tex.create_view(&Default::default());
+            state.rgba_tex = Some(out_tex);
+            state.rgba_view = Some(out_view);
+            state.width = w;
+            state.height = h;
+            state.preview.invalidate();
+        }
+
+        if let Some(ref output_view) = state.rgba_view {
+            let mut encoder =
+                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
+            state.converter.convert_to(
+                device,
+                &mut encoder,
+                &shadow_map.image.view,
+                output_view,
+                w,
+                h,
+            );
+            queue.submit(std::iter::once(encoder.finish()));
+        }
     });
 }
 

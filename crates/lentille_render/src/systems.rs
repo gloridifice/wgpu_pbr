@@ -8,7 +8,7 @@ use crate::{
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
-    shadow_mapping::{CascadeShadowMapping, LayerContext},
+    shadow_mapping::csm::{CascadeShadowMapping, LayerContext},
     skybox::SkyboxPipeline,
     stage::RenderContext,
     transparent::TransparentPipeline,
@@ -43,7 +43,7 @@ pub fn sys_render_cascade_shadow_mapping_pass(
         } = &csm.layers[i];
 
         let mut csm_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Shadow Mapping Light Depth Render Pass"),
+            label: Some("CSM Pass"),
             multiview_mask: None,
             color_attachments: &[],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
@@ -77,7 +77,7 @@ pub fn sys_render_shadow_mapping_pass(
 
     // let render_light = world.resource::<RenderLight>();
     let mut shadow_map_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Shadow Mapping Light Depth Render Pass"),
+        label: Some("Shadow Mapping Pass"),
         multiview_mask: None,
         color_attachments: &[],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {

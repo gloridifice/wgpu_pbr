@@ -11,6 +11,10 @@ use wgpu::{
 
 use super::texture_preview::TexturePreview;
 
+// ---------------------------------------------------------------------------
+// Shared WGSL
+// ---------------------------------------------------------------------------
+
 const DEPTH_TO_RGBA_SHADER: &str = r#"
 @group(0) @binding(0) var depth_tex: texture_depth_2d;
 @group(0) @binding(1) var out_tex: texture_storage_2d<rgba8unorm, write>;
@@ -22,27 +26,18 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 "#;
 
-/// Holds the RGBA output for one converted depth layer, plus the cached
-/// [`TexturePreview`] state so egui does not re-register every frame.
-pub struct DepthLayerOutput {
-    pub rgba_tex: wgpu::Texture,
-    pub rgba_view: wgpu::TextureView,
-    pub preview: TexturePreview,
-    pub width: u32,
-    pub height: u32,
-    pub original_format: wgpu::TextureFormat,
-}
+// ---------------------------------------------------------------------------
+// General-purpose depth → RGBA compute pipeline
+// ---------------------------------------------------------------------------
 
-/// Compute-pipeline resource that converts depth textures to RGBA8 for
-/// display in egui.
+/// Stateless compute pipeline that converts a single depth texture view
+/// into a [`TextureFormat::Rgba8Unorm`] output.
 ///
-/// Create once with [`DepthToRgbaConverter::new`], then call [`convert`]
-/// each frame before the egui UI is built.
-#[derive(Resource)]
+/// Call [`convert_to`](Self::convert_to) to record one dispatch into an
+/// existing [`wgpu::CommandEncoder`].
 pub struct DepthToRgbaConverter {
     pipeline: wgpu::ComputePipeline,
     bind_group_layout: wgpu::BindGroupLayout,
-    outputs: Vec<DepthLayerOutput>,
 }
 
 impl DepthToRgbaConverter {
@@ -96,6 +91,73 @@ impl DepthToRgbaConverter {
         Self {
             pipeline,
             bind_group_layout,
+        }
+    }
+
+    /// Record one dispatch that reads `depth_view` and writes into
+    /// `output_view`.  Caller is responsible for creating both the encoder
+    /// and the output texture (with [`TextureUsages::STORAGE_BINDING`]).
+    pub fn convert_to(
+        &self,
+        device: &wgpu::Device,
+        encoder: &mut wgpu::CommandEncoder,
+        depth_view: &wgpu::TextureView,
+        output_view: &wgpu::TextureView,
+        width: u32,
+        height: u32,
+    ) {
+        let bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("depth_to_rgba bind group"),
+            layout: &self.bind_group_layout,
+            entries: &[
+                BindGroupEntry {
+                    binding: 0,
+                    resource: BindingResource::TextureView(depth_view),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::TextureView(output_view),
+                },
+            ],
+        });
+
+        let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
+            label: Some("depth_to_rgba"),
+            timestamp_writes: None,
+        });
+        cpass.set_pipeline(&self.pipeline);
+        cpass.set_bind_group(0, &bind_group, &[]);
+        cpass.dispatch_workgroups((width + 7) / 8, (height + 7) / 8, 1);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CSM-specific wrapper (output management + preview state)
+// ---------------------------------------------------------------------------
+
+/// Holds the RGBA output for one converted CSM depth layer, plus the
+/// cached [`TexturePreview`] state so egui does not re-register every frame.
+pub struct CsmDepthLayerOutput {
+    pub rgba_tex: wgpu::Texture,
+    pub rgba_view: wgpu::TextureView,
+    pub preview: TexturePreview,
+    pub width: u32,
+    pub height: u32,
+    pub original_format: wgpu::TextureFormat,
+}
+
+/// Manages per-frame depth→RGBA conversion of CSM layers and caches
+/// the output textures + [`TexturePreview`] state for the egui UI.
+#[derive(Resource)]
+pub struct CsmDepthToRgbaConverter {
+    inner: DepthToRgbaConverter,
+    outputs: Vec<CsmDepthLayerOutput>,
+}
+
+impl CsmDepthToRgbaConverter {
+    pub fn new(device: &wgpu::Device) -> Self {
+        Self {
+            inner: DepthToRgbaConverter::new(device),
             outputs: Vec::new(),
         }
     }
@@ -119,29 +181,14 @@ impl DepthToRgbaConverter {
 
         for (i, depth_view) in depth_views.iter().enumerate() {
             let output = &self.outputs[i];
-
-            let bind_group = device.create_bind_group(&BindGroupDescriptor {
-                label: Some("depth_to_rgba bind group"),
-                layout: &self.bind_group_layout,
-                entries: &[
-                    BindGroupEntry {
-                        binding: 0,
-                        resource: BindingResource::TextureView(depth_view),
-                    },
-                    BindGroupEntry {
-                        binding: 1,
-                        resource: BindingResource::TextureView(&output.rgba_view),
-                    },
-                ],
-            });
-
-            let mut cpass = encoder.begin_compute_pass(&ComputePassDescriptor {
-                label: Some("depth_to_rgba"),
-                timestamp_writes: None,
-            });
-            cpass.set_pipeline(&self.pipeline);
-            cpass.set_bind_group(0, &bind_group, &[]);
-            cpass.dispatch_workgroups((width + 7) / 8, (height + 7) / 8, 1);
+            self.inner.convert_to(
+                device,
+                &mut encoder,
+                depth_view,
+                &output.rgba_view,
+                width,
+                height,
+            );
         }
 
         queue.submit(std::iter::once(encoder.finish()));
@@ -149,14 +196,11 @@ impl DepthToRgbaConverter {
 
     /// Mutable access to the per-layer outputs (including their
     /// [`TexturePreview`] caches) for use in egui UI code.
-    pub fn outputs_mut(&mut self) -> &mut [DepthLayerOutput] {
+    pub fn outputs_mut(&mut self) -> &mut [CsmDepthLayerOutput] {
         &mut self.outputs
     }
 
-    // -----------------------------------------------------------------------
-    // internals
-    // -----------------------------------------------------------------------
-
+    // -------------------------------------------------------------------
     fn ensure_outputs(
         &mut self,
         device: &wgpu::Device,
@@ -165,12 +209,11 @@ impl DepthToRgbaConverter {
         height: u32,
         original_format: wgpu::TextureFormat,
     ) {
-        // Drop outputs whose size no longer matches.
         self.outputs.retain(|o| o.width == width && o.height == height);
 
         while self.outputs.len() < count {
             let tex = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("depth_to_rgba output"),
+                label: Some("csm_depth_to_rgba output"),
                 size: wgpu::Extent3d {
                     width,
                     height,
@@ -185,7 +228,7 @@ impl DepthToRgbaConverter {
             });
             let view = tex.create_view(&TextureViewDescriptor::default());
 
-            self.outputs.push(DepthLayerOutput {
+            self.outputs.push(CsmDepthLayerOutput {
                 rgba_tex: tex,
                 rgba_view: view,
                 preview: TexturePreview::new(),
