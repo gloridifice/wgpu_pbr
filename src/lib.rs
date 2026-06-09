@@ -13,12 +13,16 @@ use lentille_render::{
     camera::RenderTargetConfig,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
+    shadow_mapping::csm::CsmConfig,
     skybox::{Skybox, prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path},
     utils::cube::CubeVerticesBuffer,
 };
 
 use crate::{
-    control::{ControlPlugin, camera::CameraController},
+    control::{
+        ControlPlugin,
+        camera::{CameraController, MainCamera},
+    },
     editor::EditorPlugin,
 };
 
@@ -44,7 +48,7 @@ impl Plugin for WgpuPbrPlugin {
                 Startup,
                 (sys_generate_plane_scene, sys_startup_light_and_environment),
             )
-            .add_systems(Update, sys_update_rotation);
+            .add_systems(Update, (sys_update_rotation, sys_gizmo));
     }
 }
 
@@ -205,6 +209,17 @@ pub fn sys_generate_plane_scene(world: &mut World) {
         )
         .unwrap();
 
+    world
+        .run_system_once_with(
+            sys_generate_single_model,
+            (
+                AssetPath::new("models/rough_mountaintop_landscape.glb"),
+                "Landscape".to_string(),
+                1.0,
+            ),
+        )
+        .unwrap();
+
     queue.apply(world);
 }
 
@@ -282,9 +297,15 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
 
 pub fn sys_spawn_camera(mut commands: Commands) {
     commands.spawn((
+        MainCamera,
         Camera {
             fovy: 50.0,
             ..Camera::new(1.0)
+        },
+        CsmConfig {
+            level_count: 4,
+            texture_size: 2048,
+            linear_log_factor: 0.5,
         },
         RenderTargetConfig::Texture {
             width: 1600,
@@ -301,6 +322,24 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             .build()
             .unwrap(),
         Name::new("相机"),
+    ));
+
+    commands.spawn((
+        Name::new("Game camera"),
+        Camera {
+            fovy: 50.0,
+            ..Camera::new(1.0)
+        },
+        CsmConfig {
+            level_count: 4,
+            texture_size: 2048,
+            linear_log_factor: 0.5,
+        },
+        RenderTargetConfig::Texture {
+            width: 1600,
+            height: 900,
+            format: SCREEN_FORMAT,
+        },
     ));
 }
 
@@ -383,4 +422,23 @@ pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> Up
         cube_vertices_buffer,
     )
     .unwrap()
+}
+
+fn sys_gizmo(
+    lights: Query<(&PointLight, &WorldTransform)>,
+    camera: Query<&WorldTransform, (With<Camera>, Without<MainCamera>)>,
+) {
+    for (light, trans) in lights.iter() {
+        Gizmo::dot(trans.position, 0.1, light.color.into());
+    }
+
+    for transform in camera.iter() {
+        Gizmo::line(
+            transform.position,
+            transform.position + transform.forward() * 2.0,
+            Color::GREEN,
+        );
+
+        Gizmo::dot(transform.position, 0.5, Color::GREEN);
+    }
 }

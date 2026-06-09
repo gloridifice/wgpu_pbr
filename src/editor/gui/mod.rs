@@ -19,8 +19,10 @@ use lentille_render::{
     app_ext::AppExt,
     camera::{Camera, RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
-    shadow_mapping::ShadowMap,
-    shadow_mapping::csm::CascadeShadowMapping,
+    shadow_mapping::{
+        ShadowMap,
+        csm::{CascadeShadowMapping, CsmConfig},
+    },
 };
 
 use components::{
@@ -28,7 +30,7 @@ use components::{
     texture_preview::TexturePreview, world_tree,
 };
 
-use crate::egui_renderer::EguiRenderer;
+use crate::{control::camera::MainCamera, egui_renderer::EguiRenderer};
 
 pub mod components;
 
@@ -178,6 +180,13 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
             Pane::RightPanel => {
                 let device: &wgpu::Device = unsafe { &**device };
 
+                {
+                    let mut config_query = world.query::<&mut CsmConfig>();
+                    if let Ok(mut config) = config_query.single_mut(world) {
+                        ui.add(egui::Slider::new(&mut config.linear_log_factor, 0.0..=1.0));
+                    }
+                }
+
                 ScrollArea::vertical().show(ui, |ui| {
                     // --- ShadowMap single preview ---
                     if let Some(mut state) = world.get_resource_mut::<ShadowMapPreviewState>() {
@@ -208,10 +217,14 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                     ui.colored_label(Color32::LIGHT_YELLOW, "CSM Depth Layers");
                     ui.separator();
 
-                    if let Some(mut converter) = world.get_resource_mut::<CsmDepthToRgbaConverter>()
-                    {
-                        for (i, output) in converter.outputs_mut().iter_mut().enumerate() {
-                            ui.collapsing(format!("Cascade {}", i), |ui| {
+                    let mut has_preview = false;
+                    let mut converter_query =
+                        world.query::<(&mut CsmDepthToRgbaConverter, &Name)>();
+                    for (mut converter, name) in converter_query.iter_mut(world) {
+                        has_preview = true;
+                        ui.collapsing(name.as_str(), |ui| {
+                            for (i, output) in converter.outputs_mut().iter_mut().enumerate() {
+                                ui.label(format!("Cascade {}", i));
                                 ui.label(format!("Depth format: {:?}", output.original_format));
                                 output.preview.size(128., 128.).show_view(
                                     ui,
@@ -225,9 +238,10 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                                     },
                                     wgpu::TextureFormat::Rgba8Unorm,
                                 );
-                            });
-                        }
-                    } else {
+                            }
+                        });
+                    }
+                    if !has_preview {
                         ui.colored_label(Color32::GRAY, "No depth data available");
                     }
                 });
@@ -293,7 +307,7 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                 }
 
                 if let Ok(mut target_size) = world
-                    .query_filtered::<&mut RenderTargetSize, With<Camera>>()
+                    .query_filtered::<&mut RenderTargetSize, With<MainCamera>>()
                     .single_mut(world)
                 {
                     let new_w = size.x as u32;
@@ -323,8 +337,15 @@ pub fn sys_egui_tiles(world: &mut World) {
     if world.contains_resource::<ShadowMap>() {
         convert_shadow_map_depth_to_rgba(world);
     }
-    if world.contains_resource::<CascadeShadowMapping>() {
-        convert_csm_depth_to_rgba(world);
+    {
+        let has_csm = world
+            .query::<&CascadeShadowMapping>()
+            .iter(world)
+            .next()
+            .is_some();
+        if has_csm {
+            convert_csm_depth_to_rgba(world);
+        }
     }
 
     let mut tree = create_tree();
@@ -361,34 +382,54 @@ pub fn sys_egui_tiles(world: &mut World) {
 }
 
 fn convert_csm_depth_to_rgba(world: &mut World) {
-    // Lazily create the converter resource on first use.
-    if !world.contains_resource::<CsmDepthToRgbaConverter>() {
-        let converter = {
-            let rs = world.resource::<RenderState>();
-            CsmDepthToRgbaConverter::new(&rs.device)
-        };
-        world.insert_resource(converter);
+    let mut csm_data: Vec<(
+        Entity,
+        Vec<std::sync::Arc<wgpu::TextureView>>,
+        u32,
+        u32,
+        wgpu::TextureFormat,
+    )> = Vec::new();
+    {
+        let mut query = world.query::<(Entity, &CascadeShadowMapping)>();
+        for (entity, csm) in query.iter(world) {
+            let views: Vec<_> = csm.layers.iter().map(|l| l.view.clone()).collect();
+            let size = csm.shadow_maps.size();
+            csm_data.push((
+                entity,
+                views,
+                size.width,
+                size.height,
+                csm.shadow_maps.format(),
+            ));
+        }
     }
 
-    world.resource_scope(|world, mut converter: Mut<CsmDepthToRgbaConverter>| {
-        let csm = world.resource::<CascadeShadowMapping>();
+    if csm_data.is_empty() {
+        return;
+    }
+
+    let (device_ptr, queue_ptr): (*const wgpu::Device, *const wgpu::Queue) = {
         let rs = world.resource::<RenderState>();
+        (
+            &rs.device as *const wgpu::Device,
+            &rs.queue as *const wgpu::Queue,
+        )
+    };
 
-        let depth_views: Vec<&wgpu::TextureView> =
-            csm.layers.iter().map(|l| l.view.as_ref()).collect();
+    for (entity, depth_refs, w, h, format) in &csm_data {
+        let mut entity_mut = world.entity_mut(*entity);
+        if !entity_mut.contains::<CsmDepthToRgbaConverter>() {
+            let device: &wgpu::Device = unsafe { &*device_ptr };
+            entity_mut.insert(CsmDepthToRgbaConverter::new(device));
+        }
 
-        let size = csm.shadow_maps.size();
-        let format = csm.shadow_maps.format();
+        let device: &wgpu::Device = unsafe { &*device_ptr };
+        let queue: &wgpu::Queue = unsafe { &*queue_ptr };
+        let depth_views: Vec<&wgpu::TextureView> = depth_refs.iter().map(|v| v.as_ref()).collect();
 
-        converter.convert(
-            &rs.device,
-            &rs.queue,
-            &depth_views,
-            size.width,
-            size.height,
-            format,
-        );
-    });
+        let mut converter = entity_mut.get_mut::<CsmDepthToRgbaConverter>().unwrap();
+        converter.convert(device, queue, &depth_views, *w, *h, *format);
+    }
 }
 
 fn convert_shadow_map_depth_to_rgba(world: &mut World) {
@@ -488,7 +529,7 @@ fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
 fn sys_on_resize_scene_render_target(
     event: On<RenderTargetResizedEvent>,
     mut egui_tex_id: ResMut<RenderTargetEguiTexId>,
-    q_camera: Query<&RenderTarget>,
+    q_camera: Query<&RenderTarget, With<MainCamera>>,
     mut egui: ResMut<EguiRenderer>,
     rs: Res<RenderState>,
 ) {

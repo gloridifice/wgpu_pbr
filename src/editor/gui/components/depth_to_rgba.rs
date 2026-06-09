@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use bevy_ecs::prelude::Resource;
+use bevy_ecs::prelude::Component;
 use wgpu::{
     BindGroupDescriptor, BindGroupEntry, BindGroupLayoutDescriptor, BindGroupLayoutEntry,
     BindingResource, BindingType, ComputePassDescriptor, ComputePipelineDescriptor,
@@ -148,7 +148,7 @@ pub struct CsmDepthLayerOutput {
 
 /// Manages per-frame depth→RGBA conversion of CSM layers and caches
 /// the output textures + [`TexturePreview`] state for the egui UI.
-#[derive(Resource)]
+#[derive(Component)]
 pub struct CsmDepthToRgbaConverter {
     inner: DepthToRgbaConverter,
     outputs: Vec<CsmDepthLayerOutput>,

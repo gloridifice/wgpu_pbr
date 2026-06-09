@@ -19,6 +19,9 @@ impl Plugin for CameraControlPlugin {
     }
 }
 
+#[derive(Component, Default, Clone, Copy)]
+pub struct MainCamera;
+
 #[derive(Component, Clone, Default)]
 pub struct CameraController {
     pub row: f32,

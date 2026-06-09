@@ -1,7 +1,6 @@
 use std::{env, path::Path};
 
 use bevy_app::App;
-use tracing_subscriber::{EnvFilter, layer::SubscriberExt, util::SubscriberInitExt};
 use wgpu_pbr::WgpuPbrPlugin;
 
 fn main() {

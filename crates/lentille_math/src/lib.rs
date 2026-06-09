@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Sub};
 
-use cgmath::Point3;
+use cgmath::{Point3, VectorSpace};
 
 #[allow(unused)]
 pub use cgmath::{Deg, Euler, InnerSpace, Rad, Rotation3};
@@ -20,10 +20,19 @@ pub struct Color {
 
 impl Color {
     pub const WHITE: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+    pub const RED: Color = Color::new(1.0, 0.0, 0.0, 1.0);
+    pub const BLUE: Color = Color::new(0.0, 0.0, 1.0, 1.0);
+    pub const GREEN: Color = Color::new(0.0, 1.0, 0.0, 1.0);
 
     pub const fn new(r: f32, g: f32, b: f32, a: f32) -> Self {
         Self {
             vec4: Vec4::new(r, g, b, a),
+        }
+    }
+
+    pub fn lerp(&self, other: &Color, factor: f32) -> Color {
+        Self {
+            vec4: self.vec4.lerp(other.vec4, factor),
         }
     }
 
@@ -123,6 +132,7 @@ pub trait Vector3Ext {
 
 #[allow(unused)]
 pub trait Vector4Ext {
+    fn xyz(&self) -> Vec3;
     fn new_w(w: f32) -> Self;
     fn new_z(z: f32) -> Self;
 }
@@ -193,6 +203,10 @@ impl Vector4Ext for Vec4 {
 
     fn new_w(w: f32) -> Self {
         Self::new(0., 0., 0., w)
+    }
+
+    fn xyz(&self) -> Vec3 {
+        Vec3::new(self.x, self.y, self.z)
     }
 }
 

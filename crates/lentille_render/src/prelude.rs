@@ -13,6 +13,7 @@ pub use crate::{
         object_binding::ObjectBindGroupLayout,
     },
     camera::Camera,
+    gizmo::Gizmo,
     graph::{after, before},
     image::{UploadedImage, UploadedImageWithSampler},
     light::{parallel_light::ParallelLight, point_light::PointLight},

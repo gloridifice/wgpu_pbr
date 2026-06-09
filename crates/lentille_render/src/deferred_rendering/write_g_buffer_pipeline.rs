@@ -275,17 +275,23 @@ fn sys_create_deferred_g_buffer(
 
 fn sys_resize_g_buffer_texture(
     event: On<RenderTargetResizedEvent>,
-    q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
+    mut q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
     no_filter_sampler: Res<NoFilterClampSampler>,
 ) {
-    for mut bg in q_camera {
+    let RenderTargetResizedEvent {
+        render_target_entity,
+        new_width,
+        new_height,
+    } = *event;
+
+    if let Ok(mut bg) = q_camera.get_mut(render_target_entity) {
         *bg.as_mut() = GBufferTexturesBindGroup::new(
             &rs.device,
             Extent3d {
-                width: event.new_width,
-                height: event.new_height,
+                width: new_width,
+                height: new_height,
                 depth_or_array_layers: 1,
             },
             &bgl.layout,

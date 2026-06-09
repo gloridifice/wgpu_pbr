@@ -23,6 +23,7 @@ use crate::{
     camera::CameraPlugin,
     cubemap::CubemapPlugin,
     deferred_rendering::DeferredRenderingPlugin,
+    gizmo::GizmoPlugin,
     graph::after,
     light::LightPlugin,
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
@@ -40,6 +41,7 @@ pub mod blit;
 pub mod camera;
 pub mod cubemap;
 pub mod deferred_rendering;
+pub mod gizmo;
 pub mod graph;
 pub mod image;
 pub mod light;
@@ -91,6 +93,7 @@ impl Plugin for RenderPlugin {
             BaseAssetsPlugin,
             DeferredRenderingPlugin,
             BlitPlugin,
+            GizmoPlugin,
         ))
         .init_resource::<ShaderLoader>()
         .init_resource::<RenderState>();

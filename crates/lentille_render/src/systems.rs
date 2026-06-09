@@ -30,10 +30,16 @@ const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
 
 pub fn sys_render_cascade_shadow_mapping_pass(
     mut ctx: InMut<RenderContext>,
-    csm: Res<CascadeShadowMapping>,
+    csm: Query<&CascadeShadowMapping>,
     mesh_renderers: Query<&MeshRenderer, With<CastShadow>>,
 ) {
-    let encoder = &mut ctx.encoder;
+    let RenderContext {
+        camera_id, encoder, ..
+    } = &mut ctx.0;
+
+    let Ok(csm) = csm.get(*camera_id) else {
+        return;
+    };
 
     for i in 0..csm.levels {
         let LayerContext {
