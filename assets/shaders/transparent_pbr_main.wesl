@@ -1,5 +1,5 @@
-import package::libs::vertex::{ VertexInput };
-import package::libs::primary::pbr_type::{ StandardMaterial, PBRSurface };
+import package::libs::vertex::{VertexInput};
+import package::libs::primary::pbr_type::{StandardMaterial, PBRSurface};
 import package::libs::primary::pbr_type;
 import package::libs::pbr_functions;
 import package::libs::pbr_functions::{
@@ -73,8 +73,7 @@ fn fs_main(
     let base_color = base_color4.xyz;
     let world_pos = in.world_pos;
 
-    let f0: vec3<f32> =
-        vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
+    let f0: vec3<f32> = vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
 
     var diffuse_color = vec3f(0.0);
@@ -118,18 +117,18 @@ fn fs_main(
 
     // + Image based Lighting
     let ibl_result = ibl_functions::evaluate_ibl_separately(
-                        surface.normal,
-                        world2camera,
-                        base_color,
-                        f0,
-                        surface.material.perceptual_roughness
-                    );
+        surface.normal,
+        world2camera,
+        base_color,
+        f0,
+        surface.material.perceptual_roughness
+    );
 
     diffuse_color += ibl_result.diffuse;
     specular_color += ibl_result.specular;
 
     /// -- Shadowing --
-    let shadow = shadow::sample_directional_shadow(world_pos);
+    let shadow = shadow::shadow(world_pos);
     let shadow_factor = mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
     diffuse_color *= shadow_factor;
     specular_color *= shadow_factor;

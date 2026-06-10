@@ -2,7 +2,7 @@ import package::libs::vertex::{FullscreenV2F};
 import package::libs::primary::pbr_type::{PBRSurface, unpack_g_buffer};
 import package::libs::primary::global_bindings::{
     camera, light, directional_shadow_map, directional_shadow_map_comparison_sampler,
-    env_cubemap, env_cubemap_sampler,
+    env_cubemap, env_cubemap_sampler, csm_bounds
 };
 import package::libs::ibl_functions;
 import package::libs::pbr_functions;
@@ -87,7 +87,7 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     surface_color += ibl;
 
     /// -- Shadowing --
-    let shadow = shadow::sample_directional_shadow(world_pos);
+    let shadow = shadow::shadow(world_pos);
     surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
 
     return vec4<f32>(surface_color, 1.0);

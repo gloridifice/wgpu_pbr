@@ -10,7 +10,7 @@ impl FromWorld for GlobalBindGroupLayout {
             ["Main PBR Global Bind Group Layout"]
             0: ShaderStages::all() => BGLEntry::UniformBuffer(); // Camera
             1: ShaderStages::all() => BGLEntry::UniformBuffer(); // Light
-            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Depth); // Depth
+            2: ShaderStages::FRAGMENT => BGLEntry::Tex2DArray(false, wgpu::TextureSampleType::Depth); // Depth
             3: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Comparison); // Depth
             4: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true }); // DFG
             5: ShaderStages::FRAGMENT => BGLEntry::TexCube(false, wgpu::TextureSampleType::Float { filterable: true }); // Skybox
@@ -19,6 +19,7 @@ impl FromWorld for GlobalBindGroupLayout {
 
             8: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: true}); // Sampleable Color Target
             9: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::Filtering); // Sampleable Color Target
+            10: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer(); // Csm bounds
         };
 
         let rs = world.resource::<RenderState>();

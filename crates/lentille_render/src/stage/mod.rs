@@ -5,11 +5,11 @@ use crate::{
     base_assets::{DFGTexture, NoFilterClampSampler},
     bindings::global_binding::GlobalBindGroupLayout,
     camera::{CameraBuffer, RenderTarget, TargetType},
-    gizmo::{GizmoPrimitive, GIZMO_BUFFER},
+    gizmo::{GIZMO_BUFFER, GizmoPrimitive},
     graph::{InsertConfig, TypeIdGraph},
     light::LightUnifromBuffer,
     prelude::*,
-    shadow_mapping::ShadowMap,
+    shadow_mapping::{ShadowMap, csm::CascadeShadowMapping},
     skybox::{DefaultSkybox, SkyboxSHBuffer},
 };
 use bevy_app::Plugin;
@@ -40,8 +40,8 @@ pub struct RenderStageManager {
 pub struct RenderContext {
     pub camera_id: Entity,
     pub encoder: wgpu::CommandEncoder,
-    pub color_target: Arc<UploadedImage>,
     pub camera_global_bind_group: Arc<BindGroup>,
+    pub color_target: Arc<UploadedImage>,
     pub depth_target: Option<Arc<UploadedImage>>,
     pub gizmo_primitives: Arc<Vec<GizmoPrimitive>>,
 }
@@ -99,7 +99,12 @@ impl RenderStage {
 pub fn sys_render(
     mut commands: Commands,
     mut render_stage_manager: ResMut<RenderStageManager>,
-    mut q_camera: Query<(Entity, &CameraBuffer, &mut RenderTarget)>,
+    mut q_camera: Query<(
+        Entity,
+        &CameraBuffer,
+        &mut RenderTarget,
+        &CascadeShadowMapping,
+    )>,
     rs: Res<RenderState>,
 
     light: Res<LightUnifromBuffer>,
@@ -121,7 +126,7 @@ pub fn sys_render(
         }
     };
 
-    for (camera_id, camera_buffer, mut camera_target) in q_camera.iter_mut() {
+    for (camera_id, camera_buffer, mut camera_target, csm) in q_camera.iter_mut() {
         let color_target = camera_target.next();
         let color_attachment = camera_target.get_attachment_color();
         let depth_target = camera_target.depth.clone();
@@ -144,14 +149,15 @@ pub fn sys_render(
                     ["Main PBR Global BindGroup"][&layout.0]
                     0: camera_buffer.buffer.as_entire_binding();
                     1: light.buffer.as_entire_binding();
-                    2: BindingResource::TextureView(&shadow_map.image.view);
-                    3: BindingResource::Sampler(&shadow_map.image.sampler);
+                    2: BindingResource::TextureView(&csm.full_view);
+                    3: BindingResource::Sampler(&csm.sampler);
                     4: BindingResource::TextureView(&dfg.texture.view);
                     5: BindingResource::TextureView(&skybox_texture.view);
                     6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
                     7: skybox_sh.buffer.as_entire_binding();
                     8: BindingResource::TextureView(&color_attachment.view);
                     9: BindingResource::Sampler(&no_filter_sampler.0);
+                    10: csm.csm_info_buffer.as_entire_binding();
                 };
 
                 Arc::new(device.create_bind_group(&bind_group_desc))

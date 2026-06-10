@@ -1,4 +1,8 @@
-use crate::{app_ext::AppExt, camera::OPENGL_TO_WGPU_MATRIX, prelude::*};
+use crate::{
+    app_ext::AppExt,
+    camera::{self, OPENGL_TO_WGPU_MATRIX},
+    prelude::*,
+};
 use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Single;
@@ -34,12 +38,32 @@ impl FromWorld for CsmShader {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GpuCsmBound {
+    pub light_space_matrix: [[f32; 4]; 4],
+    pub near: f32,
+    pub far: f32,
+    pub _padding: [f32; 2],
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GpuCsmInfoUniform {
+    pub texture_size: f32,
+    pub _padding: [f32; 3],
+    pub bounds: [GpuCsmBound; 8],
+}
+
+impl_pod_zeroable!(GpuCsmInfoUniform);
+
 #[derive(Component)]
 pub struct CascadeShadowMapping {
     pub levels: usize,
     pub pipeline: Arc<RenderPipeline>,
-    pub shadow_maps: Arc<wgpu::Texture>,
     pub layers: Vec<LayerContext>,
+    pub csm_info_buffer: Arc<Buffer>,
+    pub shadow_maps: Arc<wgpu::Texture>,
+    pub sampler: Arc<Sampler>,
+    pub full_view: Arc<TextureView>,
 }
 
 impl CascadeShadowMapping {
@@ -51,7 +75,7 @@ impl CascadeShadowMapping {
     ) -> Self {
         let device = &rs.device;
 
-        let texture_array = Arc::new(device.create_texture(&TextureDescriptor {
+        let shadow_maps = Arc::new(device.create_texture(&TextureDescriptor {
             label: Some("CSM Texture Array"),
             size: Extent3d {
                 width: config.texture_size,
@@ -65,6 +89,8 @@ impl CascadeShadowMapping {
             usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
             view_formats: &[],
         }));
+
+        let full_view = Arc::new(shadow_maps.create_view(&wgpu::TextureViewDescriptor::default()));
 
         let mut layers = Vec::new();
 
@@ -87,7 +113,7 @@ impl CascadeShadowMapping {
                 0: mat_buffer.as_entire_binding();
             )));
 
-            let view = Arc::new(texture_array.create_view(&wgpu::TextureViewDescriptor {
+            let view = Arc::new(shadow_maps.create_view(&wgpu::TextureViewDescriptor {
                 label: Some("CSM View Layer"),
                 dimension: Some(TextureViewDimension::D2),
                 format: Some(TextureFormat::Depth32Float),
@@ -102,6 +128,13 @@ impl CascadeShadowMapping {
                 mat_bind_group,
             });
         }
+
+        let csm_info_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Csm Bounds Buffer"),
+            size: size_of::<GpuCsmInfoUniform>() as u64,
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        }));
 
         let pipeline_layout = Arc::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
@@ -157,11 +190,19 @@ impl CascadeShadowMapping {
             }),
         );
 
+        let sampler = Arc::new(camera::create_depth_sampler(
+            Some(wgpu::CompareFunction::LessEqual),
+            device,
+        ));
+
         Self {
             levels: config.level_count as usize,
             pipeline,
-            shadow_maps: texture_array,
+            shadow_maps,
             layers,
+            csm_info_buffer,
+            full_view,
+            sampler,
         }
     }
 }
@@ -195,24 +236,43 @@ pub fn sys_update_csm_buffers(
             Some(csm) => {
                 let inv_cam_view_proj = camera.view_proj.invert().unwrap_or(Mat4::identity());
                 let bounds = calculate_csm_ndc_bounds(
-                    4,
-                    camera.znear as f64,
-                    camera.zfar as f64,
-                    config.linear_log_factor as f64,
+                    csm.levels,
+                    camera.znear,
+                    camera.zfar,
+                    config.linear_log_factor,
                     false,
                 );
-                for i in 0..csm.levels {
-                    let bound = &bounds[i];
+
+                let mut gpu_bounds: [GpuCsmBound; 8] = Default::default();
+                bounds.iter().enumerate().for_each(|(i, bound)| {
                     let mat4: [[f32; 4]; 4] = calculate_cascade_matrix(
                         light_dir,
                         inv_cam_view_proj,
-                        bound.near_ndc as f32,
-                        bound.far_ndc as f32,
+                        bound.near_ndc,
+                        bound.far_ndc,
                     )
                     .into();
+                    // Write each layer matrix buffer
                     rs.queue
                         .write_buffer(&csm.layers[i].mat_buffer, 0, bytemuck::bytes_of(&mat4));
-                }
+                    gpu_bounds[i] = GpuCsmBound {
+                        near: bound.near_ndc,
+                        far: bound.far_ndc,
+                        light_space_matrix: mat4,
+                        _padding: Default::default(),
+                    };
+                });
+
+                // Write all bounds buffer for main pass
+                rs.queue.write_buffer(
+                    &csm.csm_info_buffer,
+                    0,
+                    bytemuck::bytes_of(&GpuCsmInfoUniform {
+                        bounds: gpu_bounds,
+                        texture_size: config.texture_size as f32,
+                        _padding: Default::default(),
+                    }),
+                );
             }
             None => {
                 commands.entity(id).insert(CascadeShadowMapping::new(
@@ -285,6 +345,7 @@ fn calculate_cascade_matrix(light_dir: Vec3, inv: Mat4, near: f32, far: f32) -> 
     // );
 
     // Column major
+    //由于
     let light_proj = ortho(min_x, max_x, min_y, max_y, min_z, max_z);
 
     let ret = OPENGL_TO_WGPU_MATRIX * light_proj * light_view;
@@ -295,32 +356,30 @@ fn calculate_cascade_matrix(light_dir: Vec3, inv: Mat4, near: f32, far: f32) -> 
 
 pub struct CascadeBounds {
     pub index: usize,
-    pub near_ndc: f64,
-    pub far_ndc: f64,
+    pub near_ndc: f32,
+    pub far_ndc: f32,
 }
 
 /// 计算 CSM 级联在 NDC 空间的划分边界
 ///
 /// # 参数
 /// * `segments` - 级联数量 (通常为 4)
-/// * `n` - 视锥体近平面距离 (Camera Near)
-/// * `f` - 视锥体远平面距离 (Camera Far)
 /// * `alpha` - 混合系数 (0.0 为纯线性，1.0 为纯对数)
 /// * `reversed_z` - 是否启用 Reversed-Z (DirectX/Vulkan 常规优化)
 pub fn calculate_csm_ndc_bounds(
     segments: usize,
-    n: f64,
-    f: f64,
-    alpha: f64,
+    camera_near: f32,
+    camera_far: f32,
+    alpha: f32,
     reversed_z: bool,
 ) -> Vec<CascadeBounds> {
     let mut z_view = Vec::with_capacity(segments + 1);
 
     // 1. 计算视空间（View Space）的线性分段点 Z_i
     for i in 0..=segments {
-        let ratio = i as f64 / segments as f64;
-        let z_log = n * (f / n).powf(ratio);
-        let z_lin = n + ratio * (f - n);
+        let ratio = i as f32 / segments as f32;
+        let z_log = camera_near * (camera_far / camera_near).powf(ratio);
+        let z_lin = camera_near + ratio * (camera_far - camera_near);
 
         let z_i = alpha * z_log + (1.0 - alpha) * z_lin;
         z_view.push(z_i);
@@ -328,7 +387,7 @@ pub fn calculate_csm_ndc_bounds(
 
     // 2. 将视空间 Z 值映射到 NDC 空间
     let mut bounds = Vec::with_capacity(segments);
-    let denom = f - n;
+    let denom = camera_far - camera_near;
 
     for i in 0..segments {
         let v_near = z_view[i];
@@ -336,13 +395,13 @@ pub fn calculate_csm_ndc_bounds(
 
         let (near_ndc, far_ndc) = if reversed_z {
             // Reversed-Z: 近平面为 1, 远平面为 0
-            let nz = (n / denom) * ((f / v_near) - 1.0);
-            let fz = (n / denom) * ((f / v_far) - 1.0);
+            let nz = (camera_near / denom) * ((camera_far / v_near) - 1.0);
+            let fz = (camera_near / denom) * ((camera_far / v_far) - 1.0);
             (nz, fz)
         } else {
             // Standard-Z: 近平面为 0, 远平面为 1
-            let nz = (f / denom) * (1.0 - (n / v_near));
-            let fz = (f / denom) * (1.0 - (n / v_far));
+            let nz = (camera_far / denom) * (1.0 - (camera_near / v_near));
+            let fz = (camera_far / denom) * (1.0 - (camera_near / v_far));
             (nz, fz)
         };
 

@@ -8,6 +8,7 @@ pub enum BGLEntry {
     StorageBuffer(bool),
     /// `(multisampled: bool, texture_sample_type: wgpu::TextureSampleType)`
     Tex2D(bool, wgpu::TextureSampleType),
+    Tex2DArray(bool, wgpu::TextureSampleType),
     TexCube(bool, wgpu::TextureSampleType),
     Sampler(wgpu::SamplerBindingType),
     Raw(BindGroupLayoutEntry),
@@ -42,6 +43,13 @@ impl BGLEntry {
                         view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled,
                     },
+                    BGLEntry::Tex2DArray(multisampled, texture_sample_type) => {
+                        BindingType::Texture {
+                            sample_type: texture_sample_type,
+                            view_dimension: wgpu::TextureViewDimension::D2Array,
+                            multisampled,
+                        }
+                    }
                     BGLEntry::TexCube(multisampled, texture_sample_type) => BindingType::Texture {
                         sample_type: texture_sample_type,
                         view_dimension: wgpu::TextureViewDimension::Cube,
