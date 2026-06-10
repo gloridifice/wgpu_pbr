@@ -18,6 +18,12 @@ import package::libs::light_bindings::{
 @group(1) @binding(1) var world_pos_tex: texture_2d<f32>;
 @group(1) @binding(2) var g_buffer_tex: texture_2d<u32>;
 
+fn skybox(ndc_xy: vec2<f32>) -> vec3<f32> {
+    let world_far = camera.inv_view_proj * vec4f(ndc_xy, 1.0, 1.0);
+    let dir = normalize(world_far.xyz / world_far.w - camera.position);
+    return textureSampleLevel(env_cubemap, env_cubemap_sampler, dir, 0.0).xyz;
+}
+
 @fragment
 fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let world_pos: vec3<f32> = textureSample(world_pos_tex, g_samp, in.uv).xyz;
@@ -26,16 +32,16 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let surface: PBRSurface = unpack_g_buffer(g_buffer);
 
     if all(surface.normal == vec3f(0.0)) {
-        discard;
+        return vec4f(skybox((in.uv - vec2f(0.5)) * vec2f(1.0, -1.0)), 1.0);
     }
+
+    var surface_color = vec3f(0.0);
 
     let metallic = surface.material.metallic;
     let base_color = surface.material.base_color.xyz;
 
     let f0: vec3<f32> = vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
-
-    var surface_color = vec3<f32>(0.0);
 
     let world2camera = -camera.direction;
     // + Parallel Lighting

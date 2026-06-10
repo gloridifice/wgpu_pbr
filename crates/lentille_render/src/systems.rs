@@ -9,10 +9,8 @@ use crate::{
     material::pbr::PBRMaterialOverride,
     prelude::*,
     shadow_mapping::csm::{CascadeShadowMapping, LayerContext},
-    skybox::SkyboxPipeline,
     stage::RenderContext,
     transparent::TransparentPipeline,
-    utils::cube::CubeVerticesBuffer,
 };
 use bevy_ecs::prelude::*;
 
@@ -164,8 +162,6 @@ pub fn sys_render_main_pass(
     ctx: InMut<RenderContext>,
     main_pipeline: Res<DeferredComputePipeline>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
-    skybox_pipeline: Res<SkyboxPipeline>,
-    cube_vertex_buffer: Res<CubeVerticesBuffer>,
     default_material: Res<DefaultPBRMaterial>,
     q_camera: Query<&GBufferTexturesBindGroup>,
 ) {
@@ -198,12 +194,8 @@ pub fn sys_render_main_pass(
         timestamp_writes: None,
     });
 
-    render_pass.set_pipeline(&skybox_pipeline.pipeline);
-    render_pass.set_bind_group(0, Some(camera_global_bind_group.as_ref()), &[]);
-    render_pass.set_vertex_buffer(0, cube_vertex_buffer.vertices_buffer.slice(..));
-    render_pass.draw(0..36, 0..1);
-
     render_pass.set_pipeline(&main_pipeline.pipeline);
+    render_pass.set_bind_group(0, Some(camera_global_bind_group.as_ref()), &[]);
     render_pass.set_bind_group(1, Some(g_buffer_bind_group.bind_group.as_ref()), &[]);
     render_pass.set_bind_group(2, Some(default_material.0.bind_group.as_ref()), &[]);
     render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);

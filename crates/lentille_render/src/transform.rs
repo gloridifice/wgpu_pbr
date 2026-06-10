@@ -120,12 +120,36 @@ impl Default for Transform {
 }
 
 impl Transform {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     #[allow(unused)]
-    pub fn with_position(pos: Vec3) -> Self {
+    pub fn from_position(pos: Vec3) -> Self {
         Self {
             position: pos,
             ..Default::default()
         }
+    }
+
+    pub fn position(mut self, value: Vec3) -> Self {
+        self.position = value;
+        self
+    }
+
+    pub fn rotation(mut self, value: Quat) -> Self {
+        self.rotation = value;
+        self
+    }
+
+    pub fn scale_vec3(mut self, value: Vec3) -> Self {
+        self.scale = value;
+        self
+    }
+
+    pub fn scale(mut self, value: f32) -> Self {
+        self.scale = Vec3::new_unit(value);
+        self
     }
 
     #[allow(unused)]

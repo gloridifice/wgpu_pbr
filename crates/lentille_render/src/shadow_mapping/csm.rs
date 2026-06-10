@@ -199,7 +199,7 @@ pub fn sys_update_csm_buffers(
                     camera.znear as f64,
                     camera.zfar as f64,
                     config.linear_log_factor as f64,
-                    true,
+                    false,
                 );
                 for i in 0..csm.levels {
                     let bound = &bounds[i];
@@ -278,11 +278,11 @@ fn calculate_cascade_matrix(light_dir: Vec3, inv: Mat4, near: f32, far: f32) -> 
         max_z * z_mult
     };
 
-    Gizmo::r#box(
-        Vec3::new(min_x, min_y, min_z),
-        Vec3::new(max_x, max_y, max_z),
-        Color::GREEN,
-    );
+    // Gizmo::r#box(
+    //     Vec3::new(min_x, min_y, min_z),
+    //     Vec3::new(max_x, max_y, max_z),
+    //     Color::GREEN,
+    // );
 
     // Column major
     let light_proj = ortho(min_x, max_x, min_y, max_y, min_z, max_z);

@@ -59,6 +59,7 @@ pub struct CameraBuffer {
 #[derive(Debug, Clone, Copy)]
 pub struct CameraUniform {
     pub view_proj: [[f32; 4]; 4],
+    pub inv_view_proj: [[f32; 4]; 4],
     pub position: [f32; 4],
     pub direction: [f32; 4],
     pub resolution: [f32; 4],
@@ -143,8 +144,12 @@ impl Camera {
     pub fn get_uniform(&self, transform: &WorldTransform, resolution: [f32; 2]) -> CameraUniform {
         let pos = transform.position;
         let dir = transform.forward();
+        let view_proj = self.build_view_projection_matrix(transform);
+        let inv_view_proj = view_proj.invert().unwrap_or(Mat4::identity());
+
         CameraUniform {
-            view_proj: self.build_view_projection_matrix(transform).into(),
+            view_proj: view_proj.into(),
+            inv_view_proj: inv_view_proj.into(),
             position: [pos.x, pos.y, pos.z, 1.],
             direction: [dir.x, dir.y, dir.z, 1.],
             resolution: [resolution[0], resolution[1], 0.0, 0.0],
@@ -444,6 +449,14 @@ pub fn create_color_render_target_image(
         height: height,
         depth_or_array_layers: 1,
     };
+    // 对 sRGB 颜色目标额外暴露其线性对应格式的视图，
+    // 便于像 egui 这样自带 gamma 处理的消费者直接采样原始字节，
+    // 避免硬件 sRGB 解码 + shader 内手动解码导致的双重 gamma。
+    let linear_view = linear_view_format_of(format);
+    let view_formats: &[wgpu::TextureFormat] = match &linear_view {
+        Some(f) => std::slice::from_ref(f),
+        None => &[],
+    };
     let desc = TextureDescriptor {
         label: Some("Render Target"),
         size,
@@ -455,12 +468,21 @@ pub fn create_color_render_target_image(
         mip_level_count: 1,
         sample_count: 1,
         dimension: TextureDimension::D2,
-        view_formats: &[],
+        view_formats,
     };
     let texture = device.create_texture(&desc);
     let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
 
     UploadedImage { texture, view }
+}
+
+/// 返回给定 sRGB 颜色格式对应的线性 UNORM 格式；非 sRGB 输入返回 `None`。
+pub fn linear_view_format_of(format: wgpu::TextureFormat) -> Option<wgpu::TextureFormat> {
+    match format {
+        wgpu::TextureFormat::Rgba8UnormSrgb => Some(wgpu::TextureFormat::Rgba8Unorm),
+        wgpu::TextureFormat::Bgra8UnormSrgb => Some(wgpu::TextureFormat::Bgra8Unorm),
+        _ => None,
+    }
 }
 
 pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> UploadedImage {

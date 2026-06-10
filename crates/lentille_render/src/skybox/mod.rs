@@ -2,12 +2,11 @@ use std::fs;
 use std::io::Read;
 use std::sync::Arc;
 
-use crate::bindings::global_binding::GlobalBindGroupLayout;
 use crate::cubemap::CubemapMatrixBindGroups;
 use crate::image::cubemap::load_cubemap_sliced;
+use crate::prelude::*;
 use crate::skybox::prefiltering::PrefilteringPipeline;
 use crate::utils::cube::CubeVerticesBuffer;
-use crate::{SCREEN_FORMAT, prelude::*};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
@@ -22,16 +21,8 @@ impl Plugin for SkyBoxPlugin {
             .init_render_resource_with_config::<DefaultSkybox>([
                 after::<CubemapMatrixBindGroups>(),
                 after::<CubeVerticesBuffer>(),
-            ])
-            .init_render_resource_with_config::<SkyboxPipeline>([after::<GlobalBindGroupLayout>()]);
+            ]);
     }
-}
-
-#[derive(Resource)]
-pub struct SkyboxPipeline {
-    #[allow(unused)]
-    pub pipeline_layout: Arc<PipelineLayout>,
-    pub pipeline: Arc<RenderPipeline>,
 }
 
 #[derive(Component, Default)]
@@ -71,69 +62,6 @@ impl FromWorld for DefaultSkybox {
         )
         .unwrap();
         Self { texture }
-    }
-}
-
-impl FromWorld for SkyboxPipeline {
-    fn from_world(world: &mut World) -> Self {
-        let mut shader_loader = world.resource_mut::<ShaderLoader>();
-        let skybox_shader_source = shader_loader
-            .load_source(AssetPath::new_shader_wgsl("skybox"))
-            .unwrap();
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let global_bind_group = world.resource::<GlobalBindGroupLayout>();
-        let skybox_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Skybox"),
-            source: skybox_shader_source,
-        });
-        let pipeline_layout = Arc::new(device.create_pipeline_layout(
-            &wgpu::PipelineLayoutDescriptor {
-                label: Some("Skybox"),
-                bind_group_layouts: &[Some(&global_bind_group.0)],
-                immediate_size: 0,
-            },
-        ));
-        let cube_vertex_layout = super::utils::cube::cube_vertex_layout();
-        let pipeline = Arc::new(
-            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Skybox"),
-                layout: Some(&pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &skybox_shader,
-                    entry_point: Some("vs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    buffers: &[cube_vertex_layout],
-                },
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Front),
-                    unclipped_depth: false,
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    conservative: false,
-                },
-                depth_stencil: None,
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &skybox_shader,
-                    entry_point: Some("fs_main"),
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                    targets: &[Some(SCREEN_FORMAT.into())],
-                }),
-                multiview_mask: None,
-                cache: None,
-            }),
-        );
-        Self {
-            pipeline_layout,
-            pipeline,
-        }
     }
 }
 

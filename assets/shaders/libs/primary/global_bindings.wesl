@@ -1,6 +1,7 @@
 // Global -----
 struct CameraUniform {
     view_proj: mat4x4<f32>,
+    inv_view_proj: mat4x4<f32>,
     position: vec3<f32>,
     direction: vec3<f32>,
     screen_resolution: vec2<f32>,
