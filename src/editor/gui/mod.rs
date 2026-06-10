@@ -539,9 +539,20 @@ fn sys_on_resize_scene_render_target(
         ..
     }) = &q_camera.get(event.render_target_entity)
     {
+        // egui-wgpu 的 shader 假设传入的 native texture 是 “非 sRGB” 字节，
+        // 自己负责 gamma 处理。如果直接把 sRGB 视图给它，硬件采样时会做一次
+        // sRGB→linear 解码，再叠加 shader 内的 linear_from_gamma_rgb，最终
+        // 会多一次 gamma。这里改成显式创建对应的线性视图，跳过硬件解码。
+        let view = match lentille_render::camera::linear_view_format_of(image.texture.format()) {
+            Some(linear_format) => image.texture.create_view(&wgpu::TextureViewDescriptor {
+                format: Some(linear_format),
+                ..Default::default()
+            }),
+            None => image.texture.create_view(&Default::default()),
+        };
         egui_tex_id.0 = Some(egui.renderer.register_native_texture(
             device,
-            &image.view,
+            &view,
             wgpu::FilterMode::Linear,
         ));
     }
