@@ -115,7 +115,7 @@ fn generate_point_lights(
                 intensity: rand::random::<f32>() * light_intensity_scale + light_intensity_offset,
                 ..Default::default()
             },
-            Transform::with_position(Vec3::new(x, y, z)),
+            Transform::from_position(Vec3::new(x, y, z)),
             Name::new("点光源"),
         ))
     }
@@ -183,7 +183,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
     commands.queue(SpawnModelCmd {
         model: plane_model,
         parent_bundle: (
-            Transform::with_position(Vec3::new(0.0, -0.1, 0.0)),
+            Transform::from_position(Vec3::new(0.0, -0.1, 0.0)),
             Name::new("地面"),
         ),
         child_bundle: (
@@ -203,8 +203,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             sys_generate_single_model,
             (
                 AssetPath::new("models/stanford_dragon_pbr.glb"),
-                "Dragon".to_string(),
-                0.05,
+                (Name::new("Dragon"), Transform::new().scale(0.05)),
             ),
         )
         .unwrap();
@@ -214,19 +213,23 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             sys_generate_single_model,
             (
                 AssetPath::new("models/rough_mountaintop_landscape.glb"),
-                "Landscape".to_string(),
-                1.0,
+                (
+                    Name::new("Landscape"),
+                    Transform::new()
+                        .position(Vec3::new(0., -375., 0.))
+                        .scale(0.5),
+                ),
             ),
         )
         .unwrap();
 
+    generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
+
     queue.apply(world);
 }
 
-fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut World) {
-    let In((model_asset_path, name, scale)) = input;
-
-    generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
+fn sys_generate_single_model(input: In<(AssetPath, impl Bundle)>, world: &mut World) {
+    let In((model_asset_path, bundle)) = input;
 
     let model = match Model::load(model_asset_path, world) {
         Ok(model) => Arc::new(model),
@@ -241,13 +244,7 @@ fn sys_generate_single_model(input: In<(AssetPath, String, f32)>, world: &mut Wo
 
     commands.queue(SpawnModelCmd {
         model,
-        parent_bundle: (
-            TransformBuilder::default()
-                .scale(Vec3::one() * scale)
-                .build()
-                .unwrap(),
-            Name::new(name),
-        ),
+        parent_bundle: bundle,
         child_bundle: (
             CastShadow,
             MainPassObject,
@@ -297,6 +294,7 @@ fn sys_generate_unreal_vr_room_scene(world: &mut World) {
 
 pub fn sys_spawn_camera(mut commands: Commands) {
     commands.spawn((
+        Name::new("相机"),
         MainCamera,
         Camera {
             fovy: 50.0,
@@ -321,7 +319,6 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             .rotation(Euler::new(Deg(-25.0), Deg(0.0), Deg(0.0)).into())
             .build()
             .unwrap(),
-        Name::new("相机"),
     ));
 
     commands.spawn((
