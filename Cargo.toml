@@ -8,6 +8,7 @@ members = [
     "crates/lentille_render",
     "crates/lentille_core",
     "crates/lentille_wgpu_utils",
+    "crates/lentille_wgpu_macros",
     "crates/lentille_math",
 ]
 

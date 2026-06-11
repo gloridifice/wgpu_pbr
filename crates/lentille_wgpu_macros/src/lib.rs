@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Ident, LitInt, Token, Type, bracketed,
+    Attribute, Ident, LitInt, Token, Type, bracketed,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -65,6 +65,8 @@ impl Parse for Entry {
 
 struct BindingDefine {
     name: Ident,
+    layout_attrs: Vec<Attribute>,
+    builder_attrs: Vec<Attribute>,
     entries: Vec<Entry>,
 }
 
@@ -74,10 +76,46 @@ impl Parse for BindingDefine {
         bracketed!(content in input);
         let name: Ident = content.parse()?;
 
+        let mut layout_attrs: Vec<Attribute> = Vec::new();
+        let mut builder_attrs: Vec<Attribute> = Vec::new();
+
+        // 尝试解析可选的 layout_macro / builder_macro 字段
+        loop {
+            // 下一个 token 必须是 ident 且后跟 `:` 才是关键字段，否则留给 entry 解析
+            if !input.peek(Ident) {
+                break;
+            }
+            // 先 fork 探测，避免消耗 entry 的 binding index
+            let fork = input.fork();
+            let key: Ident = fork.parse()?;
+            if !fork.peek(Token![:]) {
+                break;
+            }
+            let key_str = key.to_string();
+            if key_str != "layout_macro" && key_str != "builder_macro" {
+                break;
+            }
+            // 确认是关键字段，正式消耗
+            let _key: Ident = input.parse()?;
+            input.parse::<Token![:]>()?;
+            let attrs = input.call(Attribute::parse_outer)?;
+            // 可选尾随逗号
+            if input.peek(Token![,]) {
+                input.parse::<Token![,]>()?;
+            }
+            if key_str == "layout_macro" {
+                layout_attrs = attrs;
+            } else {
+                builder_attrs = attrs;
+            }
+        }
+
         let entries: Punctuated<Entry, Token![,]> = Punctuated::parse_terminated(input)?;
 
         Ok(Self {
             name,
+            layout_attrs,
+            builder_attrs,
             entries: entries.into_iter().collect(),
         })
     }
@@ -99,7 +137,12 @@ impl Parse for BindingDefine {
 /// `wgpu::BindingResource` (value-level, for the bind group).
 #[proc_macro]
 pub fn binding_define(input: TokenStream) -> TokenStream {
-    let BindingDefine { name, entries } = parse_macro_input!(input as BindingDefine);
+    let BindingDefine {
+        name,
+        layout_attrs,
+        builder_attrs,
+        entries,
+    } = parse_macro_input!(input as BindingDefine);
 
     let builder = format_ident!("{}BindGroupBuilder", name);
     let layout = format_ident!("{}BindGroupLayout", name);
@@ -138,10 +181,12 @@ pub fn binding_define(input: TokenStream) -> TokenStream {
     });
 
     let expanded = quote! {
+        #(#builder_attrs)*
         pub struct #builder<'a> {
             #(#fields)*
         }
 
+        #(#layout_attrs)*
         pub struct #layout(pub wgpu::BindGroupLayout);
 
         impl #layout {

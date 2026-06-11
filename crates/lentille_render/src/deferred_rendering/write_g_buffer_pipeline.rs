@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    bindings::global_binding::GlobalBindGroupLayout,
+    bindings::camera_binding::CameraBindGroupLayout,
     camera::{RenderTarget, RenderTargetResizedEvent, RenderTargetSize},
     prelude::*,
 };
@@ -43,7 +43,6 @@ pub struct GBufferTexture {
 pub struct DeferredWriteGBufferPipeline {
     pub pipeline: RenderPipeline,
     pub pipeline_layout: PipelineLayout,
-    pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
 impl GBufferTexturesBindGroup {
@@ -150,24 +149,21 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             source: shader_source,
         });
 
-        let global_bind_group_layout = Arc::clone(&world.resource::<GlobalBindGroupLayout>().0);
+        let global_bind_group_layout = &world.resource::<CameraBindGroupLayout>().0;
         let material_bind_group_layout =
             Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0);
         let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);
 
         let bind_group_layouts = vec![
-            global_bind_group_layout,
-            Arc::clone(&material_bind_group_layout),
-            object_bind_group_layout,
+            Some(global_bind_group_layout),
+            Some(material_bind_group_layout.as_ref()),
+            Some(&object_bind_group_layout),
         ];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Write G-Buffer Layout"),
-                bind_group_layouts: &bind_group_layouts
-                    .iter()
-                    .map(|it| Some(it.as_ref()))
-                    .collect::<Vec<_>>(),
+                bind_group_layouts: &bind_group_layouts,
                 immediate_size: 0,
             });
 
@@ -226,7 +222,6 @@ impl FromWorld for DeferredWriteGBufferPipeline {
         Self {
             pipeline: render_pipeline,
             pipeline_layout: render_pipeline_layout,
-            bind_group_layouts,
         }
     }
 }
@@ -246,10 +241,7 @@ impl FromWorld for GBufferTextureBindGroupLayout {
 
 fn sys_create_deferred_g_buffer(
     mut commands: Commands,
-    q_camera: Query<
-        (Entity, &RenderTargetSize, &RenderTarget),
-        Without<GBufferTexturesBindGroup>,
-    >,
+    q_camera: Query<(Entity, &RenderTargetSize, &RenderTarget), Without<GBufferTexturesBindGroup>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
 ) {

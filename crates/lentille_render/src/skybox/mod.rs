@@ -67,16 +67,16 @@ impl FromWorld for DefaultSkybox {
 
 #[derive(Resource)]
 pub struct SkyboxSHBuffer {
-    pub buffer: Arc<TypedBuffer<ComputedSH>>,
+    pub buffer: Arc<TypedBuffer<ComputedSHUniform>>,
 }
 
 #[derive(Clone, Copy)]
-pub struct ComputedSH {
+pub struct ComputedSHUniform {
     #[allow(unused)]
     pub array: [[f32; 4]; 9],
 }
 
-impl_pod_zeroable!(ComputedSH);
+impl_pod_zeroable!(ComputedSHUniform);
 
 impl FromWorld for SkyboxSHBuffer {
     fn from_world(world: &mut World) -> Self {
@@ -84,7 +84,7 @@ impl FromWorld for SkyboxSHBuffer {
         let buffer = TypedBuffer::new_init(
             &rs.device,
             Some("Computed SH"),
-            ComputedSH {
+            ComputedSHUniform {
                 array: [
                     [0.79, 0.44, 0.54],
                     [0.39, 0.35, 0.60],
@@ -112,7 +112,7 @@ pub fn sys_update_skybox_sh_from_path(
     skybox_sh_buffer: Res<SkyboxSHBuffer>,
     rs: Res<RenderState>,
 ) {
-    match ComputedSH::compute_from_path(input.0) {
+    match ComputedSHUniform::compute_from_path(input.0) {
         Ok(raw) => {
             skybox_sh_buffer.buffer.write(raw, &rs.queue);
         }
@@ -122,8 +122,8 @@ pub fn sys_update_skybox_sh_from_path(
     }
 }
 
-impl ComputedSH {
-    pub fn compute_from_path(path: AssetPath) -> anyhow::Result<ComputedSH> {
+impl ComputedSHUniform {
+    pub fn compute_from_path(path: AssetPath) -> anyhow::Result<ComputedSHUniform> {
         let path = path.final_path();
         let mut file = fs::File::open(&path)?;
         let mut buffer = vec![];
@@ -131,6 +131,6 @@ impl ComputedSH {
         let image = image::load_from_memory(&buffer)?;
         let result = sh_coefficients::compute_sh_coefficients(&image);
 
-        Ok(ComputedSH { array: result })
+        Ok(ComputedSHUniform { array: result })
     }
 }

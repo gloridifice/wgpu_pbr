@@ -2254,6 +2254,7 @@ dependencies = [
  "image",
  "lentille_core",
  "lentille_math",
+ "lentille_wgpu_macros",
  "lentille_wgpu_utils",
  "png 0.17.16",
  "pollster",
@@ -2264,10 +2265,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "lentille_wgpu_macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "lentille_wgpu_utils"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "lentille_wgpu_macros",
  "wgpu",
 ]
 

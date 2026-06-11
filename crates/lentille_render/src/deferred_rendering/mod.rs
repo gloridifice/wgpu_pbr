@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::{
     SCREEN_FORMAT,
     bindings::{
-        global_binding::GlobalBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
+        camera_binding::CameraBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
     },
     deferred_rendering::write_g_buffer_pipeline::{
         DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, WriteGBufferPlugin,
@@ -22,11 +22,11 @@ impl Plugin for DeferredRenderingPlugin {
         app.add_plugins(WriteGBufferPlugin)
             .init_render_resource_with_config::<DeferredWriteGBufferPipeline>([
                 after::<GBufferTextureBindGroupLayout>(),
-                after::<GlobalBindGroupLayout>(),
+                after::<CameraBindGroupLayout>(),
             ])
             .init_render_resource_with_config::<DeferredComputePipeline>([
                 after::<GBufferTextureBindGroupLayout>(),
-                after::<GlobalBindGroupLayout>(),
+                after::<CameraBindGroupLayout>(),
                 after::<PBRMaterialBindGroupLayout>(),
                 after::<DynamicLightBindGroup>(),
             ]);
@@ -38,7 +38,6 @@ impl Plugin for DeferredRenderingPlugin {
 pub struct DeferredComputePipeline {
     pub pipeline: Arc<RenderPipeline>,
     pub pipeline_layout: Arc<PipelineLayout>,
-    pub bind_group_layouts: Vec<Arc<BindGroupLayout>>,
 }
 
 impl FromWorld for DeferredComputePipeline {
@@ -56,19 +55,16 @@ impl FromWorld for DeferredComputePipeline {
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
 
         let bind_group_layouts = vec![
-            Arc::clone(&world.resource::<GlobalBindGroupLayout>().0),
-            Arc::clone(&world.resource::<GBufferTextureBindGroupLayout>().layout),
-            Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0),
-            Arc::clone(&world.resource::<DynamicLightBindGroup>().layout),
+            Some(&world.resource::<CameraBindGroupLayout>().0),
+            Some(&world.resource::<GBufferTextureBindGroupLayout>().layout),
+            Some(&world.resource::<PBRMaterialBindGroupLayout>().0),
+            Some(&world.resource::<DynamicLightBindGroup>().layout),
         ];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("PBR Main Pipeline"),
-                bind_group_layouts: &bind_group_layouts
-                    .iter()
-                    .map(|it| Some(it.as_ref()))
-                    .collect::<Vec<_>>(),
+                bind_group_layouts: &bind_group_layouts,
                 immediate_size: 0,
             });
 
@@ -86,7 +82,6 @@ impl FromWorld for DeferredComputePipeline {
         DeferredComputePipeline {
             pipeline: Arc::new(render_pipeline),
             pipeline_layout: Arc::new(render_pipeline_layout),
-            bind_group_layouts,
         }
     }
 }

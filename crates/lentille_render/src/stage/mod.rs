@@ -3,7 +3,7 @@ use std::any::{TypeId, type_name};
 use crate::{
     FrameSets, SurfaceState,
     base_assets::{DFGTexture, NoFilterClampSampler},
-    bindings::global_binding::GlobalBindGroupLayout,
+    bindings::camera_binding::{CameraBindGroupBuilder, CameraBindGroupLayout},
     camera::{CameraBuffer, RenderTarget, TargetType},
     gizmo::{GIZMO_BUFFER, GizmoPrimitive},
     graph::{InsertConfig, TypeIdGraph},
@@ -110,7 +110,7 @@ pub fn sys_render(
     light: Res<LightUnifromBuffer>,
     shadow_map: Res<ShadowMap>,
     dfg: Res<DFGTexture>,
-    layout: Res<GlobalBindGroupLayout>,
+    layout: Res<CameraBindGroupLayout>,
     no_filter_sampler: Res<NoFilterClampSampler>,
 
     default_skybox: Res<DefaultSkybox>,
