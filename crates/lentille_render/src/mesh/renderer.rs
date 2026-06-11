@@ -12,7 +12,7 @@ use bevy_ecs::prelude::*;
 pub struct MeshRenderer {
     pub mesh: Option<Arc<UploadedMesh>>,
     pub object_bind_group: Arc<BindGroup>,
-    pub transform_buffer: Arc<Buffer>,
+    pub transform_buffer: Arc<TypedBuffer<TransformUniform>>,
 }
 
 impl MeshRenderer {
@@ -20,12 +20,11 @@ impl MeshRenderer {
         let device = &world.resource::<RenderState>().device;
         let layout = &world.resource::<ObjectBindGroupLayout>().0;
 
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("transform buffer"),
-            size: size_of::<TransformUniform>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let buffer = TypedBuffer::new(
+            device,
+            Some("transform buffer"),
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
         let object_bind_group = device.create_bind_group(&bg_descriptor!(
             ["Object Bind Group"] [layout]
             0: buffer.as_entire_binding();
@@ -38,7 +37,7 @@ impl MeshRenderer {
     }
 
     pub fn update_transform_buffer(&self, queue: &wgpu::Queue, uniform: TransformUniform) {
-        queue.write_buffer(&self.transform_buffer, 0, bytemuck::cast_slice(&[uniform]));
+        self.transform_buffer.write(uniform, queue);
     }
 
     /// Bind vertex buffer and index buffer, and set bind group of 1 (ObjectBindGroup)

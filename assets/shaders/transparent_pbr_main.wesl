@@ -128,7 +128,9 @@ fn fs_main(
     specular_color += ibl_result.specular;
 
     /// -- Shadowing --
-    let shadow = shadow::shadow(world_pos);
+    // @builtin(position) 在片段阶段为 framebuffer 坐标，z 即写入深度的 NDC z。
+    let z_ndc = in.clip_position.z;
+    let shadow = shadow::shadow(world_pos, z_ndc);
     let shadow_factor = mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
     diffuse_color *= shadow_factor;
     specular_color *= shadow_factor;

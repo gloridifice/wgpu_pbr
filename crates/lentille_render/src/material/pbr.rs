@@ -58,11 +58,12 @@ impl UploadedPBRMaterial {
 
         let raw = RawPBRMaterial::from(gltf_material);
 
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("PBR"),
-            contents: bytemuck::cast_slice(&[raw]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
+        let buffer = TypedBuffer::new_init(
+            device,
+            Some("PBR"),
+            raw,
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
 
         let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
             ["PBR Material Bind Group"] [material_bind_group_layout]

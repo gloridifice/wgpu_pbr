@@ -20,7 +20,7 @@ impl Plugin for CsmPlugin {
 
 pub struct LayerContext {
     pub view: Arc<TextureView>,
-    pub mat_buffer: Arc<Buffer>,
+    pub mat_buffer: Arc<TypedBuffer<[[f32; 4]; 4]>>,
     pub mat_bind_group: Arc<BindGroup>,
 }
 
@@ -60,7 +60,7 @@ pub struct CascadeShadowMapping {
     pub levels: usize,
     pub pipeline: Arc<RenderPipeline>,
     pub layers: Vec<LayerContext>,
-    pub csm_info_buffer: Arc<Buffer>,
+    pub csm_info_buffer: Arc<TypedBuffer<GpuCsmInfoUniform>>,
     pub shadow_maps: Arc<wgpu::Texture>,
     pub sampler: Arc<Sampler>,
     pub full_view: Arc<TextureView>,
@@ -101,12 +101,11 @@ impl CascadeShadowMapping {
             )));
 
         for i in 0..config.level_count as usize {
-            let mat_buffer = Arc::new(device.create_buffer(&wgpu::wgt::BufferDescriptor {
-                label: Some("CSM Light Matrix Buffer"),
-                size: size_of::<[[f32; 4]; 4]>() as u64,
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }));
+            let mat_buffer = Arc::new(TypedBuffer::new(
+                device,
+                Some("CSM Light Matrix Buffer"),
+                BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+            ));
 
             let mat_bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
                 ["CSM Global Bind Group"] [ csm_uniform_layout.as_ref() ]
@@ -129,12 +128,11 @@ impl CascadeShadowMapping {
             });
         }
 
-        let csm_info_buffer = Arc::new(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Csm Bounds Buffer"),
-            size: size_of::<GpuCsmInfoUniform>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        }));
+        let csm_info_buffer = Arc::new(TypedBuffer::new(
+            device,
+            Some("Csm Bounds Buffer"),
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        ));
 
         let pipeline_layout = Arc::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
@@ -253,8 +251,7 @@ pub fn sys_update_csm_buffers(
                     )
                     .into();
                     // Write each layer matrix buffer
-                    rs.queue
-                        .write_buffer(&csm.layers[i].mat_buffer, 0, bytemuck::bytes_of(&mat4));
+                    csm.layers[i].mat_buffer.write(mat4, &rs.queue);
                     gpu_bounds[i] = GpuCsmBound {
                         near: bound.near_ndc,
                         far: bound.far_ndc,
@@ -264,14 +261,13 @@ pub fn sys_update_csm_buffers(
                 });
 
                 // Write all bounds buffer for main pass
-                rs.queue.write_buffer(
-                    &csm.csm_info_buffer,
-                    0,
-                    bytemuck::bytes_of(&GpuCsmInfoUniform {
+                csm.csm_info_buffer.write(
+                    GpuCsmInfoUniform {
                         bounds: gpu_bounds,
                         texture_size: config.texture_size as f32,
                         _padding: Default::default(),
-                    }),
+                    },
+                    &rs.queue,
                 );
             }
             None => {

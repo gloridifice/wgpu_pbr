@@ -4,7 +4,6 @@ use crate::{app_ext::AppExt, prelude::*};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use cgmath::{Deg, Point3, Vector3};
-use wgpu::util::DeviceExt;
 
 use super::shader_loader::ShaderLoader;
 
@@ -77,11 +76,12 @@ impl FromWorld for CubemapMatrixBindGroups {
             let mat = proj * view;
             let mat: [[f32; 4]; 4] = mat.into();
 
-            let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Render Cubemap Matrix"),
-                contents: bytemuck::cast_slice(&[mat]),
-                usage: BufferUsages::UNIFORM,
-            });
+            let buffer = TypedBuffer::new_init(
+                device,
+                Some("Render Cubemap Matrix"),
+                mat,
+                BufferUsages::UNIFORM,
+            );
 
             device.create_bind_group(&bg_descriptor!(
                 ["Render Cube Map Matrix"][&layout]

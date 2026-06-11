@@ -21,8 +21,7 @@ struct VertexOutput {
 };
 
 struct FragmentOutput {
-    @location(0) world_pos: vec4<f32>,
-    @location(1) g_buffer: vec4<u32>,
+    @location(0) g_buffer: vec4<u32>,
 }
 
 @vertex
@@ -62,7 +61,6 @@ fn fs_main(in: VertexOutput) -> FragmentOutput {
     surface.material = material;
 
     var o: FragmentOutput;
-    o.world_pos = vec4<f32>(in.world_pos, 1.0);
     o.g_buffer = pbr_type::pack_g_buffer(surface);
 
     return o;

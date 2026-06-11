@@ -42,5 +42,5 @@ pub use wgpu::{
     BindGroup, BindGroupLayout, BindingResource, Buffer, BufferDescriptor, BufferUsages,
     ColorWrites, Extent3d, PipelineLayout, RenderPass, RenderPassDescriptor, RenderPipeline,
     Sampler, SamplerBindingType, ShaderModule, ShaderStages, TextureDescriptor, TextureFormat,
-    TextureSampleType, TextureUsages, util::DeviceExt,
+    TextureSampleType, TextureUsages, TextureView, util::DeviceExt,
 };

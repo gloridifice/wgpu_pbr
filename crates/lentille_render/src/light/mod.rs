@@ -32,7 +32,7 @@ impl Plugin for LightPlugin {
 #[derive(Resource)]
 pub struct LightUnifromBuffer {
     // pub main_light: MainLight,
-    pub buffer: Arc<wgpu::Buffer>,
+    pub buffer: Arc<TypedBuffer<LightUniform>>,
 }
 
 #[repr(C, align(16))]
@@ -50,19 +50,18 @@ pub struct LightUniform {
 
 impl LightUnifromBuffer {
     pub fn new(device: &wgpu::Device) -> Self {
-        let buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Light Uniform Buffer"),
-            size: size_of::<LightUniform>() as u64,
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let buffer = TypedBuffer::new(
+            device,
+            Some("Light Uniform Buffer"),
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
         Self {
             buffer: Arc::new(buffer),
         }
     }
 
     pub fn write_buffer(&self, queue: &wgpu::Queue, light_uniform: LightUniform) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[light_uniform]));
+        self.buffer.write(light_uniform, queue);
     }
 }
 
@@ -140,8 +139,7 @@ pub fn sys_update_dynamic_lights_bind_group(
         );
         let uniform =
             LightUniform::from_lights(parallel_light.0, &dynamic_lights, parallel_light.1);
-        rs.queue
-            .write_buffer(&light_buffer.buffer, 0, bytemuck::cast_slice(&[uniform]));
+        light_buffer.buffer.write(uniform, &rs.queue);
     }
 }
 

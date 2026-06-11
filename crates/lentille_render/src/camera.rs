@@ -10,7 +10,7 @@ use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_core::window::PrimaryWindow;
 use lentille_wgpu_utils::impl_pod_zeroable;
-use wgpu::{BufferDescriptor, TextureDimension};
+use wgpu::TextureDimension;
 
 use crate::RenderState;
 
@@ -52,7 +52,7 @@ pub struct Camera {
 /// Store wgpu buffer for gpu of camera's info
 #[derive(Component)]
 pub struct CameraBuffer {
-    pub buffer: Arc<wgpu::Buffer>,
+    pub buffer: Arc<TypedBuffer<CameraUniform>>,
 }
 
 #[repr(C)]
@@ -159,12 +159,11 @@ impl Camera {
 
 impl CameraBuffer {
     pub fn new(device: &wgpu::Device) -> CameraBuffer {
-        let camera_buffer = device.create_buffer(&BufferDescriptor {
-            label: Some("Camera Buffer"),
-            size: size_of::<CameraUniform>() as u64,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
-        });
+        let camera_buffer = TypedBuffer::new(
+            device,
+            Some("Camera Buffer"),
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        );
 
         CameraBuffer {
             buffer: Arc::new(camera_buffer),
@@ -355,31 +354,29 @@ fn sys_create_or_update_camera_buffer(
             Some(camera_buffer) => {
                 camera.view_proj = camera.build_view_projection_matrix(transform);
 
-                rs.queue.write_buffer(
-                    &camera_buffer.buffer,
-                    0,
-                    bytemuck::cast_slice(&[camera.get_uniform(
+                camera_buffer.buffer.write(
+                    camera.get_uniform(
                         transform,
                         [
                             render_target_size.width as f32,
                             render_target_size.height as f32,
                         ],
-                    )]),
+                    ),
+                    &rs.queue,
                 );
             }
             None => {
                 camera.view_proj = camera.build_view_projection_matrix(transform);
                 let buffer = CameraBuffer::new(&rs.device);
-                rs.queue.write_buffer(
-                    &buffer.buffer,
-                    0,
-                    bytemuck::cast_slice(&[camera.get_uniform(
+                buffer.buffer.write(
+                    camera.get_uniform(
                         transform,
                         [
                             render_target_size.width as f32,
                             render_target_size.height as f32,
                         ],
-                    )]),
+                    ),
+                    &rs.queue,
                 );
                 commands.entity(id).insert(buffer);
             }

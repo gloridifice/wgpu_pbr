@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
-use wgpu::{BindingResource, CommandEncoderDescriptor, util::DeviceExt};
+use wgpu::{BindingResource, CommandEncoderDescriptor};
 
 use crate::{
     cubemap::{CubemapMatrixBindGroups, CubemapVertexShader},
@@ -226,14 +226,15 @@ pub fn prefilter(
 
     for level in 1..level_count {
         let roughness = 1.0 / (level_count as f32) * (level as f32);
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[PrefilteringEnvironmentUniform {
+        let buffer = TypedBuffer::new_init(
+            device,
+            None,
+            PrefilteringEnvironmentUniform {
                 roughness,
                 sample_count,
-            }]),
-            usage: BufferUsages::UNIFORM,
-        });
+            },
+            BufferUsages::UNIFORM,
+        );
         let sampler = device.create_sampler(&lentille_wgpu_utils::sampler_desc(
             None,
             wgpu::AddressMode::Repeat,

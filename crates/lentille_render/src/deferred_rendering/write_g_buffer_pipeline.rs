@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use crate::{
-    base_assets::NoFilterClampSampler,
     bindings::global_binding::GlobalBindGroupLayout,
-    camera::{RenderTargetResizedEvent, RenderTargetSize},
+    camera::{RenderTarget, RenderTargetResizedEvent, RenderTargetSize},
     prelude::*,
 };
 use bevy_app::{Plugin, PreUpdate};
@@ -52,21 +51,19 @@ impl GBufferTexturesBindGroup {
         device: &wgpu::Device,
         size: Extent3d,
         layout: &BindGroupLayout,
-        sampler: &Sampler,
+        depth_view: &TextureView,
     ) -> (Vec<GBufferTexture>, Arc<BindGroup>) {
-        let textures: Vec<GBufferTexture> = vec![
-            ("World Pos", TextureFormat::Rgba16Float),
-            ("G-Buffer", TextureFormat::Rgba32Uint),
-        ]
-        .into_iter()
-        .map(|(_, format)| create_g_buffer_image(device, size, format))
-        .collect();
+        // G-buffer 现在只输出一张 packed Uint 纹理；世界坐标在 PBR 主通道
+        // 通过深度缓冲反投影重建，因此不再需要单独的 world_pos 纹理。
+        let textures: Vec<GBufferTexture> = vec![("G-Buffer", TextureFormat::Rgba32Uint)]
+            .into_iter()
+            .map(|(_, format)| create_g_buffer_image(device, size, format))
+            .collect();
 
         let bind_group = Arc::new(device.create_bind_group(&bg_descriptor! {
             ["GBuffer Textures"][&layout]
-            0: BindingResource::Sampler(sampler);
+            0: BindingResource::TextureView(depth_view);
             1: BindingResource::TextureView(&textures[0].image.view);
-            2: BindingResource::TextureView(&textures[1].image.view);
         }));
 
         (textures, bind_group)
@@ -92,10 +89,10 @@ impl GBufferTexturesBindGroup {
         device: &wgpu::Device,
         size: Extent3d,
         layout: &BindGroupLayout,
-        sampler: &Sampler,
+        depth_view: &TextureView,
     ) -> Self {
         let (textures, bind_group) =
-            Self::create_textures_and_bind_groups(device, size, layout, sampler);
+            Self::create_textures_and_bind_groups(device, size, layout, depth_view);
 
         Self {
             textures,
@@ -109,7 +106,7 @@ impl GBufferTexturesBindGroup {
         height: u32,
         device: &wgpu::Device,
         layout: &BindGroupLayout,
-        sampler: &Sampler,
+        depth_view: &TextureView,
     ) {
         let size = Extent3d {
             width,
@@ -117,7 +114,7 @@ impl GBufferTexturesBindGroup {
             depth_or_array_layers: 1,
         };
         (self.textures, self.bind_group) =
-            Self::create_textures_and_bind_groups(device, size, layout, sampler);
+            Self::create_textures_and_bind_groups(device, size, layout, depth_view);
     }
 }
 
@@ -175,10 +172,6 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             });
 
         let targets = [
-            // World Position
-            Some(lentille_wgpu_utils::color_target_replace_write_all(
-                wgpu::TextureFormat::Rgba16Float,
-            )),
             // G-Buffer
             Some(wgpu::ColorTargetState {
                 format: wgpu::TextureFormat::Rgba32Uint,
@@ -243,9 +236,8 @@ impl FromWorld for GBufferTextureBindGroupLayout {
         let device = &world.resource::<RenderState>().device;
         let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
             ["GBuffert Textures"]
-            0: ShaderStages::FRAGMENT => BGLEntry::Sampler(wgpu::SamplerBindingType::NonFiltering); // Universal Sampler
-            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Float { filterable: false }); // World Pos
-            2: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Uint); // G-Buffer
+            0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Depth); // Depth
+            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, wgpu::TextureSampleType::Uint); // G-Buffer
         }));
 
         Self { layout }
@@ -254,12 +246,17 @@ impl FromWorld for GBufferTextureBindGroupLayout {
 
 fn sys_create_deferred_g_buffer(
     mut commands: Commands,
-    q_camera: Query<(Entity, &RenderTargetSize), Without<GBufferTexturesBindGroup>>,
+    q_camera: Query<
+        (Entity, &RenderTargetSize, &RenderTarget),
+        Without<GBufferTexturesBindGroup>,
+    >,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
-    no_filter_sampler: Res<NoFilterClampSampler>,
 ) {
-    for (id, size) in q_camera {
+    for (id, size, target) in q_camera {
+        let Some(depth) = target.depth.as_ref() else {
+            continue;
+        };
         commands.entity(id).insert(GBufferTexturesBindGroup::new(
             &rs.device,
             Extent3d {
@@ -268,17 +265,16 @@ fn sys_create_deferred_g_buffer(
                 depth_or_array_layers: 1,
             },
             &bgl.layout,
-            &no_filter_sampler.0,
+            &depth.view,
         ));
     }
 }
 
 fn sys_resize_g_buffer_texture(
     event: On<RenderTargetResizedEvent>,
-    mut q_camera: Query<&mut GBufferTexturesBindGroup, With<RenderTargetSize>>,
+    mut q_camera: Query<(&mut GBufferTexturesBindGroup, &RenderTarget), With<RenderTargetSize>>,
     rs: Res<RenderState>,
     bgl: Res<GBufferTextureBindGroupLayout>,
-    no_filter_sampler: Res<NoFilterClampSampler>,
 ) {
     let RenderTargetResizedEvent {
         render_target_entity,
@@ -286,7 +282,10 @@ fn sys_resize_g_buffer_texture(
         new_height,
     } = *event;
 
-    if let Ok(mut bg) = q_camera.get_mut(render_target_entity) {
+    if let Ok((mut bg, target)) = q_camera.get_mut(render_target_entity) {
+        let Some(depth) = target.depth.as_ref() else {
+            return;
+        };
         *bg.as_mut() = GBufferTexturesBindGroup::new(
             &rs.device,
             Extent3d {
@@ -295,7 +294,7 @@ fn sys_resize_g_buffer_texture(
                 depth_or_array_layers: 1,
             },
             &bgl.layout,
-            &no_filter_sampler.0,
+            &depth.view,
         );
     }
 }

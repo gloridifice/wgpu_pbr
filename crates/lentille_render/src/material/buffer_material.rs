@@ -17,12 +17,12 @@ pub struct UploadedBufferMaterialLayout {
 #[allow(unused)]
 pub struct UploadedBufferMaterialInstance<M: BufferMaterialData> {
     pub data: M,
-    pub buffer: Buffer,
+    pub buffer: TypedBuffer<M::Raw>,
     pub bind_group: BindGroup,
 }
 
 pub trait BufferMaterialData {
-    type Raw: bytemuck::Pod;
+    type Raw: bytemuck::NoUninit;
 
     fn raw(&self) -> Self::Raw;
     fn binding_resources<'a>(&self, buffer: &'a Buffer) -> Vec<wgpu::BindingResource<'a>>;
@@ -64,12 +64,13 @@ impl BufferMaterialManager {
             .map
             .get(&TypeId::of::<M>())
             .ok_or(anyhow!(NOT_FOUND_LAYOUT_STR))?;
-        let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: None,
-            contents: bytemuck::cast_slice(&[data.raw()]),
-            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-        });
-        let bind_group = Self::create_bind_group(device, &layout.layout, &data, &buffer);
+        let buffer = TypedBuffer::new_init(
+            device,
+            None,
+            data.raw(),
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
+        let bind_group = Self::create_bind_group(device, &layout.layout, &data, buffer.as_ref());
         Ok(UploadedBufferMaterialInstance {
             data,
             buffer,
@@ -113,7 +114,7 @@ impl BufferMaterialManager {
             device,
             &layout.layout,
             &material_instance.data,
-            &material_instance.buffer,
+            material_instance.buffer.as_ref(),
         );
         material_instance.bind_group = bg;
         Ok(())
@@ -122,7 +123,7 @@ impl BufferMaterialManager {
 
 impl<M: BufferMaterialData> UploadedBufferMaterialInstance<M> {
     pub fn update_buffer(&self, queue: &wgpu::Queue) {
-        queue.write_buffer(&self.buffer, 0, bytemuck::cast_slice(&[self.data.raw()]));
+        self.buffer.write(self.data.raw(), queue);
     }
 }
 

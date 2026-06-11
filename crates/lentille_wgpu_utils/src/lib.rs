@@ -6,6 +6,8 @@ use wgpu::{
 };
 
 pub mod bind_group_macro;
+pub mod typed_buffer;
+pub use typed_buffer::TypedBuffer;
 
 pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
     BindGroupLayoutEntry {

@@ -16,7 +16,7 @@ struct LightUniform {
 }
 
 struct CsmBound {
-    invert_light_space: mat4x4<f32>,
+    light_space_matrix: mat4x4<f32>,
     near: f32,
     far: f32,
 }

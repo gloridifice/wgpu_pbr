@@ -67,7 +67,7 @@ impl FromWorld for DefaultSkybox {
 
 #[derive(Resource)]
 pub struct SkyboxSHBuffer {
-    pub buffer: Arc<Buffer>,
+    pub buffer: Arc<TypedBuffer<ComputedSH>>,
 }
 
 #[derive(Clone, Copy)]
@@ -81,26 +81,25 @@ impl_pod_zeroable!(ComputedSH);
 impl FromWorld for SkyboxSHBuffer {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
-        let buffer = rs
-            .device
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Computed SH"),
-                contents: bytemuck::cast_slice(&[ComputedSH {
-                    array: [
-                        [0.79, 0.44, 0.54],
-                        [0.39, 0.35, 0.60],
-                        [-0.34, -0.18, -0.27],
-                        [-0.29, -0.06, -0.1],
-                        [-0.11, -0.05, -0.12],
-                        [-0.26, -0.22, -0.47],
-                        [-0.16, -0.09, -0.15],
-                        [0.56, 0.21, 0.14],
-                        [0.21, -0.05, -0.3],
-                    ]
-                    .map(|it| [it[0], it[1], it[2], 0.0]),
-                }]),
-                usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
-            });
+        let buffer = TypedBuffer::new_init(
+            &rs.device,
+            Some("Computed SH"),
+            ComputedSH {
+                array: [
+                    [0.79, 0.44, 0.54],
+                    [0.39, 0.35, 0.60],
+                    [-0.34, -0.18, -0.27],
+                    [-0.29, -0.06, -0.1],
+                    [-0.11, -0.05, -0.12],
+                    [-0.26, -0.22, -0.47],
+                    [-0.16, -0.09, -0.15],
+                    [0.56, 0.21, 0.14],
+                    [0.21, -0.05, -0.3],
+                ]
+                .map(|it| [it[0], it[1], it[2], 0.0]),
+            },
+            BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        );
 
         Self {
             buffer: Arc::new(buffer),
@@ -115,8 +114,7 @@ pub fn sys_update_skybox_sh_from_path(
 ) {
     match ComputedSH::compute_from_path(input.0) {
         Ok(raw) => {
-            rs.queue
-                .write_buffer(&skybox_sh_buffer.buffer, 0, bytemuck::cast_slice(&[raw]));
+            skybox_sh_buffer.buffer.write(raw, &rs.queue);
         }
         Err(err) => {
             bevy_log::error!("Failed to update skybox SH from path. Err: \n {}", err);
