@@ -5,8 +5,17 @@ use wgpu::{
     TextureFormat, TextureView, VertexBufferLayout, VertexState,
 };
 
+// Allow the generated code from `binding_define!` to reference this crate by its
+// canonical name even when expanded inside this crate itself.
+extern crate self as lentille_wgpu_utils;
+
 pub mod bind_group_macro;
+pub mod typed_binding_resource;
 pub mod typed_buffer;
+pub mod typed_sampler;
+pub mod typed_texture;
+
+pub use lentille_wgpu_macros::binding_define;
 pub use typed_buffer::TypedBuffer;
 
 pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
@@ -205,51 +214,6 @@ pub fn primitive_triangle_list_default() -> wgpu::PrimitiveState {
         conservative: false,
     }
 }
-
-// pub fn create_pure_color_texture(
-//     device: &wgpu::Device,
-//     queue: &wgpu::Queue,
-//     color: Vec4,
-// ) -> UploadedImageWithSampler {
-//     let size = Extent3d {
-//         width: 1,
-//         height: 1,
-//         depth_or_array_layers: 1,
-//     };
-//     let texture = device.create_texture_with_data(
-//         queue,
-//         &TextureDescriptor {
-//             label: None,
-//             size,
-//             mip_level_count: 1,
-//             sample_count: 1,
-//             dimension: wgpu::TextureDimension::D2,
-//             format: TextureFormat::Rgba8Unorm,
-//             usage: TextureUsages::COPY_DST | TextureUsages::TEXTURE_BINDING,
-//             view_formats: &[],
-//         },
-//         TextureDataOrder::LayerMajor,
-//         &[
-//             (color.x * 255.) as u8,
-//             (color.y * 255.) as u8,
-//             (color.z * 255.) as u8,
-//             (color.w * 255.) as u8,
-//         ],
-//     );
-//     let sampler = device.create_sampler(&sampler_desc(
-//         None,
-//         wgpu::AddressMode::Repeat,
-//         wgpu::FilterMode::Linear,
-//     ));
-//     let view = texture.create_view(&Default::default());
-
-//     UploadedImageWithSampler {
-//         texture,
-//         view,
-//         size,
-//         sampler,
-//     }
-// }
 
 pub fn copy_texture2d_to_texture2d_no_mip(
     encoder: &mut wgpu::CommandEncoder,

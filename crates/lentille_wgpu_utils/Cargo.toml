@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 wgpu = { workspace = true }
 bytemuck = { workspace = true }
+lentille_wgpu_macros = { path = "../lentille_wgpu_macros" }

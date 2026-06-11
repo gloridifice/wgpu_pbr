@@ -1,0 +1,100 @@
+//! 类型安全的 sampler 封装。
+//!
+//! 本模块用零大小状态类型把 [`wgpu::SamplerBindingType`] 编码进类型系统，
+//! 让 sampler 在 `binding_define!` 中自动生成正确的 bind group layout 类型。
+
+use std::marker::PhantomData;
+use std::ops::Deref;
+
+use wgpu::{Device, Sampler, SamplerBindingType, SamplerDescriptor};
+
+use crate::typed_binding_resource::TypedBinding;
+
+/// sampler 绑定类型的类型级状态。
+pub trait SamplerBindingTypeState {
+    /// 对应的 `wgpu` sampler 绑定类型。
+    const VALUE: SamplerBindingType;
+}
+
+/// 可过滤采样器状态，对应 [`SamplerBindingType::Filtering`]。
+pub struct SamplerFiltering;
+
+/// 不可过滤采样器状态，对应 [`SamplerBindingType::NonFiltering`]。
+pub struct SamplerNonFiltering;
+
+/// 比较采样器状态，对应 [`SamplerBindingType::Comparison`]。
+pub struct SamplerComparison;
+
+impl SamplerBindingTypeState for SamplerFiltering {
+    const VALUE: SamplerBindingType = SamplerBindingType::Filtering;
+}
+
+impl SamplerBindingTypeState for SamplerNonFiltering {
+    const VALUE: SamplerBindingType = SamplerBindingType::NonFiltering;
+}
+
+impl SamplerBindingTypeState for SamplerComparison {
+    const VALUE: SamplerBindingType = SamplerBindingType::Comparison;
+}
+
+/// 带类型级绑定类型的 sampler。
+///
+/// 泛型 `B` 决定该 sampler 在 bind group layout 中声明为 filtering、
+/// non-filtering 还是 comparison sampler。
+pub struct TypedSampler<B: SamplerBindingTypeState> {
+    sampler: Sampler,
+    _binding_type: PhantomData<B>,
+}
+
+impl<B: SamplerBindingTypeState> TypedSampler<B> {
+    /// 根据 `wgpu` 描述符创建 typed sampler。
+    pub fn new(device: &Device, descriptor: &SamplerDescriptor<'_>) -> Self {
+        Self {
+            sampler: device.create_sampler(descriptor),
+            _binding_type: PhantomData,
+        }
+    }
+
+    /// 返回类型 `B` 编码的 sampler 绑定类型。
+    pub fn binding_type() -> SamplerBindingType {
+        B::VALUE
+    }
+
+    /// 返回底层 [`wgpu::Sampler`] 引用。
+    pub fn sampler(&self) -> &Sampler {
+        &self.sampler
+    }
+}
+
+impl<B: SamplerBindingTypeState> AsRef<Sampler> for TypedSampler<B> {
+    fn as_ref(&self) -> &Sampler {
+        &self.sampler
+    }
+}
+
+impl<B: SamplerBindingTypeState> Deref for TypedSampler<B> {
+    type Target = Sampler;
+
+    fn deref(&self) -> &Self::Target {
+        &self.sampler
+    }
+}
+
+impl<B: SamplerBindingTypeState> TypedBinding for TypedSampler<B> {
+    fn binding_layout_type() -> wgpu::BindingType {
+        wgpu::BindingType::Sampler(B::VALUE)
+    }
+
+    fn as_binding_resource(&self) -> wgpu::BindingResource<'_> {
+        wgpu::BindingResource::Sampler(&self.sampler)
+    }
+}
+
+/// filtering sampler 便捷别名。
+pub type FilteringSampler = TypedSampler<SamplerFiltering>;
+
+/// non-filtering sampler 便捷别名。
+pub type NonFilteringSampler = TypedSampler<SamplerNonFiltering>;
+
+/// comparison sampler 便捷别名。
+pub type ComparisonSampler = TypedSampler<SamplerComparison>;

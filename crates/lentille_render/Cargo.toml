@@ -27,6 +27,7 @@ image = "0.25.4"
 lentille_math = { path = "../lentille_math" }
 lentille_wgpu_utils = { path = "../lentille_wgpu_utils" }
 lentille_core = { path = "../lentille_core" }
+lentille_wgpu_macros = { path = "../lentille_wgpu_macros" }
 
 [dependencies.gltf]
 version = "1"
