@@ -31,14 +31,13 @@ Powered by
   - [x] Transparent pass (separate specular and diffuse)
   - [x] Screenspace refraction effect
 - [x] Multi-camera
-- [ ] Simple gizmo system
-- [ ] Cascade shadow mapping (CSM)
-- [ ] WESL & Shader cache
+- [x] Simple gizmo system
+- [x] Cascade shadow mapping (CSM)
+- [x] WESL & Shader cache
 - [ ] Forward+ pipeline
   - [ ] Material pattern
   - [ ] Light filtering
 - [ ] Clear coat model
-- [ ] Cascade shadow mapping
 
 ## Screenshot
 
