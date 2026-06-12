@@ -18,7 +18,7 @@ use wgpu::{AddressMode, Extent3d, FilterMode, ShaderModule, TextureDescriptor, T
 use crate::image::UploadedImageWithSampler;
 use crate::mesh::{Mesh, Model, Primitive, Vertex};
 use crate::prelude::GltfMaterial;
-use crate::prelude::{Dim2D, SampleFloatFilterable, TexView2D, Tex2D};
+use crate::prelude::{Dim2D, SampleFloatFilterable, Tex2D, TexView2D};
 use crate::{AlphaMode, RenderState};
 use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 
@@ -164,9 +164,7 @@ impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
             pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(
-                    format.block_copy_size(None).unwrap_or(4) * data.width,
-                ),
+                bytes_per_row: Some(format.block_copy_size(None).unwrap_or(4) * data.width),
                 rows_per_image: Some(data.height),
             },
             size,
@@ -258,7 +256,10 @@ impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
 
         let view: TexView2D<SampleFloatFilterable> =
             texture.create_view(&TypedTextureViewDescriptor::new(None));
-        let sampler = device.create_sampler(&UploadedImageWithSampler::<Dim2D, SampleFloatFilterable>::default_sampler_desc());
+        let sampler = device
+            .create_sampler(
+                &UploadedImageWithSampler::<Dim2D, SampleFloatFilterable>::default_sampler_desc(),
+            );
 
         Ok(UploadedImageWithSampler {
             texture,

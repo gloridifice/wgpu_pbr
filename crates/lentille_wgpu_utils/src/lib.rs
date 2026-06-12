@@ -18,6 +18,30 @@ pub mod typed_texture;
 pub use lentille_wgpu_macros::binding_define;
 pub use typed_buffer::TypedBuffer;
 
+#[macro_export]
+macro_rules! impl_type_state {
+    (
+        $vis:vis trait $trait_name:ident for $enum_name:ident {
+            $( $struct_name:ident => $variant:ident $( { $($fields:tt)* } )? ),+ $(,)?
+        }
+    ) => {
+        // 生成本地约束 Trait
+        $vis trait $trait_name {
+            const VALUE: $enum_name;
+        }
+
+        $(
+            // 生成状态结构体
+            $vis struct $struct_name;
+
+            // 绑定第三方枚举变体
+            impl $trait_name for $struct_name {
+                const VALUE: $enum_name = $enum_name::$variant $( { $($fields)* } )?;
+            }
+        )+
+    };
+}
+
 pub const fn bind_group_layout_entry_shader(binding: u32, ty: BindingType) -> BindGroupLayoutEntry {
     BindGroupLayoutEntry {
         binding,

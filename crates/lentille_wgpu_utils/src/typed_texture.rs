@@ -1,35 +1,11 @@
-//! 类型安全的 texture 与 texture view 封装。
-//!
-//! 本模块用零大小状态类型把 texture 维度、texture view 维度和采样类型编码进类型系统。
-//! 这样 texture view 在接入 `binding_define!` 时，可以从类型自动推导
-//! [`wgpu::BindingType::Texture`]。
-
-macro_rules! impl_type_state {
-    (
-        $vis:vis trait $trait_name:ident for $enum_name:ident {
-            $( $struct_name:ident => $variant:ident $( { $($fields:tt)* } )? ),+ $(,)?
-        }
-    ) => {
-        $vis trait $trait_name {
-            const VALUE: $enum_name;
-        }
-
-        $(
-            $vis struct $struct_name;
-
-            impl $trait_name for $struct_name {
-                const VALUE: $enum_name = $enum_name::$variant $( { $($fields)* } )?;
-            }
-        )+
-    };
-}
-
 use std::{marker::PhantomData, ops::Deref};
 
 use wgpu::{
     Device, Extent3d, Texture, TextureDescriptor, TextureDimension, TextureFormat,
     TextureSampleType, TextureUsages, TextureView, TextureViewDescriptor, TextureViewDimension,
 };
+
+use crate::impl_type_state;
 
 impl_type_state! {
     pub trait TextureViewDimensionState for TextureViewDimension {
@@ -60,29 +36,18 @@ impl_type_state! {
     }
 }
 
-/// 带类型级 texture 维度和采样类型的 texture。
-///
-/// `TD` 决定底层 [`wgpu::TextureDimension`]，`S` 决定该 texture 被 view 绑定时的
-/// [`wgpu::TextureSampleType`]。
 pub struct TypedTexture<TD: TextureDimensionState, S: TextureSampleTypeState> {
     texture: Texture,
     _texture_dimension: PhantomData<TD>,
     _sample_type: PhantomData<S>,
 }
 
-/// 带类型级 view 维度和采样类型的 texture view。
-///
-/// 该类型实现了 [`crate::typed_binding_resource::TypedBinding`]，可直接用于
-/// `binding_define!`。
 pub struct TypedTextureView<D: TextureViewDimensionState, S: TextureSampleTypeState> {
     view: TextureView,
     _dimension: PhantomData<D>,
     _sample_type: PhantomData<S>,
 }
 
-/// typed texture 创建描述符。
-///
-/// 与 [`wgpu::TextureDescriptor`] 相比，`dimension` 和 sample type 由泛型类型编码。
 pub struct TypedTextureDescriptor<'a, TD: TextureDimensionState, S: TextureSampleTypeState> {
     pub label: wgpu::Label<'a>,
     pub size: Extent3d,
@@ -95,9 +60,6 @@ pub struct TypedTextureDescriptor<'a, TD: TextureDimensionState, S: TextureSampl
     _sample_type: PhantomData<S>,
 }
 
-/// typed texture view 创建描述符。
-///
-/// 与 [`wgpu::TextureViewDescriptor`] 相比，`dimension` 和 sample type 由泛型类型编码。
 pub struct TypedTextureViewDescriptor<'a, D: TextureViewDimensionState, S: TextureSampleTypeState> {
     pub label: wgpu::Label<'a>,
     pub format: Option<TextureFormat>,
@@ -111,7 +73,6 @@ pub struct TypedTextureViewDescriptor<'a, D: TextureViewDimensionState, S: Textu
     _sample_type: PhantomData<S>,
 }
 
-/// [`TypedTexture`] 的兼容别名。
 pub type TypeTexture<TD, S> = TypedTexture<TD, S>;
 
 impl<'a, TD, S> TypedTextureDescriptor<'a, TD, S>
@@ -119,7 +80,6 @@ where
     TD: TextureDimensionState,
     S: TextureSampleTypeState,
 {
-    /// 创建 typed texture 描述符。
     pub fn new(
         label: wgpu::Label<'a>,
         size: Extent3d,
@@ -141,13 +101,11 @@ where
         }
     }
 
-    /// 设置可用于创建 view 的格式列表。
     pub fn with_view_formats(mut self, view_formats: &'a [TextureFormat]) -> Self {
         self.view_formats = view_formats;
         self
     }
 
-    /// 转换为 `wgpu` 原生 texture 描述符。
     pub fn to_descriptor(&self) -> TextureDescriptor<'a> {
         TextureDescriptor {
             label: self.label,
@@ -167,7 +125,6 @@ where
     D: TextureViewDimensionState,
     S: TextureSampleTypeState,
 {
-    /// 创建默认 typed texture view 描述符。
     pub fn new(label: wgpu::Label<'a>) -> Self {
         Self {
             label,
@@ -183,39 +140,33 @@ where
         }
     }
 
-    /// 设置 view 格式。
     pub fn with_format(mut self, format: TextureFormat) -> Self {
         self.format = Some(format);
         self
     }
 
-    /// 设置 view usage。
     pub fn with_usage(mut self, usage: TextureUsages) -> Self {
         self.usage = Some(usage);
         self
     }
 
-    /// 设置 texture aspect。
     pub fn with_aspect(mut self, aspect: wgpu::TextureAspect) -> Self {
         self.aspect = aspect;
         self
     }
 
-    /// 设置 mip level 范围。
     pub fn with_mip_levels(mut self, base: u32, count: u32) -> Self {
         self.base_mip_level = base;
         self.mip_level_count = Some(count);
         self
     }
 
-    /// 设置 array layer 范围。
     pub fn with_array_layers(mut self, base: u32, count: u32) -> Self {
         self.base_array_layer = base;
         self.array_layer_count = Some(count);
         self
     }
 
-    /// 转换为 `wgpu` 原生 texture view 描述符。
     pub fn to_descriptor(&self) -> TextureViewDescriptor<'a> {
         TextureViewDescriptor {
             label: self.label,
@@ -236,7 +187,6 @@ where
     TD: TextureDimensionState,
     S: TextureSampleTypeState,
 {
-    /// 根据 typed 描述符创建 texture。
     pub fn new(device: &Device, descriptor: &TypedTextureDescriptor<'_, TD, S>) -> Self {
         let texture = device.create_texture(&descriptor.to_descriptor());
 
@@ -247,9 +197,6 @@ where
         }
     }
 
-    /// 根据原生 `wgpu` 描述符创建 texture。
-    ///
-    /// Debug 构建下会检查描述符维度是否等于 `TD` 编码的维度。
     pub fn from_descriptor(device: &Device, descriptor: &TextureDescriptor<'_>) -> Self {
         debug_assert_eq!(descriptor.dimension, TD::VALUE);
 
@@ -262,7 +209,6 @@ where
         }
     }
 
-    /// 为当前 texture 创建 typed texture view。
     pub fn create_view<D>(
         &self,
         descriptor: &TypedTextureViewDescriptor<'_, D, S>,
@@ -279,12 +225,10 @@ where
         }
     }
 
-    /// 返回类型 `S` 编码的采样类型。
     pub fn sample_type() -> TextureSampleType {
         S::VALUE
     }
 
-    /// 返回底层 [`wgpu::Texture`] 引用。
     pub fn texture(&self) -> &Texture {
         &self.texture
     }
@@ -295,7 +239,6 @@ where
     D: TextureViewDimensionState,
     S: TextureSampleTypeState,
 {
-    /// 返回该 view 在 bind group layout 中对应的 texture 绑定类型。
     pub fn binding_type(multisampled: bool) -> wgpu::BindingType {
         wgpu::BindingType::Texture {
             sample_type: S::VALUE,
@@ -304,7 +247,6 @@ where
         }
     }
 
-    /// 返回底层 [`wgpu::TextureView`] 引用。
     pub fn view(&self) -> &TextureView {
         &self.view
     }
@@ -354,29 +296,16 @@ where
     }
 }
 
-/// 1D texture 便捷别名。
 pub type Tex1D<S> = TypedTexture<TextureDim1D, S>;
-
-/// 2D texture 便捷别名。
 pub type Tex2D<S> = TypedTexture<TextureDim2D, S>;
-
-/// 3D texture 便捷别名。
 pub type Tex3D<S> = TypedTexture<TextureDim3D, S>;
-
-/// 1D texture view 便捷别名。
 pub type TexView1D<S> = TypedTextureView<Dim1D, S>;
-
-/// 2D texture view 便捷别名。
 pub type TexView2D<S> = TypedTextureView<Dim2D, S>;
-
-/// 2D array texture view 便捷别名。
 pub type TexView2DArray<S> = TypedTextureView<Dim2DArray, S>;
-
-/// cube texture view 便捷别名。
 pub type TexViewCube<S> = TypedTextureView<DimCube, S>;
-
-/// cube array texture view 便捷别名。
 pub type TexViewCubeArray<S> = TypedTextureView<DimCubeArray, S>;
-
-/// 3D texture view 便捷别名。
 pub type TexView3D<S> = TypedTextureView<Dim3D, S>;
+
+// Sampler
+// (Using typed buffer) UniformBuffer<T>, StorageBuffer<T>,
+// RawUniformBuffer, RawStorageBuffer,

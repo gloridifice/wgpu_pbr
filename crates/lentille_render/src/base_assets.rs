@@ -3,6 +3,7 @@ use crate::{
 };
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
+use lentille_wgpu_utils::typed_sampler::NonFilteringSampler;
 
 pub(super) struct BaseAssetsPlugin;
 
@@ -66,7 +67,7 @@ pub struct MissingTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFil
 pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 
 #[derive(Resource, Clone)]
-pub struct NoFilterClampSampler(pub Arc<Sampler>);
+pub struct NoFilterClampSampler(pub Arc<NonFilteringSampler>);
 
 #[derive(Resource, Clone)]
 pub struct LinearFilterClampSampler(pub Arc<Sampler>);
@@ -143,9 +144,8 @@ impl FromWorld for DefaultPBRMaterial {
 impl FromWorld for NoFilterClampSampler {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
-        let sampler = rs
-            .device
-            .create_sampler(&lentille_wgpu_utils::sampler_desc_no_filter());
+        let sampler =
+            NonFilteringSampler::new(&rs.device, &lentille_wgpu_utils::sampler_desc_no_filter());
         Self(Arc::new(sampler))
     }
 }

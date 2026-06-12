@@ -7,7 +7,10 @@ use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Single;
 use cgmath::{SquareMatrix, ortho};
-use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
+use lentille_wgpu_utils::{
+    typed_sampler::ComparisonSampler,
+    typed_texture::{TypedTexture, TypedTextureViewDescriptor},
+};
 use wgpu::{ShaderSource, wgt::TextureDescriptor};
 
 pub(super) struct CsmPlugin;
@@ -63,7 +66,7 @@ pub struct CascadeShadowMapping {
     pub layers: Vec<LayerContext>,
     pub csm_info_buffer: Arc<TypedBuffer<GpuCsmInfoUniform>>,
     pub shadow_maps: Arc<Tex2D<SampleDepth>>,
-    pub sampler: Arc<Sampler>,
+    pub sampler: Arc<ComparisonSampler>,
     pub full_view: Arc<TexView2DArray<SampleDepth>>,
 }
 
@@ -76,24 +79,27 @@ impl CascadeShadowMapping {
     ) -> Self {
         let device = &rs.device;
 
-        let shadow_maps = Arc::new(TypedTexture::from_descriptor(device, &TextureDescriptor {
-            label: Some("CSM Texture Array"),
-            size: Extent3d {
-                width: config.texture_size,
-                height: config.texture_size,
-                depth_or_array_layers: config.level_count,
+        let shadow_maps = Arc::new(TypedTexture::from_descriptor(
+            device,
+            &TextureDescriptor {
+                label: Some("CSM Texture Array"),
+                size: Extent3d {
+                    width: config.texture_size,
+                    height: config.texture_size,
+                    depth_or_array_layers: config.level_count,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Depth32Float,
+                usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Depth32Float,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING,
-            view_formats: &[],
-        }));
-
-        let full_view = Arc::new(shadow_maps.create_view(
-            &TypedTextureViewDescriptor::new(Some("CSM Full View")),
         ));
+
+        let full_view = Arc::new(
+            shadow_maps.create_view(&TypedTextureViewDescriptor::new(Some("CSM Full View"))),
+        );
 
         let mut layers = Vec::new();
 
@@ -115,11 +121,13 @@ impl CascadeShadowMapping {
                 0: mat_buffer.as_entire_binding();
             )));
 
-            let view = Arc::new(shadow_maps.create_view(
-                &TypedTextureViewDescriptor::new(Some("CSM View Layer"))
-                    .with_format(TextureFormat::Depth32Float)
-                    .with_array_layers(i as u32, 1),
-            ));
+            let view = Arc::new(
+                shadow_maps.create_view(
+                    &TypedTextureViewDescriptor::new(Some("CSM View Layer"))
+                        .with_format(TextureFormat::Depth32Float)
+                        .with_array_layers(i as u32, 1),
+                ),
+            );
 
             layers.push(LayerContext {
                 view,
@@ -188,9 +196,9 @@ impl CascadeShadowMapping {
             }),
         );
 
-        let sampler = Arc::new(camera::create_depth_sampler(
-            Some(wgpu::CompareFunction::LessEqual),
+        let sampler = Arc::new(ComparisonSampler::new(
             device,
+            &lentille_wgpu_utils::sampler_desc_no_filter(),
         ));
 
         Self {

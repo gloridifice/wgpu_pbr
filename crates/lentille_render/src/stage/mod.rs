@@ -3,7 +3,7 @@ use std::any::{TypeId, type_name};
 use crate::{
     FrameSets, SurfaceState,
     base_assets::{DFGTexture, NoFilterClampSampler},
-    bindings::camera_binding::CameraBindGroupLayout,
+    bindings::camera_binding::{CameraBindGroupBuilder, CameraBindGroupLayout},
     camera::{CameraBuffer, ColorImage, DepthImage, RenderTarget, TargetType},
     gizmo::{GIZMO_BUFFER, GizmoPrimitive},
     graph::{InsertConfig, TypeIdGraph},
@@ -143,6 +143,21 @@ pub fn sys_render(
                     .unwrap_or(&default_skybox.texture);
 
                 let device = &rs.device;
+
+                CameraBindGroupBuilder {
+                    camera_uniform: &camera_buffer.buffer,
+                    light_uniform: &light.buffer,
+                    csm_buffer: &csm.full_view,
+                    csm_sampler: &csm.sampler,
+                    dfg: &dfg.texture.view,
+                    skybox: &skybox_texture.view,
+                    skybox_sampler: &dfg.texture.sampler,
+                    skybox_sh: &skybox_sh.buffer,
+                    color_target: &color_target.view,
+                    color_target_sampler: &no_filter_sampler.0,
+                    csm_info: &csm.csm_info_buffer,
+                }
+                .build(device, &layout);
 
                 let bind_group_desc = bg_descriptor! {
                     ["Main PBR Global BindGroup"][&layout.0]

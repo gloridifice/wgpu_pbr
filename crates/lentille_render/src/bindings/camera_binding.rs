@@ -17,7 +17,7 @@ binding_define! {
     6: frag  => skybox_sampler: FilteringSampler,
     7: frag  => skybox_sh: TypedBuffer<ComputedSHUniform>,
     8: frag  => color_target: TexView2D<SampleFloatFilterable>,
-    9: frag  => color_target_sampler: FilteringSampler,
+    9: frag  => color_target_sampler: NonFilteringSampler,
     10: frag => csm_info: TypedBuffer<GpuCsmInfoUniform>,
 }
 

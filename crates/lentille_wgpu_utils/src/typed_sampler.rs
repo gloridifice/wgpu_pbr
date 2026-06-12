@@ -6,35 +6,17 @@
 use std::marker::PhantomData;
 use std::ops::Deref;
 
+use crate::impl_type_state;
 use wgpu::{Device, Sampler, SamplerBindingType, SamplerDescriptor};
 
 use crate::typed_binding_resource::TypedBinding;
 
-/// sampler 绑定类型的类型级状态。
-pub trait SamplerBindingTypeState {
-    /// 对应的 `wgpu` sampler 绑定类型。
-    const VALUE: SamplerBindingType;
-}
-
-/// 可过滤采样器状态，对应 [`SamplerBindingType::Filtering`]。
-pub struct SamplerFiltering;
-
-/// 不可过滤采样器状态，对应 [`SamplerBindingType::NonFiltering`]。
-pub struct SamplerNonFiltering;
-
-/// 比较采样器状态，对应 [`SamplerBindingType::Comparison`]。
-pub struct SamplerComparison;
-
-impl SamplerBindingTypeState for SamplerFiltering {
-    const VALUE: SamplerBindingType = SamplerBindingType::Filtering;
-}
-
-impl SamplerBindingTypeState for SamplerNonFiltering {
-    const VALUE: SamplerBindingType = SamplerBindingType::NonFiltering;
-}
-
-impl SamplerBindingTypeState for SamplerComparison {
-    const VALUE: SamplerBindingType = SamplerBindingType::Comparison;
+impl_type_state! {
+    pub trait SamplerBindingTypeState for SamplerBindingType {
+        SamplerFiltering => Filtering,
+        SamplerNonFiltering => NonFiltering,
+        SamplerComparison => Comparison,
+    }
 }
 
 /// 带类型级绑定类型的 sampler。
