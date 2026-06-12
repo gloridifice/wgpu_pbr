@@ -1,14 +1,13 @@
-use std::sync::Arc;
+use bevy_ecs::prelude::Resource;
 
-use bevy_ecs::{
-    prelude::Resource,
-    world::{FromWorld, World},
-};
+use crate::{prelude::*, transform::TransformUniform};
+use lentille_wgpu_macros::DeviceNewFromWorld;
 
-use crate::prelude::*;
-
-#[derive(Resource, Clone)]
-pub struct ObjectBindGroupLayout(pub Arc<BindGroupLayout>);
+binding_define! {
+    [Object]
+    layout_macro: #[derive(Resource, DeviceNewFromWorld)],
+    0: vert => transform_uniform: TypedBuffer<TransformUniform>,
+}
 
 impl From<gltf::material::AlphaMode> for AlphaMode {
     fn from(value: gltf::material::AlphaMode) -> Self {
@@ -17,18 +16,5 @@ impl From<gltf::material::AlphaMode> for AlphaMode {
             gltf::material::AlphaMode::Mask => AlphaMode::Blend,
             gltf::material::AlphaMode::Blend => AlphaMode::Blend,
         }
-    }
-}
-
-impl FromWorld for ObjectBindGroupLayout {
-    fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let object_bind_group_layout =
-            Arc::new(device.create_bind_group_layout(&bg_layout_descriptor!(
-                ["Object Bind Group Layout"]
-                0: ShaderStages::VERTEX => BGLEntry::UniformBuffer(); // Transform
-            )));
-        Self(object_bind_group_layout)
     }
 }

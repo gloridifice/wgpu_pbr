@@ -2,7 +2,11 @@ use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
-use crate::{SCREEN_FORMAT, bindings::camera_binding::CameraBindGroupLayout, prelude::*};
+use crate::{
+    SCREEN_FORMAT,
+    bindings::{camera_binding::CameraBindGroupLayout, light_binding::DynamicLightBindGroupLayout},
+    prelude::*,
+};
 
 use super::shader_loader::ShaderLoader;
 
@@ -12,7 +16,7 @@ impl Plugin for TransparentPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource_with_config::<TransparentPipeline>([
             after::<CameraBindGroupLayout>(),
-            after::<PBRMaterialBindGroupLayout>(),
+            after::<PbrMaterialBindGroupLayout>(),
             after::<ObjectBindGroupLayout>(),
             after::<DynamicLightBindGroup>(),
         ]);
@@ -38,9 +42,9 @@ impl FromWorld for TransparentPipeline {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
         let global_bind_group = world.resource::<CameraBindGroupLayout>();
-        let material_bind_group = world.resource::<PBRMaterialBindGroupLayout>();
+        let material_bind_group = world.resource::<PbrMaterialBindGroupLayout>();
         let object_bind_group = world.resource::<ObjectBindGroupLayout>();
-        let dynamic_light = world.resource::<DynamicLightBindGroup>();
+        let dynamic_light_layout = world.resource::<DynamicLightBindGroupLayout>();
 
         let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: None,
@@ -49,9 +53,9 @@ impl FromWorld for TransparentPipeline {
 
         let bind_group_layouts = vec![
             &global_bind_group,
-            material_bind_group.0.as_ref(),
-            object_bind_group.0.as_ref(),
-            dynamic_light.layout.as_ref(),
+            &material_bind_group.0,
+            &object_bind_group.0,
+            &dynamic_light_layout.0,
         ];
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {

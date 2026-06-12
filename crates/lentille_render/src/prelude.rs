@@ -9,7 +9,7 @@ pub use crate::{
         NormalDefaultTexture, WhiteTexture,
     },
     bindings::{
-        light_binding::DynamicLightBindGroup, material_binding::PBRMaterialBindGroupLayout,
+        light_binding::DynamicLightBindGroup, material_binding::PbrMaterialBindGroupLayout,
         object_binding::ObjectBindGroupLayout,
     },
     camera::Camera,
@@ -30,17 +30,14 @@ pub use crate::{
 
 pub use lentille_math::*;
 pub use lentille_wgpu_utils::bind_group_macro::*;
-pub use lentille_wgpu_utils::*;
 #[allow(unused)]
 pub use lentille_wgpu_utils::typed_texture::{
-    Dim2D, Dim2DArray, DimCube, DimCubeArray, Dim1D, Dim3D,
-    SampleDepth, SampleFloatFilterable, SampleFloatUnfilterable, SampleSint, SampleUint,
-    Tex2D, Tex1D, Tex3D,
-    TexView2D, TexView2DArray, TexViewCube, TexViewCubeArray, TexView1D, TexView3D,
-    TextureDimensionState, TextureSampleTypeState, TextureViewDimensionState,
-    TypedTexture, TypedTextureView,
-    TextureDim2D,
+    Dim1D, Dim2D, Dim2DArray, Dim3D, DimCube, DimCubeArray, SampleDepth, SampleFloatFilterable,
+    SampleFloatUnfilterable, SampleSint, SampleUint, Tex1D, Tex2D, Tex3D, TexView1D, TexView2D,
+    TexView2DArray, TexView3D, TexViewCube, TexViewCubeArray, TextureDim2D, TextureDimensionState,
+    TextureSampleTypeState, TextureViewDimensionState, TypedTexture, TypedTextureView,
 };
+pub use lentille_wgpu_utils::*;
 
 #[allow(unused)]
 pub use std::sync::Arc;

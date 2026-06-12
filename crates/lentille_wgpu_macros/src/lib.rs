@@ -2,7 +2,7 @@ use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
-    Attribute, Ident, LitInt, Token, Type, bracketed,
+    Attribute, DeriveInput, Ident, LitInt, Token, Type, bracketed,
     parse::{Parse, ParseStream},
     parse_macro_input,
     punctuated::Punctuated,
@@ -190,7 +190,7 @@ pub fn binding_define(input: TokenStream) -> TokenStream {
         pub struct #layout(pub wgpu::BindGroupLayout);
 
         impl #layout {
-            pub fn new(device: &wgpu::Device) -> Self {
+            pub fn new<'a>(device: &wgpu::Device) -> Self {
                 let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some(#bgl_label),
                     entries: &[
@@ -218,6 +218,31 @@ pub fn binding_define(input: TokenStream) -> TokenStream {
                         #(#bg_entries),*
                     ],
                 })
+            }
+        }
+    };
+
+    expanded.into()
+}
+
+/// Derive `bevy_ecs::world::FromWorld` for a type that has a `new(device: &wgpu::Device) -> Self`.
+///
+/// Generates:
+/// ```ignore
+/// impl FromWorld for Xxx {
+///     fn from_world(world: &mut World) -> Self {
+///         Self::new(&world.resource::<RenderState>().device)
+///     }
+/// }
+/// ```
+#[proc_macro_derive(DeviceNewFromWorld)]
+pub fn derive_device_new_from_world(input: TokenStream) -> TokenStream {
+    let DeriveInput { ident, .. } = parse_macro_input!(input as DeriveInput);
+
+    let expanded = quote! {
+        impl bevy_ecs::world::FromWorld for #ident {
+            fn from_world(world: &mut bevy_ecs::world::World) -> Self {
+                Self::new(&world.resource::<crate::RenderState>().device)
             }
         }
     };

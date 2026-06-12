@@ -41,7 +41,7 @@ pub struct UploadedPBRMaterial {
 impl UploadedPBRMaterial {
     pub fn from_gltf(
         device: &wgpu::Device,
-        layout: &PBRMaterialBindGroupLayout,
+        layout: &PbrMaterialBindGroupLayout,
         white_texture: &Tex2D,
         normal_texture: &Tex2D,
         sampler: &FilteringSampler,
@@ -140,7 +140,7 @@ pub fn sys_update_override_pbr_material_bind_group(
     main_pipeline: Res<DeferredComputePipeline>,
     white: Res<WhiteTexture>,
     normal_default: Res<NormalDefaultTexture>,
-    layout: Res<PBRMaterialBindGroupLayout>,
+    layout: Res<PbrMaterialBindGroupLayout>,
     material_sampler: Res<DefaultMaterialSampler>,
     mut pbr_mats: Query<
         (&MeshRenderer, &PBRMaterial, &mut PBRMaterialOverride),

@@ -45,7 +45,7 @@ impl Mesh {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
         let main_pipeline = world.resource::<DeferredComputePipeline>();
-        let layout = world.resource::<PBRMaterialBindGroupLayout>();
+        let layout = world.resource::<PbrMaterialBindGroupLayout>();
         let white_tex = world.resource::<WhiteTexture>();
         let normal_default = world.resource::<NormalDefaultTexture>();
         let material_sampler = world.resource::<DefaultMaterialSampler>();

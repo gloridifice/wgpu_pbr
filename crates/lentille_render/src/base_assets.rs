@@ -23,7 +23,7 @@ impl Plugin for BaseAssetsPlugin {
                 after::<WhiteTexture>(),
                 after::<NormalDefaultTexture>(),
                 after::<DeferredComputePipeline>(),
-                after::<PBRMaterialBindGroupLayout>(),
+                after::<PbrMaterialBindGroupLayout>(),
                 after::<DefaultMaterialSampler>(),
             ]);
     }
@@ -133,7 +133,7 @@ impl FromWorld for DefaultPBRMaterial {
         let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
         let device = world.resource::<RenderState>().device.clone();
         let compute_pipeline = world.resource::<DeferredComputePipeline>();
-        let layout = world.resource::<PBRMaterialBindGroupLayout>();
+        let layout = world.resource::<PbrMaterialBindGroupLayout>();
         let material_sampler = world.resource::<DefaultMaterialSampler>();
 
         let mat = UploadedPBRMaterial::from_gltf(

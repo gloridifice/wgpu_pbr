@@ -29,7 +29,7 @@ wgpu = { version = "29", features = ["naga-ir", "trace"] }
 cgmath = "0.18.0"
 
 # bevy
-bevy_ecs = "0.18"
+bevy_ecs = { version = "0.18", features = ["default", "debug"] }
 bevy_app = "0.18"
 bevy_log = "0.18"
 bevy_reflect = "0.18"

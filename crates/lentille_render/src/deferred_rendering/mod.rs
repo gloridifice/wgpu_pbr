@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::{
     SCREEN_FORMAT,
     bindings::{
-        camera_binding::CameraBindGroupLayout, material_binding::PBRMaterialBindGroupLayout,
+        camera_binding::CameraBindGroupLayout, light_binding::DynamicLightBindGroupLayout,
+        material_binding::PbrMaterialBindGroupLayout,
     },
     deferred_rendering::write_g_buffer_pipeline::{
         DeferredWriteGBufferPipeline, GBufferTextureBindGroupLayout, WriteGBufferPlugin,
@@ -27,7 +28,7 @@ impl Plugin for DeferredRenderingPlugin {
             .init_render_resource_with_config::<DeferredComputePipeline>([
                 after::<GBufferTextureBindGroupLayout>(),
                 after::<CameraBindGroupLayout>(),
-                after::<PBRMaterialBindGroupLayout>(),
+                after::<PbrMaterialBindGroupLayout>(),
                 after::<DynamicLightBindGroup>(),
             ]);
     }
@@ -57,8 +58,8 @@ impl FromWorld for DeferredComputePipeline {
         let bind_group_layouts = vec![
             Some(&world.resource::<CameraBindGroupLayout>().0),
             Some(&world.resource::<GBufferTextureBindGroupLayout>().layout),
-            Some(&world.resource::<PBRMaterialBindGroupLayout>().0),
-            Some(&world.resource::<DynamicLightBindGroup>().layout),
+            Some(&world.resource::<PbrMaterialBindGroupLayout>().0),
+            Some(&world.resource::<DynamicLightBindGroupLayout>().0),
         ];
 
         let render_pipeline_layout =

@@ -151,14 +151,13 @@ impl FromWorld for DeferredWriteGBufferPipeline {
         });
 
         let global_bind_group_layout = &world.resource::<CameraBindGroupLayout>().0;
-        let material_bind_group_layout =
-            Arc::clone(&world.resource::<PBRMaterialBindGroupLayout>().0);
-        let object_bind_group_layout = Arc::clone(&world.resource::<ObjectBindGroupLayout>().0);
+        let material_bind_group_layout = &world.resource::<PbrMaterialBindGroupLayout>().0;
+        let object_bind_group_layout = &world.resource::<ObjectBindGroupLayout>().0;
 
         let bind_group_layouts = vec![
             Some(global_bind_group_layout),
-            Some(material_bind_group_layout.as_ref()),
-            Some(&object_bind_group_layout),
+            Some(material_bind_group_layout),
+            Some(object_bind_group_layout),
         ];
 
         let render_pipeline_layout =
