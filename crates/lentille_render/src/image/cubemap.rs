@@ -6,17 +6,40 @@ use crate::asset::AssetPath;
 use crate::prelude::*;
 
 /// Order of paths is +x, -x, +y, -y, +z, -z
+pub fn read_cubemap_bytes(paths: &[AssetPath; 6]) -> anyhow::Result<Vec<Vec<u8>>> {
+    let mut out = Vec::with_capacity(6);
+    for path in paths {
+        let mut file = File::open(path.final_path())?;
+        let mut buffer = Vec::new();
+        file.read_to_end(&mut buffer)?;
+        out.push(buffer);
+    }
+    Ok(out)
+}
+
+/// Order of paths is +x, -x, +y, -y, +z, -z
 pub fn load_cubemap_sliced(
     paths: &[AssetPath; 6],
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) -> anyhow::Result<UploadedImage<DimCube, SampleFloatFilterable>> {
+    let raw = read_cubemap_bytes(paths)?;
+    load_cubemap_from_bytes(&raw, device, queue)
+}
+
+/// Decode 6 already-read cube face byte buffers and upload as a cubemap texture.
+/// Order is +x, -x, +y, -y, +z, -z.
+pub fn load_cubemap_from_bytes(
+    raw: &[Vec<u8>],
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) -> anyhow::Result<UploadedImage<DimCube, SampleFloatFilterable>> {
+    if raw.len() != 6 {
+        return Err(anyhow::anyhow!("Expected 6 cube faces, got {}", raw.len()));
+    }
     let mut byte_images = Vec::with_capacity(6);
-    for path in paths {
-        let mut file = File::open(path.final_path())?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        byte_images.push(image::load_from_memory(&buffer)?.to_rgba8());
+    for bytes in raw {
+        byte_images.push(image::load_from_memory(bytes)?.to_rgba8());
     }
 
     let dimensions = byte_images[0].dimensions();

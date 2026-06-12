@@ -3,13 +3,13 @@ use std::io::Read;
 use std::sync::Arc;
 
 use crate::cubemap::CubemapMatrixBindGroups;
-use crate::image::cubemap::load_cubemap_sliced;
 use crate::prelude::*;
 use crate::skybox::prefiltering::PrefilteringPipeline;
 use crate::utils::cube::CubeVerticesBuffer;
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
+pub mod cache;
 pub mod prefiltering;
 pub mod sh_coefficients;
 
@@ -37,13 +37,30 @@ pub struct DefaultSkybox {
 
 impl FromWorld for DefaultSkybox {
     fn from_world(world: &mut World) -> Self {
-        let rs = world.resource::<RenderState>();
-        let paths = ["posx", "negx", "posy", "negy", "posz", "negz"]
-            // .map(|it| AssetPath::Assets(format!("textures/cubemap/test_{}.png", it)));
-            .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
-        let source_texture = load_cubemap_sliced(&paths, &rs.device, &rs.queue).unwrap();
+        let level_count = 5u32;
+        let sample_count = 1145u32;
+        let format = wgpu::TextureFormat::Rgba8UnormSrgb;
+        let cache_path = "assets/.cache/skybox_default_prefiltered.bin";
 
-        let pipeline = PrefilteringPipeline::new(world, wgpu::TextureFormat::Rgba8UnormSrgb);
+        let paths = ["posx", "negx", "posy", "negy", "posz", "negz"]
+            .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
+
+        let source_bytes = crate::image::cubemap::read_cubemap_bytes(&paths).unwrap();
+        let fingerprint = cache::fingerprint(&source_bytes, level_count, sample_count, format);
+
+        {
+            let rs = world.resource::<RenderState>();
+            if let Some(texture) = cache::try_load(cache_path, fingerprint, &rs.device, &rs.queue) {
+                return Self { texture };
+            }
+        }
+
+        let rs = world.resource::<RenderState>();
+        let source_texture =
+            crate::image::cubemap::load_cubemap_from_bytes(&source_bytes, &rs.device, &rs.queue)
+                .unwrap();
+
+        let pipeline = PrefilteringPipeline::new(world, format);
 
         let rs = world.resource::<RenderState>();
         let matrix_bind_groups = world.resource::<CubemapMatrixBindGroups>();
@@ -54,13 +71,27 @@ impl FromWorld for DefaultSkybox {
             &rs.queue,
             &source_texture.texture,
             &source_texture.view,
-            5,
-            1145,
+            level_count,
+            sample_count,
             &pipeline,
             matrix_bind_groups,
             cube_vertex,
         )
         .unwrap();
+
+        {
+            let rs = world.resource::<RenderState>();
+            if let Err(err) = cache::save(
+                cache_path,
+                fingerprint,
+                &texture.texture,
+                &rs.device,
+                &rs.queue,
+            ) {
+                bevy_log::warn!("Failed to write skybox prefilter cache: {err}");
+            }
+        }
+
         Self { texture }
     }
 }

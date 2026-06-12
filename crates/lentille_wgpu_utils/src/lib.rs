@@ -10,6 +10,7 @@ use wgpu::{
 extern crate self as lentille_wgpu_utils;
 
 pub mod bind_group_macro;
+pub mod texture_readback;
 pub mod typed_binding_resource;
 pub mod typed_buffer;
 pub mod typed_sampler;
