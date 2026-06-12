@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use crate::{deferred_rendering::DeferredComputePipeline, prelude::*};
+use crate::{
+    bindings::material_binding::PbrMaterialBindGroupBuilder,
+    deferred_rendering::DeferredComputePipeline, prelude::*,
+};
 use bevy_ecs::prelude::*;
 use lentille_wgpu_utils::typed_sampler::FilteringSampler;
 
@@ -43,7 +46,7 @@ impl UploadedPBRMaterial {
         device: &wgpu::Device,
         layout: &PbrMaterialBindGroupLayout,
         white_texture: &Tex2D,
-        normal_texture: &Tex2D,
+        fallback_normal_texture: &Tex2D,
         sampler: &FilteringSampler,
         main_pipeline: Arc<RenderPipeline>,
         gltf_material: &GltfMaterial,
@@ -57,8 +60,7 @@ impl UploadedPBRMaterial {
             .normal_texture
             .as_ref()
             .map(|it| it.as_ref())
-            .unwrap_or(normal_texture);
-        let material_bind_group_layout = &layout.0;
+            .unwrap_or(fallback_normal_texture);
 
         let raw = RawPBRMaterial::from(gltf_material);
 
@@ -69,14 +71,16 @@ impl UploadedPBRMaterial {
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
 
-        let bind_group = Arc::new(device.create_bind_group(&bg_descriptor!(
-            ["PBR Material Bind Group"] [material_bind_group_layout]
-            0: buffer.as_entire_binding();
-            1: BindingResource::TextureView(&base_color.view);
-            2: BindingResource::Sampler(sampler);
-            3: BindingResource::TextureView(&normal.view);
-            4: BindingResource::Sampler(sampler);
-        )));
+        let bind_group = Arc::new(
+            PbrMaterialBindGroupBuilder {
+                pbr_uniform: &buffer,
+                base_color_texture: &base_color.view,
+                base_color_sampler: &sampler,
+                normal_texture: &normal.view,
+                normal_sampler: &sampler,
+            }
+            .build(&device, &layout),
+        );
 
         Self {
             bind_group,
