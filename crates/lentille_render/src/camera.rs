@@ -9,10 +9,16 @@ use bevy_ecs::system::Single;
 use bevy_ecs::world::FromWorld;
 use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_core::window::PrimaryWindow;
-use lentille_wgpu_utils::impl_pod_zeroable;
+use lentille_wgpu_utils::{
+    impl_pod_zeroable,
+    typed_texture::{TypedTexture, TypedTextureViewDescriptor},
+};
 use wgpu::TextureDimension;
 
 use crate::RenderState;
+
+pub type ColorImage = UploadedImage<Dim2D, SampleFloatFilterable>;
+pub type DepthImage = UploadedImage<Dim2D, SampleDepth>;
 
 use super::transform::{Transform, WorldTransform};
 
@@ -91,9 +97,9 @@ pub struct RenderTarget {
     pub target_type: TargetType,
     /// true = a, false = b
     is_current_color_a: bool,
-    color_a: Arc<UploadedImage>,
-    color_b: Arc<UploadedImage>,
-    pub depth: Option<Arc<UploadedImage>>,
+    color_a: Arc<ColorImage>,
+    color_b: Arc<ColorImage>,
+    pub depth: Option<Arc<DepthImage>>,
 }
 
 /// RenderTargetSize 是外部控制 RenderTarget 的大小的组件
@@ -105,7 +111,7 @@ pub struct RenderTargetSize {
 
 pub enum TargetType {
     WindowAndSurface(Entity),
-    Texture(Arc<UploadedImage>),
+    Texture(Arc<ColorImage>),
 }
 
 #[derive(Event, Clone)]
@@ -181,7 +187,7 @@ impl Default for RenderTargetSize {
 }
 
 impl RenderTarget {
-    pub fn next(&mut self) -> Arc<UploadedImage> {
+    pub fn next(&mut self) -> Arc<ColorImage> {
         self.is_current_color_a = !self.is_current_color_a;
         Arc::clone(if self.is_current_color_a {
             &self.color_a
@@ -190,7 +196,7 @@ impl RenderTarget {
         })
     }
 
-    pub fn get_current_color(&self) -> Arc<UploadedImage> {
+    pub fn get_current_color(&self) -> Arc<ColorImage> {
         Arc::clone(if self.is_current_color_a {
             &self.color_a
         } else {
@@ -198,7 +204,7 @@ impl RenderTarget {
         })
     }
 
-    pub fn get_attachment_color(&self) -> Arc<UploadedImage> {
+    pub fn get_attachment_color(&self) -> Arc<ColorImage> {
         Arc::clone(if self.is_current_color_a {
             &self.color_b
         } else {
@@ -214,9 +220,9 @@ impl RenderTarget {
         has_depth: bool,
         device: &wgpu::Device,
     ) -> (
-        Arc<UploadedImage>,
-        Arc<UploadedImage>,
-        Option<Arc<UploadedImage>>,
+        Arc<ColorImage>,
+        Arc<ColorImage>,
+        Option<Arc<DepthImage>>,
     ) {
         let width = width.max(1);
         let height = height.max(1);
@@ -440,7 +446,7 @@ pub fn create_color_render_target_image(
     height: u32,
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-) -> UploadedImage {
+) -> ColorImage {
     let size = Extent3d {
         width: width,
         height: height,
@@ -467,10 +473,10 @@ pub fn create_color_render_target_image(
         dimension: TextureDimension::D2,
         view_formats,
     };
-    let texture = device.create_texture(&desc);
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let texture = TypedTexture::from_descriptor(device, &desc);
+    let view = texture.create_view(&TypedTextureViewDescriptor::new(Some("Render Target View")));
 
-    UploadedImage { texture, view }
+    ColorImage { texture, view }
 }
 
 /// 返回给定 sRGB 颜色格式对应的线性 UNORM 格式；非 sRGB 输入返回 `None`。
@@ -482,7 +488,7 @@ pub fn linear_view_format_of(format: wgpu::TextureFormat) -> Option<wgpu::Textur
     }
 }
 
-pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> UploadedImage {
+pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> DepthImage {
     let size = wgpu::Extent3d {
         width,
         height,
@@ -498,10 +504,10 @@ pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> U
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
         view_formats: &[RenderState::DEPTH_FORMAT],
     };
-    let texture = device.create_texture(&desc);
-    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let texture = TypedTexture::from_descriptor(device, &desc);
+    let view = texture.create_view(&TypedTextureViewDescriptor::new(Some("Depth Texture View")));
 
-    UploadedImage { texture, view }
+    DepthImage { texture, view }
 }
 
 pub fn create_depth_sampler(

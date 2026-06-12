@@ -384,7 +384,7 @@ pub fn sys_egui_tiles(world: &mut World) {
 fn convert_csm_depth_to_rgba(world: &mut World) {
     let mut csm_data: Vec<(
         Entity,
-        Vec<std::sync::Arc<wgpu::TextureView>>,
+        Vec<std::sync::Arc<TexView2D<SampleDepth>>>,
         u32,
         u32,
         wgpu::TextureFormat,
@@ -425,7 +425,7 @@ fn convert_csm_depth_to_rgba(world: &mut World) {
 
         let device: &wgpu::Device = unsafe { &*device_ptr };
         let queue: &wgpu::Queue = unsafe { &*queue_ptr };
-        let depth_views: Vec<&wgpu::TextureView> = depth_refs.iter().map(|v| v.as_ref()).collect();
+        let depth_views: Vec<&wgpu::TextureView> = depth_refs.iter().map(|v| v.view()).collect();
 
         let mut converter = entity_mut.get_mut::<CsmDepthToRgbaConverter>().unwrap();
         converter.convert(device, queue, &depth_views, *w, *h, *format);
@@ -544,11 +544,11 @@ fn sys_on_resize_scene_render_target(
         // sRGB→linear 解码，再叠加 shader 内的 linear_from_gamma_rgb，最终
         // 会多一次 gamma。这里改成显式创建对应的线性视图，跳过硬件解码。
         let view = match lentille_render::camera::linear_view_format_of(image.texture.format()) {
-            Some(linear_format) => image.texture.create_view(&wgpu::TextureViewDescriptor {
+            Some(linear_format) => image.texture.texture().create_view(&wgpu::TextureViewDescriptor {
                 format: Some(linear_format),
                 ..Default::default()
             }),
-            None => image.texture.create_view(&Default::default()),
+            None => image.texture.texture().create_view(&wgpu::TextureViewDescriptor::default()),
         };
         egui_tex_id.0 = Some(egui.renderer.register_native_texture(
             device,

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use bevy_ecs::prelude::*;
+use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 use wgpu::{BindingResource, CommandEncoderDescriptor};
 
 use crate::{
@@ -181,26 +182,26 @@ pub fn prefilter(
     pipeline: &PrefilteringPipeline,
     matrix_bind_groups: &CubemapMatrixBindGroups,
     cube_vertex_buffer: &CubeVerticesBuffer,
-) -> anyhow::Result<UploadedImage> {
+) -> anyhow::Result<UploadedImage<DimCube, SampleFloatFilterable>> {
     let size = source_texture.size();
     if size.depth_or_array_layers != 6 {
         return Err(anyhow::anyhow!("Not a cubemap!"));
     }
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-        label,
-        size,
-        mip_level_count: level_count,
-        sample_count: 1,
-        dimension: wgpu::TextureDimension::D2,
-        format: source_texture.format(),
-        usage: source_texture.usage() | TextureUsages::RENDER_ATTACHMENT | TextureUsages::COPY_DST,
-        view_formats: &[],
-    });
+    let texture: Tex2D<SampleFloatFilterable> =
+        TypedTexture::from_descriptor(device, &wgpu::TextureDescriptor {
+            label,
+            size,
+            mip_level_count: level_count,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: source_texture.format(),
+            usage: source_texture.usage()
+                | TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
 
-    let view = texture.create_view(&wgpu::TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::Cube),
-        ..Default::default()
-    });
+    let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
 
     let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
 
@@ -212,7 +213,7 @@ pub fn prefilter(
             aspect: wgpu::TextureAspect::All,
         },
         wgpu::TexelCopyTextureInfoBase {
-            texture: &texture,
+            texture: texture.texture(),
             mip_level: 0,
             origin: wgpu::Origin3d::ZERO,
             aspect: wgpu::TextureAspect::All,
@@ -247,7 +248,7 @@ pub fn prefilter(
             2: BindingResource::Sampler(&sampler);
         ));
         for j in 0..6 {
-            let target = texture.create_view(&wgpu::TextureViewDescriptor {
+            let target = texture.texture().create_view(&wgpu::TextureViewDescriptor {
                 label: None,
                 dimension: Some(wgpu::TextureViewDimension::D2),
                 usage: Some(wgpu::TextureUsages::RENDER_ATTACHMENT),

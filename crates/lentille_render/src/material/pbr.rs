@@ -5,10 +5,12 @@ use bevy_ecs::prelude::*;
 
 use super::UploadedMaterial;
 
+type Tex2DSampler = UploadedImageWithSampler<Dim2D, SampleFloatFilterable>;
+
 #[derive(Clone)]
 pub struct GltfMaterial {
-    pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
-    pub normal_texture: Option<Arc<UploadedImageWithSampler>>,
+    pub base_color_texture: Option<Arc<Tex2DSampler>>,
+    pub normal_texture: Option<Arc<Tex2DSampler>>,
     pub color: [f32; 4],
     pub roughness: f32,
     pub metallic: f32,
@@ -39,8 +41,8 @@ impl UploadedPBRMaterial {
     pub fn from_gltf(
         device: &wgpu::Device,
         layout: &PBRMaterialBindGroupLayout,
-        white_texture: &UploadedImageWithSampler,
-        normal_texture: &UploadedImageWithSampler,
+        white_texture: &Tex2DSampler,
+        normal_texture: &Tex2DSampler,
         main_pipeline: Arc<RenderPipeline>,
         gltf_material: &GltfMaterial,
     ) -> Self {
@@ -99,8 +101,8 @@ pub struct PBRMaterialOverride {
 #[derive(Component, Clone, Default)]
 #[require(PBRMaterialOverride)]
 pub struct PBRMaterial {
-    pub base_color_texture: Option<Arc<UploadedImageWithSampler>>,
-    pub normal_texture: Option<Arc<UploadedImageWithSampler>>,
+    pub base_color_texture: Option<Arc<Tex2DSampler>>,
+    pub normal_texture: Option<Arc<Tex2DSampler>>,
     pub color: Option<Color>,
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,

@@ -377,7 +377,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
 }
 
-pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> UploadedImage {
+pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> lentille_render::image::UploadedImage<lentille_render::prelude::DimCube, lentille_render::prelude::SampleFloatFilterable> {
     let pipeline = PrefilteringPipeline::new(world, wgpu::TextureFormat::Rgba16Float);
 
     let rs = world.resource::<RenderState>();

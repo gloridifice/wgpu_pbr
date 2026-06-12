@@ -7,6 +7,7 @@ use crate::{
 };
 use bevy_app::{Plugin, PreUpdate};
 use bevy_ecs::prelude::*;
+use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 use wgpu::RenderPassColorAttachment;
 
 pub struct WriteGBufferPlugin;
@@ -35,7 +36,7 @@ pub struct GBufferTexturesBindGroup {
 #[allow(unused)]
 #[derive(Clone)]
 pub struct GBufferTexture {
-    pub image: Arc<UploadedImage>,
+    pub image: Arc<UploadedImage<Dim2D, SampleUint>>,
 }
 
 #[allow(unused)]
@@ -128,8 +129,8 @@ pub fn create_g_buffer_image(
         format,
         TextureUsages::TEXTURE_BINDING | TextureUsages::RENDER_ATTACHMENT,
     );
-    let texture = device.create_texture(&desc);
-    let view = texture.create_view(&Default::default());
+    let texture: Tex2D<SampleUint> = TypedTexture::from_descriptor(device, &desc);
+    let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
     GBufferTexture {
         image: Arc::new(UploadedImage { texture, view }),
     }

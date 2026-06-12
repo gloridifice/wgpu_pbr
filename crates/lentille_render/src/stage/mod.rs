@@ -3,13 +3,13 @@ use std::any::{TypeId, type_name};
 use crate::{
     FrameSets, SurfaceState,
     base_assets::{DFGTexture, NoFilterClampSampler},
-    bindings::camera_binding::{CameraBindGroupBuilder, CameraBindGroupLayout},
-    camera::{CameraBuffer, RenderTarget, TargetType},
+    bindings::camera_binding::CameraBindGroupLayout,
+    camera::{CameraBuffer, ColorImage, DepthImage, RenderTarget, TargetType},
     gizmo::{GIZMO_BUFFER, GizmoPrimitive},
     graph::{InsertConfig, TypeIdGraph},
     light::LightUnifromBuffer,
     prelude::*,
-    shadow_mapping::{ShadowMap, csm::CascadeShadowMapping},
+    shadow_mapping::csm::CascadeShadowMapping,
     skybox::{DefaultSkybox, SkyboxSHBuffer},
 };
 use bevy_app::Plugin;
@@ -41,8 +41,8 @@ pub struct RenderContext {
     pub camera_id: Entity,
     pub encoder: wgpu::CommandEncoder,
     pub camera_global_bind_group: Arc<BindGroup>,
-    pub color_target: Arc<UploadedImage>,
-    pub depth_target: Option<Arc<UploadedImage>>,
+    pub color_target: Arc<ColorImage>,
+    pub depth_target: Option<Arc<DepthImage>>,
     pub gizmo_primitives: Arc<Vec<GizmoPrimitive>>,
 }
 
@@ -108,7 +108,6 @@ pub fn sys_render(
     rs: Res<RenderState>,
 
     light: Res<LightUnifromBuffer>,
-    shadow_map: Res<ShadowMap>,
     dfg: Res<DFGTexture>,
     layout: Res<CameraBindGroupLayout>,
     no_filter_sampler: Res<NoFilterClampSampler>,
@@ -212,14 +211,14 @@ pub fn sys_copy_to_real_target(
                     }
                 }
             }
-            TargetType::Texture(uploaded_image) => &uploaded_image.texture,
+            TargetType::Texture(uploaded_image) => uploaded_image.texture.texture(),
         };
 
         if size == texture.size() {
             let mut encoder = rs.device.create_command_encoder(&Default::default());
             lentille_wgpu_utils::copy_texture2d_to_texture2d_no_mip(
                 &mut encoder,
-                &current_color.texture,
+                current_color.texture.texture(),
                 texture,
                 size,
             );

@@ -7,7 +7,8 @@ use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Single;
 use cgmath::{SquareMatrix, ortho};
-use wgpu::{ShaderSource, TextureView, TextureViewDimension, wgt::TextureDescriptor};
+use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
+use wgpu::{ShaderSource, wgt::TextureDescriptor};
 
 pub(super) struct CsmPlugin;
 
@@ -19,7 +20,7 @@ impl Plugin for CsmPlugin {
 }
 
 pub struct LayerContext {
-    pub view: Arc<TextureView>,
+    pub view: Arc<TexView2D<SampleDepth>>,
     pub mat_buffer: Arc<TypedBuffer<[[f32; 4]; 4]>>,
     pub mat_bind_group: Arc<BindGroup>,
 }
@@ -61,9 +62,9 @@ pub struct CascadeShadowMapping {
     pub pipeline: Arc<RenderPipeline>,
     pub layers: Vec<LayerContext>,
     pub csm_info_buffer: Arc<TypedBuffer<GpuCsmInfoUniform>>,
-    pub shadow_maps: Arc<wgpu::Texture>,
+    pub shadow_maps: Arc<Tex2D<SampleDepth>>,
     pub sampler: Arc<Sampler>,
-    pub full_view: Arc<TextureView>,
+    pub full_view: Arc<TexView2DArray<SampleDepth>>,
 }
 
 impl CascadeShadowMapping {
@@ -75,7 +76,7 @@ impl CascadeShadowMapping {
     ) -> Self {
         let device = &rs.device;
 
-        let shadow_maps = Arc::new(device.create_texture(&TextureDescriptor {
+        let shadow_maps = Arc::new(TypedTexture::from_descriptor(device, &TextureDescriptor {
             label: Some("CSM Texture Array"),
             size: Extent3d {
                 width: config.texture_size,
@@ -90,7 +91,9 @@ impl CascadeShadowMapping {
             view_formats: &[],
         }));
 
-        let full_view = Arc::new(shadow_maps.create_view(&wgpu::TextureViewDescriptor::default()));
+        let full_view = Arc::new(shadow_maps.create_view(
+            &TypedTextureViewDescriptor::new(Some("CSM Full View")),
+        ));
 
         let mut layers = Vec::new();
 
@@ -112,14 +115,11 @@ impl CascadeShadowMapping {
                 0: mat_buffer.as_entire_binding();
             )));
 
-            let view = Arc::new(shadow_maps.create_view(&wgpu::TextureViewDescriptor {
-                label: Some("CSM View Layer"),
-                dimension: Some(TextureViewDimension::D2),
-                format: Some(TextureFormat::Depth32Float),
-                base_array_layer: i as u32,
-                array_layer_count: Some(1),
-                ..Default::default()
-            }));
+            let view = Arc::new(shadow_maps.create_view(
+                &TypedTextureViewDescriptor::new(Some("CSM View Layer"))
+                    .with_format(TextureFormat::Depth32Float)
+                    .with_array_layers(i as u32, 1),
+            ));
 
             layers.push(LayerContext {
                 view,

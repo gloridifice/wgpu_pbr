@@ -25,7 +25,7 @@ impl Plugin for ShadowMappingPlugin {
 #[derive(Resource)]
 pub struct ShadowMap {
     // For shadow map rendering pass
-    pub image: UploadedImageWithSampler,
+    pub image: UploadedImageWithSampler<Dim2D, SampleDepth>,
 }
 
 #[derive(Resource)]
@@ -139,13 +139,13 @@ impl FromWorld for ShadowMap {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
-        let UploadedImage { texture, view } = camera::create_depth_texture(4096, 4096, device);
+        let depth = camera::create_depth_texture(4096, 4096, device);
         let sampler = camera::create_depth_sampler(Some(wgpu::CompareFunction::LessEqual), device);
 
         Self {
             image: UploadedImageWithSampler {
-                texture,
-                view,
+                texture: depth.texture,
+                view: depth.view,
                 sampler,
             },
         }

@@ -13,13 +13,14 @@ use bevy_log::{error, info};
 use gltf::image::{Data, Format};
 use image::{ColorType, DynamicImage};
 use png::Decoder;
-use wgpu::util::{DeviceExt, TextureDataOrder};
 use wgpu::{AddressMode, Extent3d, FilterMode, ShaderModule, TextureDescriptor, TextureUsages};
 
 use crate::image::UploadedImageWithSampler;
 use crate::mesh::{Mesh, Model, Primitive, Vertex};
 use crate::prelude::GltfMaterial;
+use crate::prelude::{Dim2D, SampleFloatFilterable, TexView2D, Tex2D};
 use crate::{AlphaMode, RenderState};
+use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 
 use super::AssetPath;
 
@@ -102,7 +103,7 @@ fn load_gltf_image_data_from_path(path: impl AsRef<Path>) -> Result<gltf::image:
     load_gltf_image_data_from_memory(&buffer)
 }
 
-impl UploadedImageWithSampler {
+impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
     pub fn load_from_data(
         data: &gltf::image::Data,
         device: &wgpu::Device,
@@ -137,8 +138,8 @@ impl UploadedImageWithSampler {
             }
         }
 
-        let texture = device.create_texture_with_data(
-            queue,
+        let texture: Tex2D<SampleFloatFilterable> = TypedTexture::from_descriptor(
+            device,
             &TextureDescriptor {
                 label: None,
                 size,
@@ -152,11 +153,27 @@ impl UploadedImageWithSampler {
                 sample_count: 1,
                 view_formats: &[],
             },
-            TextureDataOrder::MipMajor,
+        );
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfoBase {
+                texture: texture.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(
+                    format.block_copy_size(None).unwrap_or(4) * data.width,
+                ),
+                rows_per_image: Some(data.height),
+            },
+            size,
         );
 
-        let view = texture.create_view(&Default::default());
+        let view: TexView2D<SampleFloatFilterable> =
+            texture.create_view(&TypedTextureViewDescriptor::new(None));
         let sampler = device.create_sampler(&lentille_wgpu_utils::sampler_desc(
             None,
             AddressMode::MirrorRepeat,
@@ -208,8 +225,8 @@ impl UploadedImageWithSampler {
             }
         }
 
-        let texture = device.create_texture_with_data(
-            queue,
+        let texture: Tex2D<SampleFloatFilterable> = TypedTexture::from_descriptor(
+            device,
             &wgpu::TextureDescriptor {
                 size,
                 mip_level_count: 1,
@@ -222,12 +239,26 @@ impl UploadedImageWithSampler {
                     | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             },
-            Default::default(),
+        );
+        queue.write_texture(
+            wgpu::TexelCopyTextureInfoBase {
+                texture: texture.texture(),
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
             &image_data,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4 * 2),
+                rows_per_image: Some(height),
+            },
+            size,
         );
 
-        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-        let sampler = device.create_sampler(&UploadedImageWithSampler::default_sampler_desc());
+        let view: TexView2D<SampleFloatFilterable> =
+            texture.create_view(&TypedTextureViewDescriptor::new(None));
+        let sampler = device.create_sampler(&UploadedImageWithSampler::<Dim2D, SampleFloatFilterable>::default_sampler_desc());
 
         Ok(UploadedImageWithSampler {
             texture,

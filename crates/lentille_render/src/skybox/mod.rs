@@ -27,12 +27,12 @@ impl Plugin for SkyBoxPlugin {
 
 #[derive(Component, Default)]
 pub struct Skybox {
-    pub texture: Option<UploadedImage>,
+    pub texture: Option<UploadedImage<DimCube, SampleFloatFilterable>>,
 }
 
 #[derive(Resource)]
 pub struct DefaultSkybox {
-    pub texture: UploadedImage,
+    pub texture: UploadedImage<DimCube, SampleFloatFilterable>,
 }
 
 impl FromWorld for DefaultSkybox {

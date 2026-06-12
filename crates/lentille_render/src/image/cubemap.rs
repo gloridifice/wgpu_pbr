@@ -1,16 +1,16 @@
 use std::{fs::File, io::Read};
 
-use wgpu::TextureViewDescriptor;
+use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 
 use crate::asset::AssetPath;
-use crate::image::UploadedImage;
+use crate::prelude::*;
 
 /// Order of paths is +x, -x, +y, -y, +z, -z
 pub fn load_cubemap_sliced(
     paths: &[AssetPath; 6],
     device: &wgpu::Device,
     queue: &wgpu::Queue,
-) -> anyhow::Result<UploadedImage> {
+) -> anyhow::Result<UploadedImage<DimCube, SampleFloatFilterable>> {
     let mut byte_images = Vec::with_capacity(6);
     for path in paths {
         let mut file = File::open(path.final_path())?;
@@ -28,7 +28,7 @@ pub fn load_cubemap_sliced(
         depth_or_array_layers: 6,
     };
 
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
+    let texture = TypedTexture::from_descriptor(device, &wgpu::TextureDescriptor {
         size,
         mip_level_count: 1,
         label: None,
@@ -44,7 +44,7 @@ pub fn load_cubemap_sliced(
     for (index, image) in byte_images.iter().enumerate() {
         queue.write_texture(
             wgpu::TexelCopyTextureInfoBase {
-                texture: &texture,
+                texture: texture.texture(),
                 mip_level: 0,
                 origin: wgpu::Origin3d {
                     x: 0,
@@ -67,10 +67,7 @@ pub fn load_cubemap_sliced(
         );
     }
 
-    let view = texture.create_view(&TextureViewDescriptor {
-        dimension: Some(wgpu::TextureViewDimension::Cube),
-        ..Default::default()
-    });
+    let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
 
     Ok(UploadedImage { texture, view })
 }

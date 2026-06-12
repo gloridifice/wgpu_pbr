@@ -32,7 +32,7 @@ pub struct FullScreenVertexShader {
 
 #[derive(Resource)]
 pub struct DFGTexture {
-    pub texture: Arc<UploadedImageWithSampler>,
+    pub texture: Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>,
 }
 
 impl FromWorld for FullScreenVertexShader {
@@ -54,13 +54,13 @@ impl FromWorld for FullScreenVertexShader {
 }
 
 #[derive(Resource, Clone)]
-pub struct WhiteTexture(pub Arc<UploadedImageWithSampler>);
+pub struct WhiteTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
-pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler>);
+pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
-pub struct MissingTexture(pub Arc<UploadedImageWithSampler>);
+pub struct MissingTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
 pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);

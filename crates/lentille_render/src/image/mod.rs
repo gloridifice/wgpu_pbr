@@ -1,24 +1,25 @@
-use wgpu::{Texture, TextureView};
+use lentille_wgpu_utils::typed_texture::{
+    TextureSampleTypeState, TextureViewDimensionState, TypedTextureView,
+};
 
 use crate::prelude::*;
 
 pub mod cubemap;
 
-pub struct UploadedImageWithSampler {
+pub struct UploadedImageWithSampler<D: TextureViewDimensionState, S: TextureSampleTypeState> {
     #[allow(unused)]
-    pub texture: Texture,
-    pub view: TextureView,
+    pub texture: Tex2D<S>,
+    pub view: TypedTextureView<D, S>,
     pub sampler: Sampler,
 }
 
-#[derive(Debug)]
-pub struct UploadedImage {
+pub struct UploadedImage<D: TextureViewDimensionState, S: TextureSampleTypeState> {
     #[allow(unused)]
-    pub texture: Texture,
-    pub view: TextureView,
+    pub texture: Tex2D<S>,
+    pub view: TypedTextureView<D, S>,
 }
 
-impl UploadedImageWithSampler {
+impl<D: TextureViewDimensionState, S: TextureSampleTypeState> UploadedImageWithSampler<D, S> {
     pub fn image_data_layout(
         width: u32,
         heigh: u32,
