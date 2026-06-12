@@ -13,9 +13,9 @@ use bevy_log::{error, info};
 use gltf::image::{Data, Format};
 use image::{ColorType, DynamicImage};
 use png::Decoder;
-use wgpu::{AddressMode, Extent3d, FilterMode, ShaderModule, TextureDescriptor, TextureUsages};
+use wgpu::{Extent3d, ShaderModule, TextureDescriptor, TextureUsages};
 
-use crate::image::UploadedImageWithSampler;
+use crate::image::UploadedImage;
 use crate::mesh::{Mesh, Model, Primitive, Vertex};
 use crate::prelude::GltfMaterial;
 use crate::prelude::{Dim2D, SampleFloatFilterable, Tex2D, TexView2D};
@@ -103,7 +103,7 @@ fn load_gltf_image_data_from_path(path: impl AsRef<Path>) -> Result<gltf::image:
     load_gltf_image_data_from_memory(&buffer)
 }
 
-impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
+impl UploadedImage<Dim2D, SampleFloatFilterable> {
     pub fn load_from_data(
         data: &gltf::image::Data,
         device: &wgpu::Device,
@@ -172,17 +172,8 @@ impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
 
         let view: TexView2D<SampleFloatFilterable> =
             texture.create_view(&TypedTextureViewDescriptor::new(None));
-        let sampler = device.create_sampler(&lentille_wgpu_utils::sampler_desc(
-            None,
-            AddressMode::MirrorRepeat,
-            FilterMode::Linear,
-        ));
 
-        Ok(UploadedImageWithSampler {
-            texture,
-            view,
-            sampler,
-        })
+        Ok(UploadedImage { texture, view })
     }
 
     pub fn load_from_path(
@@ -256,16 +247,8 @@ impl UploadedImageWithSampler<Dim2D, SampleFloatFilterable> {
 
         let view: TexView2D<SampleFloatFilterable> =
             texture.create_view(&TypedTextureViewDescriptor::new(None));
-        let sampler = device
-            .create_sampler(
-                &UploadedImageWithSampler::<Dim2D, SampleFloatFilterable>::default_sampler_desc(),
-            );
 
-        Ok(UploadedImageWithSampler {
-            texture,
-            view,
-            sampler,
-        })
+        Ok(UploadedImage { texture, view })
     }
 }
 
@@ -418,7 +401,7 @@ impl Loadable for Model {
                             let index = info.texture().index();
                             let data = &images[index];
                             Arc::new(
-                                UploadedImageWithSampler::load_from_data(
+                                UploadedImage::load_from_data(
                                     data,
                                     device,
                                     queue,
@@ -430,7 +413,7 @@ impl Loadable for Model {
                         let normal_texture = mat.normal_texture().map(|info| {
                             let index = info.texture().index();
                             Arc::new(
-                                UploadedImageWithSampler::load_from_data(
+                                UploadedImage::load_from_data(
                                     &images[index],
                                     device,
                                     queue,

@@ -389,7 +389,7 @@ pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> le
     let queue = &rs.queue;
     let In(path) = input;
 
-    let hdri = UploadedImageWithSampler::load_hdri_to_f16(path, device, queue).unwrap();
+    let hdri = UploadedImage::load_hdri_to_f16(path, device, queue).unwrap();
 
     let source_texture = {
         converter.0.render_hdir_to_cube_map(

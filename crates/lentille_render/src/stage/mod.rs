@@ -2,7 +2,7 @@ use std::any::{TypeId, type_name};
 
 use crate::{
     FrameSets, SurfaceState,
-    base_assets::{DFGTexture, NoFilterClampSampler},
+    base_assets::{DFGTexture, NoFilterClampSampler, SkyboxSampler},
     bindings::camera_binding::{CameraBindGroupBuilder, CameraBindGroupLayout},
     camera::{CameraBuffer, ColorImage, DepthImage, RenderTarget, TargetType},
     gizmo::{GIZMO_BUFFER, GizmoPrimitive},
@@ -111,10 +111,11 @@ pub fn sys_render(
     dfg: Res<DFGTexture>,
     layout: Res<CameraBindGroupLayout>,
     no_filter_sampler: Res<NoFilterClampSampler>,
+    skybox_sampler: Res<SkyboxSampler>,
 
     default_skybox: Res<DefaultSkybox>,
     skybox_sh: Res<SkyboxSHBuffer>,
-    skeybox: Query<&Skybox>,
+    skybox: Query<&Skybox>,
 ) {
     let gizmo_primitives = {
         let mut buf = GIZMO_BUFFER.lock().unwrap();
@@ -136,7 +137,7 @@ pub fn sys_render(
             });
 
             let camera_global_bind_group = {
-                let skybox_texture = skeybox
+                let skybox_texture = skybox
                     .single()
                     .ok()
                     .and_then(|it| it.texture.as_ref())
@@ -144,37 +145,22 @@ pub fn sys_render(
 
                 let device = &rs.device;
 
-                CameraBindGroupBuilder {
-                    camera_uniform: &camera_buffer.buffer,
-                    light_uniform: &light.buffer,
-                    csm_buffer: &csm.full_view,
-                    csm_sampler: &csm.sampler,
-                    dfg: &dfg.texture.view,
-                    skybox: &skybox_texture.view,
-                    skybox_sampler: &dfg.texture.sampler,
-                    skybox_sh: &skybox_sh.buffer,
-                    color_target: &color_target.view,
-                    color_target_sampler: &no_filter_sampler.0,
-                    csm_info: &csm.csm_info_buffer,
-                }
-                .build(device, &layout);
-
-                let bind_group_desc = bg_descriptor! {
-                    ["Main PBR Global BindGroup"][&layout.0]
-                    0: camera_buffer.buffer.as_entire_binding();
-                    1: light.buffer.as_entire_binding();
-                    2: BindingResource::TextureView(&csm.full_view);
-                    3: BindingResource::Sampler(&csm.sampler);
-                    4: BindingResource::TextureView(&dfg.texture.view);
-                    5: BindingResource::TextureView(&skybox_texture.view);
-                    6: BindingResource::Sampler(&dfg.texture.sampler); // todo cubemap sampler
-                    7: skybox_sh.buffer.as_entire_binding();
-                    8: BindingResource::TextureView(&color_attachment.view);
-                    9: BindingResource::Sampler(&no_filter_sampler.0);
-                    10: csm.csm_info_buffer.as_entire_binding();
-                };
-
-                Arc::new(device.create_bind_group(&bind_group_desc))
+                Arc::new(
+                    CameraBindGroupBuilder {
+                        camera_uniform: &camera_buffer.buffer,
+                        light_uniform: &light.buffer,
+                        csm_texture: &csm.full_view,
+                        csm_sampler: &csm.sampler,
+                        dfg: &dfg.texture.view,
+                        skybox_texture: &skybox_texture.view,
+                        skybox_sampler: &skybox_sampler.0,
+                        skybox_sh_uniform: &skybox_sh.buffer,
+                        color_target: &color_attachment.view,
+                        color_target_sampler: &no_filter_sampler.0,
+                        csm_info: &csm.csm_info_buffer,
+                    }
+                    .build(device, &layout),
+                )
             };
 
             let render_context = RenderContext {

@@ -3,7 +3,7 @@ use crate::{
 };
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
-use lentille_wgpu_utils::typed_sampler::NonFilteringSampler;
+use lentille_wgpu_utils::typed_sampler::{FilteringSampler, NonFilteringSampler};
 
 pub(super) struct BaseAssetsPlugin;
 
@@ -16,12 +16,15 @@ impl Plugin for BaseAssetsPlugin {
             .init_render_resource::<MissingTexture>()
             .init_render_resource::<FullScreenVertexShader>()
             .init_render_resource::<NoFilterClampSampler>()
+            .init_render_resource::<DefaultMaterialSampler>()
+            .init_render_resource::<SkyboxSampler>()
             .init_render_resource_with_config::<DefaultPBRMaterial>([
                 after::<MissingTexture>(),
                 after::<WhiteTexture>(),
                 after::<NormalDefaultTexture>(),
                 after::<DeferredComputePipeline>(),
                 after::<PBRMaterialBindGroupLayout>(),
+                after::<DefaultMaterialSampler>(),
             ]);
     }
 }
@@ -33,7 +36,7 @@ pub struct FullScreenVertexShader {
 
 #[derive(Resource)]
 pub struct DFGTexture {
-    pub texture: Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>,
+    pub texture: Arc<UploadedImage<Dim2D, SampleFloatFilterable>>,
 }
 
 impl FromWorld for FullScreenVertexShader {
@@ -55,13 +58,13 @@ impl FromWorld for FullScreenVertexShader {
 }
 
 #[derive(Resource, Clone)]
-pub struct WhiteTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
+pub struct WhiteTexture(pub Arc<UploadedImage<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
-pub struct NormalDefaultTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
+pub struct NormalDefaultTexture(pub Arc<UploadedImage<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
-pub struct MissingTexture(pub Arc<UploadedImageWithSampler<Dim2D, SampleFloatFilterable>>);
+pub struct MissingTexture(pub Arc<UploadedImage<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
 pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
@@ -70,13 +73,19 @@ pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
 pub struct NoFilterClampSampler(pub Arc<NonFilteringSampler>);
 
 #[derive(Resource, Clone)]
-pub struct LinearFilterClampSampler(pub Arc<Sampler>);
+pub struct DefaultMaterialSampler(pub Arc<FilteringSampler>);
+
+#[derive(Resource, Clone)]
+pub struct SkyboxSampler(pub Arc<FilteringSampler>);
+
+#[derive(Resource, Clone)]
+pub struct LinearFilterClampSampler(pub Arc<FilteringSampler>);
 
 impl FromWorld for WhiteTexture {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
+            UploadedImage::load_from_path(
                 AssetPath::Assets("textures/white.png".to_string()),
                 &rs.device,
                 &rs.queue,
@@ -91,7 +100,7 @@ impl FromWorld for NormalDefaultTexture {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
+            UploadedImage::load_from_path(
                 AssetPath::Assets("textures/normal_default.png".to_string()),
                 &rs.device,
                 &rs.queue,
@@ -106,7 +115,7 @@ impl FromWorld for MissingTexture {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         Self(Arc::new(
-            UploadedImageWithSampler::load_from_path(
+            UploadedImage::load_from_path(
                 AssetPath::Assets("textures/missing.png".to_string()),
                 &rs.device,
                 &rs.queue,
@@ -119,21 +128,23 @@ impl FromWorld for MissingTexture {
 
 impl FromWorld for DefaultPBRMaterial {
     fn from_world(world: &mut World) -> Self {
-        let missing_tex = &world.resource::<MissingTexture>().0;
+        let missing_tex = Arc::clone(&world.resource::<MissingTexture>().0);
         let white_tex = &world.resource::<WhiteTexture>().0;
         let normal_default_tex = &world.resource::<NormalDefaultTexture>().0;
-        let device = &world.resource::<RenderState>().device;
+        let device = world.resource::<RenderState>().device.clone();
         let compute_pipeline = world.resource::<DeferredComputePipeline>();
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
+        let material_sampler = world.resource::<DefaultMaterialSampler>();
 
         let mat = UploadedPBRMaterial::from_gltf(
-            device,
+            &device,
             layout,
             white_tex,
             normal_default_tex,
+            &material_sampler.0,
             Arc::clone(&compute_pipeline.pipeline),
             &GltfMaterial {
-                base_color_texture: Some(Arc::clone(missing_tex)),
+                base_color_texture: Some(missing_tex),
                 ..Default::default()
             },
         );
@@ -145,7 +156,37 @@ impl FromWorld for NoFilterClampSampler {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let sampler =
-            NonFilteringSampler::new(&rs.device, &lentille_wgpu_utils::sampler_desc_no_filter());
+            NonFilteringSampler::new(&rs.device, lentille_wgpu_utils::sampler_desc_no_filter());
+        Self(Arc::new(sampler))
+    }
+}
+
+impl FromWorld for DefaultMaterialSampler {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let sampler = FilteringSampler::new(
+            &rs.device,
+            &lentille_wgpu_utils::sampler_desc(
+                None,
+                wgpu::AddressMode::MirrorRepeat,
+                wgpu::FilterMode::Linear,
+            ),
+        );
+        Self(Arc::new(sampler))
+    }
+}
+
+impl FromWorld for SkyboxSampler {
+    fn from_world(world: &mut World) -> Self {
+        let rs = world.resource::<RenderState>();
+        let sampler = FilteringSampler::new(
+            &rs.device,
+            &lentille_wgpu_utils::sampler_desc(
+                None,
+                wgpu::AddressMode::ClampToEdge,
+                wgpu::FilterMode::Linear,
+            ),
+        );
         Self(Arc::new(sampler))
     }
 }
@@ -153,18 +194,21 @@ impl FromWorld for NoFilterClampSampler {
 impl FromWorld for LinearFilterClampSampler {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
-        let sampler = rs.device.create_sampler(&wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            mipmap_filter: wgpu::MipmapFilterMode::Linear,
-            compare: None,
-            lod_min_clamp: 0.0,
-            lod_max_clamp: 100.0,
-            ..Default::default()
-        });
+        let sampler = FilteringSampler::new(
+            &rs.device,
+            &wgpu::SamplerDescriptor {
+                address_mode_u: wgpu::AddressMode::ClampToEdge,
+                address_mode_v: wgpu::AddressMode::ClampToEdge,
+                address_mode_w: wgpu::AddressMode::ClampToEdge,
+                mag_filter: wgpu::FilterMode::Linear,
+                min_filter: wgpu::FilterMode::Linear,
+                mipmap_filter: wgpu::MipmapFilterMode::Linear,
+                compare: None,
+                lod_min_clamp: 0.0,
+                lod_max_clamp: 100.0,
+                ..Default::default()
+            },
+        );
         Self(Arc::new(sampler))
     }
 }
@@ -173,7 +217,7 @@ impl FromWorld for DFGTexture {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let texture = Arc::new(
-            UploadedImageWithSampler::load_from_path(
+            UploadedImage::load_from_path(
                 crate::asset::AssetPath::Assets("textures/ibl_brdf_lut.png".to_string()),
                 &rs.device,
                 &rs.queue,

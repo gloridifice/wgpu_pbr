@@ -5,8 +5,8 @@ pub use crate::{
     asset::AssetPath,
     asset::load::Loadable,
     base_assets::{
-        DefaultPBRMaterial, FullScreenVertexShader, MissingTexture, NormalDefaultTexture,
-        WhiteTexture,
+        DefaultMaterialSampler, DefaultPBRMaterial, FullScreenVertexShader, MissingTexture,
+        NormalDefaultTexture, WhiteTexture,
     },
     bindings::{
         light_binding::DynamicLightBindGroup, material_binding::PBRMaterialBindGroupLayout,
@@ -15,7 +15,7 @@ pub use crate::{
     camera::Camera,
     gizmo::Gizmo,
     graph::{after, before},
-    image::{UploadedImage, UploadedImageWithSampler},
+    image::UploadedImage,
     light::{parallel_light::ParallelLight, point_light::PointLight},
     material::pbr::GltfMaterial,
     material::pbr::PBRMaterial,

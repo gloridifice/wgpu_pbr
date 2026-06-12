@@ -5,7 +5,8 @@ use wgpu::util::DeviceExt;
 use crate::material::pbr::UploadedPBRMaterial;
 
 use super::{
-    NormalDefaultTexture, WhiteTexture, deferred_rendering::DeferredComputePipeline, prelude::*,
+    DefaultMaterialSampler, NormalDefaultTexture, WhiteTexture,
+    deferred_rendering::DeferredComputePipeline, prelude::*,
 };
 use bevy_ecs::prelude::*;
 
@@ -47,6 +48,7 @@ impl Mesh {
         let layout = world.resource::<PBRMaterialBindGroupLayout>();
         let white_tex = world.resource::<WhiteTexture>();
         let normal_default = world.resource::<NormalDefaultTexture>();
+        let material_sampler = world.resource::<DefaultMaterialSampler>();
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
@@ -72,6 +74,7 @@ impl Mesh {
                             layout,
                             &white_tex.0,
                             &normal_default.0,
+                            &material_sampler.0,
                             Arc::clone(&main_pipeline.pipeline),
                             gltf_mat,
                         ))

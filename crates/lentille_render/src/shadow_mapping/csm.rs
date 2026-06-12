@@ -11,7 +11,7 @@ use lentille_wgpu_utils::{
     typed_sampler::ComparisonSampler,
     typed_texture::{TypedTexture, TypedTextureViewDescriptor},
 };
-use wgpu::{ShaderSource, wgt::TextureDescriptor};
+use wgpu::{CompareFunction, ShaderSource, wgt::TextureDescriptor};
 
 pub(super) struct CsmPlugin;
 
@@ -198,7 +198,8 @@ impl CascadeShadowMapping {
 
         let sampler = Arc::new(ComparisonSampler::new(
             device,
-            &lentille_wgpu_utils::sampler_desc_no_filter(),
+            CompareFunction::LessEqual,
+            lentille_wgpu_utils::sampler_desc_no_filter(),
         ));
 
         Self {

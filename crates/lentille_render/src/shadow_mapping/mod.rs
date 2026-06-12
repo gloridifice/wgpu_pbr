@@ -1,6 +1,8 @@
 use crate::{app_ext::AppExt, camera, prelude::*, shadow_mapping::csm::CsmPlugin};
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
+use lentille_wgpu_utils::typed_sampler::ComparisonSampler;
+use wgpu::CompareFunction;
 
 use super::{light::LightUnifromBuffer, shader_loader::ShaderLoader};
 
@@ -24,8 +26,8 @@ impl Plugin for ShadowMappingPlugin {
 
 #[derive(Resource)]
 pub struct ShadowMap {
-    // For shadow map rendering pass
-    pub image: UploadedImageWithSampler<Dim2D, SampleDepth>,
+    pub image: UploadedImage<Dim2D, SampleDepth>,
+    pub sampler: ComparisonSampler,
 }
 
 #[derive(Resource)]
@@ -139,15 +141,14 @@ impl FromWorld for ShadowMap {
     fn from_world(world: &mut World) -> Self {
         let rs = world.resource::<RenderState>();
         let device = &rs.device;
-        let depth = camera::create_depth_texture(4096, 4096, device);
-        let sampler = camera::create_depth_sampler(Some(wgpu::CompareFunction::LessEqual), device);
+        let image = camera::create_depth_texture(4096, 4096, device);
 
-        Self {
-            image: UploadedImageWithSampler {
-                texture: depth.texture,
-                view: depth.view,
-                sampler,
-            },
-        }
+        let sampler = ComparisonSampler::new(
+            device,
+            CompareFunction::LessEqual,
+            lentille_wgpu_utils::sampler_desc_no_filter(),
+        );
+
+        Self { image, sampler }
     }
 }

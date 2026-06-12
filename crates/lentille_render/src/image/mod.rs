@@ -6,20 +6,13 @@ use crate::prelude::*;
 
 pub mod cubemap;
 
-pub struct UploadedImageWithSampler<D: TextureViewDimensionState, S: TextureSampleTypeState> {
-    #[allow(unused)]
-    pub texture: Tex2D<S>,
-    pub view: TypedTextureView<D, S>,
-    pub sampler: Sampler,
-}
-
 pub struct UploadedImage<D: TextureViewDimensionState, S: TextureSampleTypeState> {
     #[allow(unused)]
     pub texture: Tex2D<S>,
     pub view: TypedTextureView<D, S>,
 }
 
-impl<D: TextureViewDimensionState, S: TextureSampleTypeState> UploadedImageWithSampler<D, S> {
+impl<D: TextureViewDimensionState, S: TextureSampleTypeState> UploadedImage<D, S> {
     pub fn image_data_layout(
         width: u32,
         heigh: u32,
@@ -35,17 +28,5 @@ impl<D: TextureViewDimensionState, S: TextureSampleTypeState> UploadedImageWithS
 
     pub fn size(&self) -> Extent3d {
         self.texture.size()
-    }
-
-    pub fn default_sampler_desc() -> wgpu::SamplerDescriptor<'static> {
-        wgpu::SamplerDescriptor {
-            address_mode_u: wgpu::AddressMode::ClampToEdge,
-            address_mode_v: wgpu::AddressMode::ClampToEdge,
-            address_mode_w: wgpu::AddressMode::ClampToEdge,
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-            ..Default::default()
-        }
     }
 }

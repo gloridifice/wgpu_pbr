@@ -11,6 +11,7 @@ use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_core::window::PrimaryWindow;
 use lentille_wgpu_utils::{
     impl_pod_zeroable,
+    typed_sampler::ComparisonSampler,
     typed_texture::{TypedTexture, TypedTextureViewDescriptor},
 };
 use wgpu::TextureDimension;
@@ -219,11 +220,7 @@ impl RenderTarget {
         format: wgpu::TextureFormat,
         has_depth: bool,
         device: &wgpu::Device,
-    ) -> (
-        Arc<ColorImage>,
-        Arc<ColorImage>,
-        Option<Arc<DepthImage>>,
-    ) {
+    ) -> (Arc<ColorImage>, Arc<ColorImage>, Option<Arc<DepthImage>>) {
         let width = width.max(1);
         let height = height.max(1);
 
@@ -508,16 +505,4 @@ pub fn create_depth_texture(width: u32, height: u32, device: &wgpu::Device) -> D
     let view = texture.create_view(&TypedTextureViewDescriptor::new(Some("Depth Texture View")));
 
     DepthImage { texture, view }
-}
-
-pub fn create_depth_sampler(
-    compare: Option<wgpu::CompareFunction>,
-    device: &wgpu::Device,
-) -> Sampler {
-    let sampler = device.create_sampler(&{
-        let mut desc = lentille_wgpu_utils::sampler_desc_no_filter();
-        desc.compare = compare;
-        desc
-    });
-    sampler
 }

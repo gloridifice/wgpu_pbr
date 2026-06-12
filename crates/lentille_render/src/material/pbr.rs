@@ -2,15 +2,16 @@ use std::sync::Arc;
 
 use crate::{deferred_rendering::DeferredComputePipeline, prelude::*};
 use bevy_ecs::prelude::*;
+use lentille_wgpu_utils::typed_sampler::FilteringSampler;
 
 use super::UploadedMaterial;
 
-type Tex2DSampler = UploadedImageWithSampler<Dim2D, SampleFloatFilterable>;
+type Tex2D = UploadedImage<Dim2D, SampleFloatFilterable>;
 
 #[derive(Clone)]
 pub struct GltfMaterial {
-    pub base_color_texture: Option<Arc<Tex2DSampler>>,
-    pub normal_texture: Option<Arc<Tex2DSampler>>,
+    pub base_color_texture: Option<Arc<Tex2D>>,
+    pub normal_texture: Option<Arc<Tex2D>>,
     pub color: [f32; 4],
     pub roughness: f32,
     pub metallic: f32,
@@ -41,8 +42,9 @@ impl UploadedPBRMaterial {
     pub fn from_gltf(
         device: &wgpu::Device,
         layout: &PBRMaterialBindGroupLayout,
-        white_texture: &Tex2DSampler,
-        normal_texture: &Tex2DSampler,
+        white_texture: &Tex2D,
+        normal_texture: &Tex2D,
+        sampler: &FilteringSampler,
         main_pipeline: Arc<RenderPipeline>,
         gltf_material: &GltfMaterial,
     ) -> Self {
@@ -71,9 +73,9 @@ impl UploadedPBRMaterial {
             ["PBR Material Bind Group"] [material_bind_group_layout]
             0: buffer.as_entire_binding();
             1: BindingResource::TextureView(&base_color.view);
-            2: BindingResource::Sampler(&base_color.sampler);
+            2: BindingResource::Sampler(sampler);
             3: BindingResource::TextureView(&normal.view);
-            4: BindingResource::Sampler(&normal.sampler);
+            4: BindingResource::Sampler(sampler);
         )));
 
         Self {
@@ -101,8 +103,8 @@ pub struct PBRMaterialOverride {
 #[derive(Component, Clone, Default)]
 #[require(PBRMaterialOverride)]
 pub struct PBRMaterial {
-    pub base_color_texture: Option<Arc<Tex2DSampler>>,
-    pub normal_texture: Option<Arc<Tex2DSampler>>,
+    pub base_color_texture: Option<Arc<Tex2D>>,
+    pub normal_texture: Option<Arc<Tex2D>>,
     pub color: Option<Color>,
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,
@@ -139,6 +141,7 @@ pub fn sys_update_override_pbr_material_bind_group(
     white: Res<WhiteTexture>,
     normal_default: Res<NormalDefaultTexture>,
     layout: Res<PBRMaterialBindGroupLayout>,
+    material_sampler: Res<DefaultMaterialSampler>,
     mut pbr_mats: Query<
         (&MeshRenderer, &PBRMaterial, &mut PBRMaterialOverride),
         Changed<PBRMaterial>,
@@ -184,6 +187,7 @@ pub fn sys_update_override_pbr_material_bind_group(
             &layout,
             &white.0,
             &normal_default.0,
+            &material_sampler.0,
             Arc::clone(&main_pipeline.pipeline),
             &mat,
         )))

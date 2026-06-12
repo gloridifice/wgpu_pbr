@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 use std::ops::Deref;
 
 use crate::impl_type_state;
-use wgpu::{Device, Sampler, SamplerBindingType, SamplerDescriptor};
+use wgpu::{CompareFunction, Device, Sampler, SamplerBindingType, SamplerDescriptor};
 
 use crate::typed_binding_resource::TypedBinding;
 
@@ -28,15 +28,42 @@ pub struct TypedSampler<B: SamplerBindingTypeState> {
     _binding_type: PhantomData<B>,
 }
 
-impl<B: SamplerBindingTypeState> TypedSampler<B> {
-    /// 根据 `wgpu` 描述符创建 typed sampler。
-    pub fn new(device: &Device, descriptor: &SamplerDescriptor<'_>) -> Self {
+impl ComparisonSampler {
+    pub fn new(
+        device: &Device,
+        compare: CompareFunction,
+        mut descriptor: SamplerDescriptor<'_>,
+    ) -> Self {
+        descriptor.compare = Some(compare);
         Self {
-            sampler: device.create_sampler(descriptor),
+            sampler: device.create_sampler(&descriptor),
             _binding_type: PhantomData,
         }
     }
+}
 
+impl FilteringSampler {
+    pub fn new(device: &Device, descriptor: &SamplerDescriptor<'_>) -> Self {
+        Self {
+            sampler: device.create_sampler(&descriptor),
+            _binding_type: PhantomData,
+        }
+    }
+}
+
+impl NonFilteringSampler {
+    pub fn new(device: &Device, mut descriptor: SamplerDescriptor<'_>) -> Self {
+        descriptor.min_filter = wgpu::FilterMode::Nearest;
+        descriptor.mag_filter = wgpu::FilterMode::Nearest;
+        descriptor.mipmap_filter = wgpu::MipmapFilterMode::Nearest;
+        Self {
+            sampler: device.create_sampler(&descriptor),
+            _binding_type: PhantomData,
+        }
+    }
+}
+
+impl<B: SamplerBindingTypeState> TypedSampler<B> {
     /// 返回类型 `B` 编码的 sampler 绑定类型。
     pub fn binding_type() -> SamplerBindingType {
         B::VALUE
