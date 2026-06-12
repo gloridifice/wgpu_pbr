@@ -304,6 +304,8 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             level_count: 4,
             texture_size: 2048,
             linear_log_factor: 0.5,
+            shadow_near: 1.0,
+            shadow_far: 80.0,
         },
         RenderTargetConfig::Texture {
             width: 1600,
@@ -331,6 +333,8 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             level_count: 4,
             texture_size: 2048,
             linear_log_factor: 0.5,
+            shadow_near: 1.0,
+            shadow_far: 80.0,
         },
         RenderTargetConfig::Texture {
             width: 1600,

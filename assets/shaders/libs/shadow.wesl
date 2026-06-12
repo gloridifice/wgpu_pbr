@@ -23,6 +23,7 @@ fn sample_csm(world_pos: vec3<f32>, z_ndc: f32) -> f32 {
             }
             sample /= 9.0;
 
+            //return light_space_z;
             return sample;
         }
     }

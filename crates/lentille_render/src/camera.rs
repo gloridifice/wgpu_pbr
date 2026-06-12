@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::shadow_mapping::csm::sys_update_csm_buffers;
 use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::component::Component;
@@ -37,7 +38,12 @@ impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_systems(
             PostUpdate,
-            (sys_create_render_target, sys_create_or_update_camera_buffer).chain(),
+            (
+                sys_create_render_target,
+                sys_create_or_update_camera_buffer,
+                sys_update_csm_buffers,
+            )
+                .chain(),
         )
         .add_systems(PreUpdate, sys_resize_render_target);
     }
