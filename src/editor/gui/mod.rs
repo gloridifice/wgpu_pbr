@@ -4,10 +4,10 @@ use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
 use bevy_log::info;
 use egui::{
-    CentralPanel, Color32, LayerId, PointerButton, ScrollArea, UiBuilder, Visuals,
-    epaint::text::InsertFontFamily, load::SizedTexture,
+    Color32, LayerId, PointerButton, ScrollArea, Visuals, epaint::text::InsertFontFamily,
+    load::SizedTexture,
 };
-use egui_tiles::{Container, Shares};
+use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
@@ -17,7 +17,7 @@ use lentille_core::{
 use lentille_render::{
     FrameSets, RenderPreparedStartup, SurfaceState,
     app_ext::AppExt,
-    camera::{Camera, RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
+    camera::{RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
     shadow_mapping::{
         ShadowMap,
@@ -41,8 +41,9 @@ impl Plugin for EditorGuiPlugin {
         app.add_plugins(EguiRendererPlugin)
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
+            .init_resource::<DockLayout>()
             .add_systems(RenderPreparedStartup, sys_setup_egui_visual)
-            .add_systems(Update, sys_egui_tiles)
+            .add_systems(Update, sys_egui_dock)
             .add_observer(sys_on_resize_scene_render_target);
     }
 }
@@ -144,7 +145,7 @@ pub enum Pane {
     WorldPanel,
 }
 
-struct TreeBehavior<'a> {
+struct DockTabViewer<'a> {
     world: &'a mut World,
     egui_renderer: &'a mut EguiRenderer,
     device: *const wgpu::Device,
@@ -152,6 +153,15 @@ struct TreeBehavior<'a> {
 
 #[derive(Resource, Clone, Default)]
 struct RenderTargetEguiTexId(Option<egui::TextureId>);
+
+#[derive(Resource)]
+struct DockLayout(DockState<Pane>);
+
+impl Default for DockLayout {
+    fn default() -> Self {
+        Self(create_dock_state())
+    }
+}
 
 /// Cached state for previewing the single [`ShadowMap`] depth texture.
 #[derive(Resource)]
@@ -164,19 +174,24 @@ struct ShadowMapPreviewState {
     height: u32,
 }
 
-impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
-    fn pane_ui(
-        &mut self,
-        ui: &mut egui::Ui,
-        _tile_id: egui_tiles::TileId,
-        pane: &mut Pane,
-    ) -> egui_tiles::UiResponse {
+impl TabViewer for DockTabViewer<'_> {
+    type Tab = Pane;
+
+    fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
+        match tab {
+            Pane::RightPanel => "CSM Preview".into(),
+            Pane::WorldPanel => "Control Panel".into(),
+            Pane::Scene => "Scene".into(),
+        }
+    }
+
+    fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Self::Tab) {
         let Self {
             world,
             egui_renderer,
             device,
         } = self;
-        match pane {
+        match tab {
             Pane::RightPanel => {
                 let device: &wgpu::Device = unsafe { &**device };
 
@@ -319,19 +334,10 @@ impl egui_tiles::Behavior<Pane> for TreeBehavior<'_> {
                 }
             }
         };
-        egui_tiles::UiResponse::None
-    }
-
-    fn tab_title_for_pane(&mut self, pane: &Pane) -> egui::WidgetText {
-        match pane {
-            Pane::RightPanel => "CSM Preview".into(),
-            Pane::WorldPanel => "Control Panel".into(),
-            Pane::Scene => "Scene".into(),
-        }
     }
 }
 
-pub fn sys_egui_tiles(world: &mut World) {
+pub fn sys_egui_dock(world: &mut World) {
     // Convert depth textures to RGBA so egui can display them
     // (depth-format textures cannot be sampled by egui_wgpu directly).
     if world.contains_resource::<ShadowMap>() {
@@ -348,8 +354,6 @@ pub fn sys_egui_tiles(world: &mut World) {
         }
     }
 
-    let mut tree = create_tree();
-
     // Snapshot a raw pointer to the device — RenderState lives forever,
     // so this pointer is valid for the lifetime of the app.
     let device_ptr: *const wgpu::Device = {
@@ -359,24 +363,23 @@ pub fn sys_egui_tiles(world: &mut World) {
 
     world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
         let mut ui = {
-            let ctx = egui.context();
+            let ctx = egui.context().clone();
             egui::Ui::new(
                 ctx.clone(),
-                egui::Id::new("ui"),
-                UiBuilder::new()
+                egui::Id::new("dock_ui"),
+                egui::UiBuilder::new()
                     .layer_id(LayerId::background())
                     .max_rect(ctx.content_rect()),
             )
         };
 
-        // Scene view
-        CentralPanel::default().show_inside(&mut ui, |ui| {
-            let mut behavior = TreeBehavior {
+        world.resource_scope(|world, mut dock: Mut<DockLayout>| {
+            let mut viewer = DockTabViewer {
                 world,
                 egui_renderer: &mut *egui,
                 device: device_ptr,
             };
-            tree.ui(&mut behavior, ui);
+            DockArea::new(&mut dock.0).show_inside(&mut ui, &mut viewer);
         });
     });
 }
@@ -539,16 +542,20 @@ fn sys_on_resize_scene_render_target(
         ..
     }) = &q_camera.get(event.render_target_entity)
     {
-        // egui-wgpu 的 shader 假设传入的 native texture 是 “非 sRGB” 字节，
-        // 自己负责 gamma 处理。如果直接把 sRGB 视图给它，硬件采样时会做一次
-        // sRGB→linear 解码，再叠加 shader 内的 linear_from_gamma_rgb，最终
-        // 会多一次 gamma。这里改成显式创建对应的线性视图，跳过硬件解码。
         let view = match lentille_render::camera::linear_view_format_of(image.texture.format()) {
-            Some(linear_format) => image.texture.texture().create_view(&wgpu::TextureViewDescriptor {
-                format: Some(linear_format),
-                ..Default::default()
-            }),
-            None => image.texture.texture().create_view(&wgpu::TextureViewDescriptor::default()),
+            Some(linear_format) => {
+                image
+                    .texture
+                    .texture()
+                    .create_view(&wgpu::TextureViewDescriptor {
+                        format: Some(linear_format),
+                        ..Default::default()
+                    })
+            }
+            None => image
+                .texture
+                .texture()
+                .create_view(&wgpu::TextureViewDescriptor::default()),
         };
         egui_tex_id.0 = Some(egui.renderer.register_native_texture(
             device,
@@ -558,27 +565,15 @@ fn sys_on_resize_scene_render_target(
     }
 }
 
-fn create_tree() -> egui_tiles::Tree<Pane> {
-    let mut tiles = egui_tiles::Tiles::default();
-
-    let left_pane = tiles.insert_pane(Pane::WorldPanel);
-    let scene_pane = tiles.insert_pane(Pane::Scene);
-    let right_pane = tiles.insert_pane(Pane::RightPanel);
-
-    let children = vec![left_pane, scene_pane, right_pane];
-
-    let mut shares = Shares::default();
-    shares.set_share(left_pane, 1.0);
-    shares.set_share(scene_pane, 2.0);
-    shares.set_share(right_pane, 1.0);
-
-    let linear_container = Container::Linear(egui_tiles::Linear {
-        children,
-        dir: egui_tiles::LinearDir::Horizontal,
-        shares,
-    });
-
-    let root = tiles.insert_container(linear_container);
-
-    egui_tiles::Tree::new("main_tree", root, tiles)
+fn create_dock_state() -> DockState<Pane> {
+    // Main area = Scene. Split left 1/4 for WorldPanel, right 1/4 for CSM Preview.
+    // Original share ratio: 1:2:1
+    let mut state = DockState::new(vec![Pane::Scene]);
+    let surface = state.main_surface_mut();
+    let [_root, _left] = surface.split_left(NodeIndex::root(), 0.25, vec![Pane::WorldPanel]);
+    // Remaining width is 0.75 of total. To get 0.25 of total for right panel,
+    // split 1/3 of remaining (0.75 * 1/3 = 0.25).
+    let [_root2, _right] =
+        surface.split_right(NodeIndex::root(), 2.0 / 3.0, vec![Pane::RightPanel]);
+    state
 }

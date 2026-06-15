@@ -51,7 +51,6 @@ egui = "0.34"
 egui-wgpu = "0.34"
 egui-winit = "0.34"
 egui_dock = "0.19"
-egui_tiles = "0.15"
 
 # Workspace
 lentille_render = { path = "crates/lentille_render" }
