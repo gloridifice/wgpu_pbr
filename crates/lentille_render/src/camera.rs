@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::shadow_mapping::csm::sys_update_csm_buffers;
+use crate::transform::TransformPostUpdateSet;
 use crate::{SurfaceState, prelude::*};
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::component::Component;
@@ -12,7 +12,6 @@ use cgmath::{Matrix4, SquareMatrix, perspective};
 use lentille_core::window::PrimaryWindow;
 use lentille_wgpu_utils::{
     impl_pod_zeroable,
-    typed_sampler::ComparisonSampler,
     typed_texture::{TypedTexture, TypedTextureViewDescriptor},
 };
 use wgpu::TextureDimension;
@@ -34,15 +33,16 @@ pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::new(
 
 pub(crate) struct CameraPlugin;
 
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, SystemSet)]
+pub struct CameraPostUpdateSet;
+
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_systems(
             PostUpdate,
-            (
-                sys_create_render_target,
-                sys_create_or_update_camera_buffer,
-                sys_update_csm_buffers,
-            )
+            (sys_create_render_target, sys_create_or_update_camera_buffer)
+                .in_set(CameraPostUpdateSet)
+                .after(TransformPostUpdateSet)
                 .chain(),
         )
         .add_systems(PreUpdate, sys_resize_render_target);

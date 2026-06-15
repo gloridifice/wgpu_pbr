@@ -1,9 +1,9 @@
 use crate::{
     app_ext::AppExt,
-    camera::{self, OPENGL_TO_WGPU_MATRIX},
+    camera::{CameraPostUpdateSet, OPENGL_TO_WGPU_MATRIX},
     prelude::*,
 };
-use bevy_app::Plugin;
+use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
 use bevy_ecs::system::Single;
 use cgmath::{InnerSpace, SquareMatrix, ortho};
@@ -17,7 +17,10 @@ pub(super) struct CsmPlugin;
 
 impl Plugin for CsmPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_render_resource::<CsmShader>();
+        app.init_render_resource::<CsmShader>().add_systems(
+            PostUpdate,
+            sys_update_csm_buffers.after(CameraPostUpdateSet),
+        );
     }
 }
 
@@ -137,9 +140,13 @@ impl CascadeShadowMapping {
             });
         }
 
-        let csm_info_buffer = Arc::new(TypedBuffer::new(
+        let csm_info_buffer = Arc::new(TypedBuffer::new_init(
             device,
             Some("Csm Bounds Buffer"),
+            GpuCsmInfoUniform {
+                texture_size: config.texture_size as f32,
+                ..Default::default()
+            },
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         ));
 

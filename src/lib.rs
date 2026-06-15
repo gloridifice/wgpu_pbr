@@ -322,26 +322,6 @@ pub fn sys_spawn_camera(mut commands: Commands) {
             .build()
             .unwrap(),
     ));
-
-    commands.spawn((
-        Name::new("Game camera"),
-        Camera {
-            fovy: 50.0,
-            ..Camera::new(1.0)
-        },
-        CsmConfig {
-            level_count: 4,
-            texture_size: 2048,
-            linear_log_factor: 0.5,
-            shadow_near: 1.0,
-            shadow_far: 80.0,
-        },
-        RenderTargetConfig::Texture {
-            width: 1600,
-            height: 900,
-            format: SCREEN_FORMAT,
-        },
-    ));
 }
 
 fn sys_startup_light_and_environment(world: &mut World) {
@@ -381,7 +361,13 @@ fn sys_startup_light_and_environment(world: &mut World) {
     }
 }
 
-pub fn sys_load_hdir_and_prefiler(input: In<AssetPath>, world: &mut World) -> lentille_render::image::UploadedImage<lentille_render::prelude::DimCube, lentille_render::prelude::SampleFloatFilterable> {
+pub fn sys_load_hdir_and_prefiler(
+    input: In<AssetPath>,
+    world: &mut World,
+) -> lentille_render::image::UploadedImage<
+    lentille_render::prelude::DimCube,
+    lentille_render::prelude::SampleFloatFilterable,
+> {
     let pipeline = PrefilteringPipeline::new(world, wgpu::TextureFormat::Rgba16Float);
 
     let rs = world.resource::<RenderState>();

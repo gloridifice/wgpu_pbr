@@ -10,6 +10,9 @@ use crate::{RenderState, prelude::MeshRenderer};
 
 pub(crate) struct TransformPlugin;
 
+#[derive(SystemSet, Hash, Debug, PartialEq, Eq, Clone, Copy)]
+pub struct TransformPostUpdateSet;
+
 impl Plugin for TransformPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_systems(
@@ -19,6 +22,7 @@ impl Plugin for TransformPlugin {
                 sys_update_world_transform,
                 sys_update_transform_buffers,
             )
+                .in_set(TransformPostUpdateSet)
                 .chain(),
         );
     }
