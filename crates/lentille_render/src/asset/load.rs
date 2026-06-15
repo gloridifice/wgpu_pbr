@@ -326,7 +326,6 @@ impl Loadable for Model {
         let device = &rs.device;
         let queue = &rs.queue;
         let path = path.final_path();
-        info!("= Start Loading <{}>", &path);
         let start_instant = Instant::now();
 
         let (document, buffers, images) = if path.ends_with(".gltf") {
@@ -336,11 +335,6 @@ impl Loadable for Model {
         } else {
             return Err(anyhow!("<{}> is not a model file (.gltf or .glb)!", &path));
         };
-
-        info!(
-            "  - imported from path, using {}s",
-            start_instant.elapsed().as_secs_f64()
-        );
 
         let meshes = document
             .meshes()
@@ -454,7 +448,7 @@ impl Loadable for Model {
 
         let duration = start_instant.elapsed();
         info!(
-            "   ✅ End Loading <{}>, using {}s",
+            "End Loading <{}>, using {:.3}s",
             &path,
             &duration.as_secs_f64()
         );
