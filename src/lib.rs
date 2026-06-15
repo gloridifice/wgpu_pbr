@@ -260,38 +260,6 @@ fn sys_generate_single_model(input: In<(AssetPath, impl Bundle)>, world: &mut Wo
     queue.apply(world);
 }
 
-fn sys_generate_unreal_vr_room_scene(world: &mut World) {
-    generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
-
-    let bistro_model = match Model::load(
-        AssetPath::new("models/sony_tc-510-2_tape_recorder/scene.gltf"),
-        world,
-    ) {
-        Ok(model) => Arc::new(model),
-        Err(e) => {
-            bevy_log::error!("Failed to load bistro model: {e}");
-            return;
-        }
-    };
-
-    let mut queue = CommandQueue::from_world(world);
-    let mut commands = Commands::new(&mut queue, world);
-
-    commands.queue(SpawnModelCmd {
-        model: bistro_model,
-        parent_bundle: (
-            TransformBuilder::default()
-                .scale(Vec3::one() * 0.1)
-                .build()
-                .unwrap(),
-            Name::new("Room".to_string()),
-        ),
-        child_bundle: (CastShadow, MainPassObject),
-    });
-
-    queue.apply(world);
-}
-
 pub fn sys_spawn_camera(mut commands: Commands) {
     commands.spawn((
         Name::new("相机"),

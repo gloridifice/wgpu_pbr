@@ -1,9 +1,6 @@
 use bevy_app::{Plugin, Update};
 use bevy_ecs::{prelude::*, system::RunSystemOnce};
-use lentille_core::{
-    input::Input,
-    window::{PrimaryWindowCreatedEvent, WinitWindow},
-};
+use lentille_core::{input::Input, window::WinitWindow};
 use winit::keyboard::KeyCode;
 
 use crate::control::camera::CameraControlPlugin;

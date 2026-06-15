@@ -7,7 +7,7 @@ use crate::asset::load::Loadable;
 
 #[derive(Clone, Resource)]
 pub struct DefaultMipmapGenShader {
-    shader: Arc<ShaderModule>,
+    pub shader: Arc<ShaderModule>,
 }
 
 impl FromWorld for DefaultMipmapGenShader {
