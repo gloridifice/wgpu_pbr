@@ -1,3 +1,28 @@
+//! Outline effect based on Jump Flood Algorithm.
+//!
+//! # Usage
+//! ```
+//! struct MyMaterialGroup;
+//! impl OutlineGroupType for MyMaterialGroup;
+//! // ...
+//!
+//! fn sys_generate_outline_mesh() {
+//! // then add this component into your MeshRenderer entity
+//! let outline_component = Outline::with_config::<MyMaterialGroup>(OutlineConfig {
+//!     thickness: 6.0,
+//!     color: Color::new(1.0, 0.55, 0.0, 1.0),
+//! };
+//! }
+//! ```
+//!
+//! Outlines are mantained by `OutlineGroupMap` Resource. When you spawn a component with `OutlineConfig`,
+//! it will automaticlly register this group into `OutlineGroupMap`.
+//!
+//! # Rendering stages
+//!
+//! `OpaqueStage (get depth here) -> WriteMaskStage (sys_render_mask) -> PostProcessStage (sys_jump_flood_and_render_outline)`
+//!
+
 use std::{
     any::TypeId,
     collections::{BTreeMap, HashSet},
@@ -46,12 +71,16 @@ impl Plugin for OutlinePlugin {
                 after::<PbrMaterialBindGroupLayout>(),
                 after::<ObjectBindGroupLayout>(),
             ])
-            .init_render_resource_with_config::<OutlineJumpFloodPipeline>([after::<
-                FullScreenVertexShader,
-            >()])
-            .init_render_resource_with_config::<OutlineCompositePipeline>([after::<
-                FullScreenVertexShader,
-            >()]);
+            .init_render_resource::<OutlineJumpFloodBindGroupLayout>()
+            .init_render_resource::<OutlineCompositeBindGroupLayout>()
+            .init_render_resource_with_config::<OutlineJumpFloodPipeline>([
+                after::<FullScreenVertexShader>(),
+                after::<OutlineJumpFloodBindGroupLayout>(),
+            ])
+            .init_render_resource_with_config::<OutlineCompositePipeline>([
+                after::<FullScreenVertexShader>(),
+                after::<OutlineCompositeBindGroupLayout>(),
+            ]);
     }
 }
 
@@ -148,16 +177,43 @@ struct OutlineMaskPipeline {
     pipeline: RenderPipeline,
 }
 
+binding_define! {
+    [OutlineJumpFlood]
+    layout_macro: #[derive(Resource)]
+    0: frag => source: TexView2D<SampleFloatUnfilterable>,
+    1: frag => jump_flood: TypedBuffer<JumpFloodUniform>,
+}
+
+impl FromWorld for OutlineJumpFloodBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        Self::new(&world.resource::<RenderState>().device)
+    }
+}
+
+binding_define! {
+    [OutlineComposite]
+    layout_macro: #[derive(Resource)]
+    0: frag => nearest: TexView2D<SampleFloatUnfilterable>,
+    1: frag => mask: TexView2D<SampleFloatUnfilterable>,
+    2: frag => outline: TypedBuffer<OutlineUniform>,
+}
+
+impl FromWorld for OutlineCompositeBindGroupLayout {
+    fn from_world(world: &mut World) -> Self {
+        Self::new(&world.resource::<RenderState>().device)
+    }
+}
+
 #[derive(Resource)]
 struct OutlineJumpFloodPipeline {
     pipeline: RenderPipeline,
-    layout: Arc<BindGroupLayout>,
+    layout: Arc<OutlineJumpFloodBindGroupLayout>,
 }
 
 #[derive(Resource)]
 struct OutlineCompositePipeline {
     pipeline: RenderPipeline,
-    layout: Arc<BindGroupLayout>,
+    layout: Arc<OutlineCompositeBindGroupLayout>,
 }
 
 impl FromWorld for OutlineMaskPipeline {
@@ -244,14 +300,10 @@ impl FromWorld for OutlineJumpFloodPipeline {
             source: shader_source,
         });
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
-        let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
-            ["Outline Jump Flood"]
-            0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: false });
-            1: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
-        }));
+        let layout = Arc::new(OutlineJumpFloodBindGroupLayout::new(device));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Outline Jump Flood Layout"),
-            bind_group_layouts: &[Some(&layout)],
+            bind_group_layouts: &[Some(&layout.0)],
             immediate_size: 0,
         });
         let pipeline =
@@ -285,15 +337,10 @@ impl FromWorld for OutlineCompositePipeline {
             source: shader_source,
         });
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
-        let layout = Arc::new(device.create_bind_group_layout(&bg_layout_descriptor! {
-            ["Outline Composite"]
-            0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: false });
-            1: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: false });
-            2: ShaderStages::FRAGMENT => BGLEntry::UniformBuffer();
-        }));
+        let layout = Arc::new(OutlineCompositeBindGroupLayout::new(device));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Outline Composite Layout"),
-            bind_group_layouts: &[Some(&layout)],
+            bind_group_layouts: &[Some(&layout.0)],
             immediate_size: 0,
         });
         let pipeline =
@@ -399,30 +446,34 @@ impl OutlineLayerBuffer {
 
     fn create_jump_bind_group(
         device: &wgpu::Device,
-        layout: &BindGroupLayout,
+        layout: &OutlineJumpFloodBindGroupLayout,
         source: &TexView2D<SampleFloatUnfilterable>,
         step_buffer: &TypedBuffer<JumpFloodUniform>,
     ) -> Arc<BindGroup> {
-        Arc::new(device.create_bind_group(&bg_descriptor! {
-            ["Outline Jump Flood BindGroup"] [layout]
-            0: BindingResource::TextureView(source);
-            1: step_buffer.as_entire_binding();
-        }))
+        Arc::new(
+            OutlineJumpFloodBindGroupBuilder {
+                source,
+                jump_flood: step_buffer,
+            }
+            .build(device, layout),
+        )
     }
 
     fn create_composite_bind_group(
         device: &wgpu::Device,
-        layout: &BindGroupLayout,
+        layout: &OutlineCompositeBindGroupLayout,
         nearest: &TexView2D<SampleFloatUnfilterable>,
         mask: &TexView2D<SampleFloatUnfilterable>,
         outline_buffer: &TypedBuffer<OutlineUniform>,
     ) -> Arc<BindGroup> {
-        Arc::new(device.create_bind_group(&bg_descriptor! {
-            ["Outline Composite BindGroup"] [layout]
-            0: BindingResource::TextureView(nearest);
-            1: BindingResource::TextureView(mask);
-            2: outline_buffer.as_entire_binding();
-        }))
+        Arc::new(
+            OutlineCompositeBindGroupBuilder {
+                nearest,
+                mask,
+                outline: outline_buffer,
+            }
+            .build(device, layout),
+        )
     }
 }
 
