@@ -300,8 +300,8 @@ impl TabViewer for DockTabViewer<'_> {
             }
             Pane::Scene => {
                 let size = ui.available_size();
-                if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>() {
-                    if let Some(render_target_egui_tex_id) = ids.0.as_ref() {
+                if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>()
+                    && let Some(render_target_egui_tex_id) = ids.0.as_ref() {
                         let main_view =
                             ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
                         let mut input = world.resource_mut::<Input>();
@@ -319,7 +319,6 @@ impl TabViewer for DockTabViewer<'_> {
                             .map(|it| Vec2::new(it.x, it.y))
                             .unwrap_or(Vec2::zero());
                     }
-                }
 
                 if let Ok(mut target_size) = world
                     .query_filtered::<&mut RenderTargetSize, With<MainCamera>>()
@@ -376,7 +375,7 @@ pub fn sys_egui_dock(world: &mut World) {
         world.resource_scope(|world, mut dock: Mut<DockLayout>| {
             let mut viewer = DockTabViewer {
                 world,
-                egui_renderer: &mut *egui,
+                egui_renderer: &mut egui,
                 device: device_ptr,
             };
             DockArea::new(&mut dock.0).show_inside(&mut ui, &mut viewer);
@@ -469,7 +468,7 @@ fn convert_shadow_map_depth_to_rgba(world: &mut World) {
         if state
             .rgba_tex
             .as_ref()
-            .map_or(true, |t| t.size().width != w || t.size().height != h)
+            .is_none_or(|t| t.size().width != w || t.size().height != h)
         {
             let out_tex = device.create_texture(&wgpu::TextureDescriptor {
                 label: Some("shadow_map depth_to_rgba output"),

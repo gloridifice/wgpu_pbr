@@ -127,7 +127,7 @@ impl DepthToRgbaConverter {
         });
         cpass.set_pipeline(&self.pipeline);
         cpass.set_bind_group(0, &bind_group, &[]);
-        cpass.dispatch_workgroups((width + 7) / 8, (height + 7) / 8, 1);
+        cpass.dispatch_workgroups(width.div_ceil(8), height.div_ceil(8), 1);
     }
 }
 

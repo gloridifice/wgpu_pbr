@@ -332,8 +332,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
     let skybox_image_path = AssetPath::new("textures/skybox/sky_110_2k.png");
     if let Ok(skybox_image) =
         world.run_system_once_with(sys_load_hdir_and_prefiler, skybox_image_path.clone())
-    {
-        if world
+        && world
             .run_system_once_with(sys_update_skybox_sh_from_path, skybox_image_path)
             .is_ok()
         {
@@ -341,7 +340,6 @@ fn sys_startup_light_and_environment(world: &mut World) {
                 texture: Some(skybox_image),
             });
         }
-    }
 }
 
 pub fn sys_load_hdir_and_prefiler(
@@ -399,7 +397,7 @@ fn sys_gizmo(
     camera: Query<&WorldTransform, (With<Camera>, Without<MainCamera>)>,
 ) {
     for (light, trans) in lights.iter() {
-        Gizmo::dot(trans.position, 0.1, light.color.into());
+        Gizmo::dot(trans.position, 0.1, light.color);
     }
 
     for transform in camera.iter() {

@@ -10,7 +10,7 @@ fn main() {
 
     let _gurad: Option<i32> = if args.get(1).is_some_and(|it| it == "-t") {
         let path = Path::new("./build/hello_1.json");
-        wgpu_subscriber::initialize_default_subscriber(Some(&path));
+        wgpu_subscriber::initialize_default_subscriber(Some(path));
         // let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new().build();
         // tracing_subscriber::registry()
         //     .with(chrome_layer)
