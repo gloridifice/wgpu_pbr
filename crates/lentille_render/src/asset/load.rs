@@ -27,6 +27,7 @@ pub trait Loadable: Sized {
     fn load(path: AssetPath, world: &mut World) -> Result<Self>;
 }
 
+#[allow(unused)]
 fn has_alpha(img: &DynamicImage) -> bool {
     matches!(
         img.color(),
@@ -38,11 +39,13 @@ fn has_alpha(img: &DynamicImage) -> bool {
     )
 }
 
+#[allow(unused)]
 fn is_any_pixel_transparent(img: &DynamicImage) -> bool {
     let rgba = img.to_rgba8();
     rgba.pixels().any(|p| p[3] < 255)
 }
 
+#[allow(unused)]
 fn is_png_srgb_from_memory(data: &[u8]) -> bool {
     let cursor = Cursor::new(data);
     let decoder = Decoder::new(cursor);

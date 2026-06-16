@@ -98,7 +98,7 @@ impl<T: 'static> TypeIdGraph<T> {
         vec.into_iter()
     }
 
-    pub fn iter_id_bfs(&self) -> BfsIterator<T> {
+    pub fn iter_id_bfs(&self) -> BfsIterator<'_, T> {
         BfsIterator::new(self)
     }
 
