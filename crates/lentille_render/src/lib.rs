@@ -117,13 +117,13 @@ impl Plugin for RenderPlugin {
 
         app.configure_render_stage::<OpaqueStage>([after::<PreStage>()])
             .configure_render_stage::<TransparentStage>([after::<OpaqueStage>()])
+            .configure_render_stage::<PostProcessStage>([after::<TransparentStage>()])
             .add_systems(Update, sys_create_surface)
             .add_systems(
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,
             )
             .add_frame_system::<PreStage, _, _>(sys_render_cascade_shadow_mapping_pass, [])
-            .add_frame_system::<PreStage, _, _>(sys_render_shadow_mapping_pass, [])
             .add_frame_system::<OpaqueStage, _, _>(sys_render_write_g_buffer_pass, [])
             .add_frame_system::<OpaqueStage, _, _>(sys_render_main_pass, [])
             .add_frame_system::<TransparentStage, _, _>(sys_render_transparent, []);
@@ -133,6 +133,7 @@ impl Plugin for RenderPlugin {
 pub struct PreStage;
 pub struct OpaqueStage;
 pub struct TransparentStage;
+pub struct PostProcessStage;
 
 #[derive(Component, Clone)]
 pub struct MainPassObject;

@@ -225,7 +225,7 @@ pub(crate) struct GizmoPlugin;
 
 impl Plugin for GizmoPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.configure_render_stage::<GizmoStage>([after::<crate::TransparentStage>()])
+        app.configure_render_stage::<GizmoStage>([after::<crate::PostProcessStage>()])
             .add_frame_system::<GizmoStage, _, _>(sys_render_gizmo_pass, [])
             .init_render_resource_with_config::<GizmoBindGroupLayout>([])
             .init_render_resource_with_config::<GizmoPipeline>([after::<GizmoBindGroupLayout>()]);

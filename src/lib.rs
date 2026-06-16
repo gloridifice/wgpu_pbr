@@ -24,11 +24,16 @@ use crate::{
         camera::{CameraController, MainCamera},
     },
     editor::EditorPlugin,
+    material::outline::{Outline, OutlineConfig, OutlinePlugin},
 };
 
 mod control;
 mod editor;
 mod egui_renderer;
+mod material;
+
+struct DefaultOutlineGroup;
+impl material::outline::OutlineGroupType for DefaultOutlineGroup {}
 
 pub struct WgpuPbrPlugin;
 
@@ -41,7 +46,7 @@ impl Plugin for WgpuPbrPlugin {
             TimePlugin,
             WindowPlugin,
         ))
-        .add_plugins((ControlPlugin, EditorPlugin));
+        .add_plugins((ControlPlugin, EditorPlugin, OutlinePlugin));
 
         app.add_systems(RenderPreparedStartup, sys_spawn_camera)
             .add_systems(
@@ -204,6 +209,10 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             (
                 AssetPath::new("models/stanford_dragon_pbr.glb"),
                 (Name::new("Dragon"), Transform::new().scale(0.05)),
+                (Outline::with_config::<DefaultOutlineGroup>(OutlineConfig {
+                    thickness: 6.0,
+                    color: Color::new(1.0, 0.55, 0.0, 1.0),
+                }),),
             ),
         )
         .unwrap();
@@ -219,6 +228,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
                         .position(Vec3::new(0., -375., 0.))
                         .scale(0.5),
                 ),
+                (),
             ),
         )
         .unwrap();
@@ -234,6 +244,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
                         .rotation(Quat::from_angle_x(Deg(-90.0)))
                         .scale(2.0),
                 ),
+                (),
             ),
         )
         .unwrap();
@@ -243,8 +254,11 @@ pub fn sys_generate_plane_scene(world: &mut World) {
     queue.apply(world);
 }
 
-fn sys_generate_single_model(input: In<(AssetPath, impl Bundle)>, world: &mut World) {
-    let In((model_asset_path, bundle)) = input;
+fn sys_generate_single_model(
+    input: In<(AssetPath, impl Bundle, impl Bundle + Clone)>,
+    world: &mut World,
+) {
+    let In((model_asset_path, bundle, children_bundle)) = input;
 
     let model = match Model::load(model_asset_path, world) {
         Ok(model) => Arc::new(model),
@@ -263,12 +277,8 @@ fn sys_generate_single_model(input: In<(AssetPath, impl Bundle)>, world: &mut Wo
         child_bundle: (
             CastShadow,
             MainPassObject,
-            PbrMaterial {
-                color: Some(Color::new(0.7, 0.7, 0.7, 1.0)),
-                roughness: Some(0.8),
-                metallic: Some(0.05),
-                ..Default::default()
-            },
+            PbrMaterial::default(),
+            children_bundle,
         ),
     });
 
@@ -335,11 +345,11 @@ fn sys_startup_light_and_environment(world: &mut World) {
         && world
             .run_system_once_with(sys_update_skybox_sh_from_path, skybox_image_path)
             .is_ok()
-        {
-            world.spawn(Skybox {
-                texture: Some(skybox_image),
-            });
-        }
+    {
+        world.spawn(Skybox {
+            texture: Some(skybox_image),
+        });
+    }
 }
 
 pub fn sys_load_hdir_and_prefiler(
