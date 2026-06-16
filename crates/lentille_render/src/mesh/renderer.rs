@@ -1,7 +1,7 @@
 use crate::{
     material::{
         UploadedMaterial,
-        pbr::{PBRMaterialOverride, UploadedPBRMaterial},
+        pbr::{PBRMaterialOverride, UploadedPbrMaterial},
     },
     prelude::*,
     transform::TransformUniform,
@@ -61,7 +61,7 @@ impl MeshRenderer {
         override_material: Option<&PBRMaterialOverride>,
     ) -> bool {
         primitive.material.as_ref().is_none_or(|mat| {
-            mat.alpha_mode == AlphaMode::Opaque
+            mat.alpha_mode_or_default() == AlphaMode::Opaque
                 && override_material.is_none_or(|ove| {
                     ove.material
                         .alpha_mode
@@ -73,7 +73,7 @@ impl MeshRenderer {
     pub fn draw_opaque(
         &self,
         render_pass: &mut RenderPass,
-        default_material: Arc<UploadedPBRMaterial>,
+        default_material: Arc<UploadedPbrMaterial>,
         override_material: Option<&PBRMaterialOverride>,
     ) {
         self.draw_filtered(
@@ -87,7 +87,7 @@ impl MeshRenderer {
     pub fn draw_transparent(
         &self,
         render_pass: &mut RenderPass,
-        default_material: Arc<UploadedPBRMaterial>,
+        default_material: Arc<UploadedPbrMaterial>,
         override_material: Option<&PBRMaterialOverride>,
     ) {
         self.draw_filtered(
@@ -101,7 +101,7 @@ impl MeshRenderer {
     fn draw_filtered(
         &self,
         render_pass: &mut RenderPass,
-        default_material: Arc<UploadedPBRMaterial>,
+        default_material: Arc<UploadedPbrMaterial>,
         override_material: Option<&PBRMaterialOverride>,
         is_valid: impl Fn(&UploadedPrimitive) -> bool,
     ) {
@@ -113,7 +113,7 @@ impl MeshRenderer {
         render_pass.set_index_buffer(mesh.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.set_bind_group(2, self.object_bind_group.as_ref(), &[]);
 
-        let mut last_material: Option<Arc<UploadedPBRMaterial>> = None;
+        let mut last_material: Option<Arc<UploadedPbrMaterial>> = None;
 
         if let Some(ove) = override_material.and_then(|it| it.uploaded_material.as_ref()) {
             render_pass.set_bind_group(1, ove.bind_group.as_ref(), &[]);

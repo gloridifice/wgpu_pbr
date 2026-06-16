@@ -7,7 +7,7 @@ use std::{
 };
 
 use bevy_ecs::prelude::*;
-use wesl::{Resolver, StandardResolver, Wesl, syntax::ModulePath};
+use wesl::{Feature, Resolver, StandardResolver, Wesl, syntax::ModulePath};
 use wgpu::ShaderSource;
 
 use crate::{RenderState, asset::AssetPath};
@@ -84,7 +84,10 @@ impl ShaderLoader {
     fn cache_paths(&self, entry: &str) -> Option<(PathBuf, PathBuf)> {
         let dir = self.cache_dir.as_ref()?;
         let key = Self::cache_key(entry);
-        Some((dir.join(format!("{key}.wgsl")), dir.join(format!("{key}.meta"))))
+        Some((
+            dir.join(format!("{key}.wgsl")),
+            dir.join(format!("{key}.meta")),
+        ))
     }
 
     /// Return the compiled WGSL from disk when the cache is present and every

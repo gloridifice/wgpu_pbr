@@ -17,8 +17,7 @@ use wgpu::{Extent3d, ShaderModule, TextureDescriptor, TextureUsages};
 
 use crate::image::UploadedImage;
 use crate::mesh::{Mesh, Model, Primitive, Vertex};
-use crate::prelude::GltfMaterial;
-use crate::prelude::{Dim2D, SampleFloatFilterable, Tex2D, TexView2D};
+use crate::prelude::{Color, Dim2D, PbrMaterial, SampleFloatFilterable, Tex2D, TexView2D};
 use crate::{AlphaMode, RenderState};
 use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
 
@@ -384,13 +383,12 @@ impl Loadable for Model {
                         vertices.push(v);
                     }
 
-                    let material_instance: GltfMaterial = {
+                    let material_instance: PbrMaterial = {
                         let mat = primitive.material();
 
                         let pbr = mat.pbr_metallic_roughness();
 
-                        // Check is transparent and get decide alpha mode
-                        let mut alpha_mode = AlphaMode::Opaque;
+                        let alpha_mode = AlphaMode::from(mat.alpha_mode());
                         let base_color_texture = pbr.base_color_texture().map(|info| {
                             let index = info.texture().index();
                             let data = &images[index];
@@ -416,15 +414,42 @@ impl Loadable for Model {
                                 .unwrap(),
                             )
                         });
+                        let metallic_roughness_ao_texture =
+                            pbr.metallic_roughness_texture().map(|info| {
+                                let index = info.texture().index();
+                                Arc::new(
+                                    UploadedImage::load_from_data(
+                                        &images[index],
+                                        device,
+                                        queue,
+                                        wgpu::TextureFormat::Rgba8Unorm,
+                                    )
+                                    .unwrap(),
+                                )
+                            });
+                        let emission_texture = mat.emissive_texture().map(|info| {
+                            let index = info.texture().index();
+                            Arc::new(
+                                UploadedImage::load_from_data(
+                                    &images[index],
+                                    device,
+                                    queue,
+                                    wgpu::TextureFormat::Rgba8UnormSrgb,
+                                )
+                                .unwrap(),
+                            )
+                        });
 
-                        GltfMaterial {
+                        PbrMaterial {
                             base_color_texture,
                             normal_texture,
-                            color: pbr.base_color_factor(),
-                            roughness: pbr.roughness_factor(),
-                            metallic: pbr.metallic_factor(),
-                            reflectance: 0.0,
-                            alpha_mode,
+                            color: Some(Color::from_linear_array(pbr.base_color_factor())),
+                            roughness: Some(pbr.roughness_factor()),
+                            metallic: Some(pbr.metallic_factor()),
+                            reflectance: Some(0.0),
+                            alpha_mode: Some(alpha_mode),
+                            metallic_roughness_ao_texture,
+                            emission_texture,
                         }
                     };
 

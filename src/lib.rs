@@ -189,7 +189,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
         child_bundle: (
             CastShadow,
             MainPassObject,
-            PBRMaterial {
+            PbrMaterial {
                 color: Some(Color::new(0.7, 0.7, 0.7, 1.0)),
                 roughness: Some(0.8),
                 metallic: Some(0.05),
@@ -223,6 +223,21 @@ pub fn sys_generate_plane_scene(world: &mut World) {
         )
         .unwrap();
 
+    world
+        .run_system_once_with(
+            sys_generate_single_model,
+            (
+                AssetPath::new("models/vending_machine2k_retro-futuristic/scene.gltf"),
+                (
+                    Name::new("Vending Machine"),
+                    Transform::new()
+                        .rotation(Quat::from_angle_x(Deg(-90.0)))
+                        .scale(2.0),
+                ),
+            ),
+        )
+        .unwrap();
+
     generate_point_lights(world, 2., 3., 3., 10, 1.0, 1.0);
 
     queue.apply(world);
@@ -248,7 +263,7 @@ fn sys_generate_single_model(input: In<(AssetPath, impl Bundle)>, world: &mut Wo
         child_bundle: (
             CastShadow,
             MainPassObject,
-            PBRMaterial {
+            PbrMaterial {
                 color: Some(Color::new(0.7, 0.7, 0.7, 1.0)),
                 roughness: Some(0.8),
                 metallic: Some(0.05),

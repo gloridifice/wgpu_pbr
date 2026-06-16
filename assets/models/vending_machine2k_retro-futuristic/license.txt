@@ -1,0 +1,11 @@
+Model Information:
+* title:	Vending Machine(2K) (Retro-Futuristic)
+* source:	https://sketchfab.com/3d-models/vending-machine2k-retro-futuristic-19d4bd442279453297b26dca4d517501
+* author:	Minh Nguyen (https://sketchfab.com/Minh_Nguyen_2004)
+
+Model License:
+* license type:	CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
+* requirements:	Author must be credited. No commercial use.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Vending Machine(2K) (Retro-Futuristic)" (https://sketchfab.com/3d-models/vending-machine2k-retro-futuristic-19d4bd442279453297b26dca4d517501) by Minh Nguyen (https://sketchfab.com/Minh_Nguyen_2004) licensed under CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)

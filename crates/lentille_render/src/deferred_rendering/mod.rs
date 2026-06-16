@@ -57,7 +57,7 @@ impl FromWorld for DeferredComputePipeline {
 
         let bind_group_layouts = vec![
             Some(&world.resource::<CameraBindGroupLayout>().0),
-            Some(&world.resource::<GBufferTextureBindGroupLayout>().layout),
+            Some(&world.resource::<GBufferTextureBindGroupLayout>().0),
             Some(&world.resource::<PbrMaterialBindGroupLayout>().0),
             Some(&world.resource::<DynamicLightBindGroupLayout>().0),
         ];

@@ -4,7 +4,7 @@ use crate::{
     MainPassObject,
     deferred_rendering::{
         DeferredComputePipeline,
-        write_g_buffer_pipeline::{DeferredWriteGBufferPipeline, GBufferTexturesBindGroup},
+        write_g_buffer_pipeline::{DeferredWriteGBufferPipeline, GBufferTextureBindGroup},
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
@@ -115,7 +115,7 @@ pub fn sys_render_write_g_buffer_pass(
         (&MeshRenderer, Option<&PBRMaterialOverride>),
         (With<Transform>, With<MainPassObject>),
     >,
-    q_camera: Query<&GBufferTexturesBindGroup>,
+    q_camera: Query<&GBufferTextureBindGroup>,
 ) {
     let InMut(RenderContext {
         camera_id,
@@ -133,11 +133,11 @@ pub fn sys_render_write_g_buffer_pass(
         return;
     };
 
-    let color_attachements = g_buffer_gb.color_attachments();
+    let color_attachment = g_buffer_gb.color_attachment();
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Write G Buffer Pass"),
         multiview_mask: None,
-        color_attachments: &color_attachements,
+        color_attachments: &[color_attachment],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &depth_target.view,
             depth_ops: Some(wgpu::Operations {
@@ -163,7 +163,7 @@ pub fn sys_render_main_pass(
     main_pipeline: Res<DeferredComputePipeline>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
     default_material: Res<DefaultPBRMaterial>,
-    q_camera: Query<&GBufferTexturesBindGroup>,
+    q_camera: Query<&GBufferTextureBindGroup>,
 ) {
     let InMut(RenderContext {
         camera_id,

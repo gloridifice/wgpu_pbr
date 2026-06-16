@@ -17,8 +17,7 @@ pub use crate::{
     graph::{after, before},
     image::UploadedImage,
     light::{parallel_light::ParallelLight, point_light::PointLight},
-    material::pbr::GltfMaterial,
-    material::pbr::PBRMaterial,
+    material::pbr::PbrMaterial,
     mesh::{
         Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex, renderer::MeshRenderer,
     },

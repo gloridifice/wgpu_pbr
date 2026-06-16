@@ -168,7 +168,7 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
             });
         });
 
-        impl_component_ui!(PBRMaterial, world, id, ui, ui, mat, {
+        impl_component_ui!(PbrMaterial, world, id, ui, ui, mat, {
             property_grid(ui, format!("PBR {}", id.index()), |ui| {
                 ui.label("Roughness");
                 option_value(ui, &mut mat.roughness, 0.0, |ui, roughness| {

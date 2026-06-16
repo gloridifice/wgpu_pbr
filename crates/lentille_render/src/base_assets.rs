@@ -1,5 +1,5 @@
 use crate::{
-    deferred_rendering::DeferredComputePipeline, material::pbr::UploadedPBRMaterial, prelude::*,
+    deferred_rendering::DeferredComputePipeline, material::pbr::UploadedPbrMaterial, prelude::*,
 };
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
@@ -67,7 +67,7 @@ pub struct NormalDefaultTexture(pub Arc<UploadedImage<Dim2D, SampleFloatFilterab
 pub struct MissingTexture(pub Arc<UploadedImage<Dim2D, SampleFloatFilterable>>);
 
 #[derive(Resource, Clone)]
-pub struct DefaultPBRMaterial(pub Arc<UploadedPBRMaterial>);
+pub struct DefaultPBRMaterial(pub Arc<UploadedPbrMaterial>);
 
 #[derive(Resource, Clone)]
 pub struct NoFilterClampSampler(pub Arc<NonFilteringSampler>);
@@ -136,14 +136,14 @@ impl FromWorld for DefaultPBRMaterial {
         let layout = world.resource::<PbrMaterialBindGroupLayout>();
         let material_sampler = world.resource::<DefaultMaterialSampler>();
 
-        let mat = UploadedPBRMaterial::from_gltf(
+        let mat = UploadedPbrMaterial::new(
             &device,
             layout,
             white_tex,
             normal_default_tex,
             &material_sampler.0,
             Arc::clone(&compute_pipeline.pipeline),
-            &GltfMaterial {
+            &PbrMaterial {
                 base_color_texture: Some(missing_tex),
                 ..Default::default()
             },

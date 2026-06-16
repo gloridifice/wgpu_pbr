@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use wgpu::util::DeviceExt;
 
-use crate::material::pbr::UploadedPBRMaterial;
+use crate::material::pbr::{PbrMaterial, UploadedPbrMaterial};
 
 use super::{
     DefaultMaterialSampler, NormalDefaultTexture, WhiteTexture,
@@ -37,7 +37,7 @@ pub struct Mesh {
 pub struct Primitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub material: Option<GltfMaterial>,
+    pub material: Option<PbrMaterial>,
 }
 
 impl Mesh {
@@ -69,7 +69,7 @@ impl Mesh {
                 indices_num: it.indices_num,
                 uploaded_material: {
                     it.material.as_ref().map(|gltf_mat| {
-                        Arc::new(UploadedPBRMaterial::from_gltf(
+                        Arc::new(UploadedPbrMaterial::new(
                             device,
                             layout,
                             &white_tex.0,
@@ -119,6 +119,6 @@ pub struct UploadedMesh {
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub uploaded_material: Option<Arc<UploadedPBRMaterial>>,
-    pub material: Option<Arc<GltfMaterial>>,
+    pub uploaded_material: Option<Arc<UploadedPbrMaterial>>,
+    pub material: Option<Arc<PbrMaterial>>,
 }

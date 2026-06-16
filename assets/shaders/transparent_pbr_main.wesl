@@ -13,7 +13,7 @@ import package::libs::primary::global_bindings::{
     camera, light, rendered_image, rendered_sampler,
 };
 import package::libs::primary::material_bindings::{
-    pbr_mat, tex_0, samp_0, normal_tex, normal_samp,
+    pbr_mat, sample_albedo, sample_normal, sample_metallic_roughness_ao
 };
 import package::libs::primary::object_bindings::{
     transform,
@@ -50,21 +50,23 @@ fn fs_main(
     in: VertexOutput,
 ) -> @location(0) vec4<f32> {
     let frag_coord = in.clip_position;
-    let base_color4 = textureSample(tex_0, samp_0, in.tex_coord) * pbr_mat.color;
+    let uv = in.tex_coord;
+    let base_color4 = sample_albedo(uv);
 
     let n_normal = normalize(in.normal);
     let n_tangent = normalize(in.tangent);
     let bitangent = cross(n_normal, n_tangent);
     let tbn = mat3x3<f32>(n_tangent, bitangent, n_normal);
-    let tangent_space_normal = textureSample(normal_tex, normal_samp, in.tex_coord).xyz * 2.0 - 1.0;
+    let tangent_space_normal = sample_normal(uv) * 2.0 - 1.0;
     let normal = normalize(tbn * tangent_space_normal);
 
     var surface: PBRSurface = pbr_type::pbr_surface_new();
     var material: StandardMaterial = pbr_type::standard_material_new();
+    let sampled = sample_metallic_roughness_ao(uv);
     surface.normal = normal;
     material.base_color = base_color4;
-    material.metallic = pbr_mat.metallic;
-    material.perceptual_roughness = pbr_mat.roughness;
+    material.metallic = sampled.metallic;
+    material.perceptual_roughness = sampled.roughness;
     material.reflectance = pbr_mat.reflectance;
     surface.material = material;
 
@@ -137,8 +139,8 @@ fn fs_main(
 
     /// Blending
     let normal_ndc = normalize((camera.view_proj * vec4<f32>(normal, 1.0)).xyz);
-    let uv = frag_coord.xy / camera.screen_resolution - normal_ndc.xy * 0.1;
-    let prev_color4 = textureSample(rendered_image, rendered_sampler, uv);
+    let uv_1 = frag_coord.xy / camera.screen_resolution - normal_ndc.xy * 0.1;
+    let prev_color4 = textureSample(rendered_image, rendered_sampler, uv_1);
 
     let alpha = base_color4.a;
     let ret_color = diffuse_color * alpha + prev_color4.xyz * (1.0 - alpha) + specular_color;
