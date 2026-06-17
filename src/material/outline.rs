@@ -32,7 +32,7 @@ use std::{
 use bevy_app::{Plugin, PreUpdate};
 use bevy_ecs::prelude::*;
 use lentille_render::{
-    OpaqueStage, PostProcessStage, SCREEN_FORMAT,
+    OpaqueStage, PostProcessStage, RenderState, SCREEN_FORMAT,
     app_ext::AppExt,
     bindings::{
         camera_binding::CameraBindGroupLayout, material_binding::PbrMaterialBindGroupLayout,
@@ -42,10 +42,13 @@ use lentille_render::{
     prelude::*,
     stage::RenderContext,
 };
+
+use lentille_wgpu_macros::RenderStage;
 use lentille_wgpu_utils::typed_texture::TypedTextureViewDescriptor;
 
 pub struct OutlinePlugin;
 
+#[derive(RenderStage)]
 struct WriteMaskStage;
 
 impl Plugin for OutlinePlugin {
@@ -64,8 +67,8 @@ impl Plugin for OutlinePlugin {
                 after::<OpaqueStage>(),
                 before::<PostProcessStage>(),
             ])
-            .add_frame_system::<WriteMaskStage, _, _>(sys_render_mask, [])
-            .add_frame_system::<PostProcessStage, _, _>(sys_jump_flood_and_render_outline, [])
+            .add_render_system(sys_render_mask, WriteMaskStage)
+            .add_render_system(sys_render_mask, PostProcessStage)
             .init_render_resource_with_config::<OutlineMaskPipeline>([
                 after::<CameraBindGroupLayout>(),
                 after::<PbrMaterialBindGroupLayout>(),

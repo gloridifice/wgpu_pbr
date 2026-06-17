@@ -57,6 +57,7 @@ lentille_render = { path = "crates/lentille_render" }
 lentille_core = { path = "crates/lentille_core" }
 lentille_math = { path = "crates/lentille_math" }
 lentille_wgpu_utils = { path = "crates/lentille_wgpu_utils" }
+lentille_wgpu_macros = { path = "crates/lentille_wgpu_macros" }
 bytemuck = { workspace = true }
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"

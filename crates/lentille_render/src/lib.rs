@@ -7,6 +7,8 @@ use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use lentille_core::window::{PrimaryWindowCreatedEvent, WinitWindow};
+use crate as lentille_render;
+use lentille_wgpu_macros::RenderStage;
 use pollster::block_on;
 use prelude::*;
 use shader_loader::ShaderLoader;
@@ -29,7 +31,7 @@ use crate::{
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
     shadow_mapping::ShadowMappingPlugin,
     skybox::SkyBoxPlugin,
-    stage::StagePlugin,
+    stage::{RenderStage, StagePlugin},
     transform::TransformPlugin,
     transparent::TransparentPlugin,
 };
@@ -123,16 +125,23 @@ impl Plugin for RenderPlugin {
                 PostUpdate,
                 material::pbr::sys_update_override_pbr_material_bind_group,
             )
-            .add_frame_system::<PreStage, _, _>(sys_render_cascade_shadow_mapping_pass, [])
-            .add_frame_system::<OpaqueStage, _, _>(sys_render_write_g_buffer_pass, [])
-            .add_frame_system::<OpaqueStage, _, _>(sys_render_main_pass, [])
-            .add_frame_system::<TransparentStage, _, _>(sys_render_transparent, []);
+            .add_render_system(sys_render_cascade_shadow_mapping_pass, PreStage)
+            .add_render_system(sys_render_write_g_buffer_pass, OpaqueStage)
+            .add_render_system(
+                sys_render_main_pass,
+                OpaqueStage.after(sys_render_write_g_buffer_pass),
+            )
+            .add_render_system(sys_render_transparent, TransparentStage);
     }
 }
 
+#[derive(RenderStage)]
 pub struct PreStage;
+#[derive(RenderStage)]
 pub struct OpaqueStage;
+#[derive(RenderStage)]
 pub struct TransparentStage;
+#[derive(RenderStage)]
 pub struct PostProcessStage;
 
 #[derive(Component, Clone)]

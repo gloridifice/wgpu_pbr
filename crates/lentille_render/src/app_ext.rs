@@ -5,7 +5,7 @@ use crate::{
     FrameSets,
     graph::InsertConfig,
     resource::RENDER_RESOURCES_TO_ADD,
-    stage::{RenderContext, RenderStageManager},
+    stage::{RenderContext, RenderStage, RenderStageConfig, RenderStageManager},
 };
 
 pub trait AppExt {
@@ -14,15 +14,23 @@ pub trait AppExt {
         configs: impl Into<Vec<InsertConfig>>,
     ) -> &mut Self;
 
-    fn add_frame_system<
-        Stage: 'static,
-        M,
-        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static,
-    >(
+    fn add_render_system<T, M, S>(
+        &mut self,
+        system: S,
+        stage_config: impl Into<RenderStageConfig<T>>,
+    ) -> &mut Self
+    where
+        T: RenderStage + 'static,
+        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static;
+
+    fn add_render_system_with_config<Stage, M, S>(
         &mut self,
         system: S,
         configs: impl Into<Vec<InsertConfig>>,
-    ) -> &mut Self;
+    ) -> &mut Self
+    where
+        Stage: 'static,
+        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static;
 
     fn add_render_system_in_frame_set<M>(
         &mut self,
@@ -78,7 +86,7 @@ impl AppExt for bevy_app::App {
         self
     }
 
-    fn add_frame_system<
+    fn add_render_system_with_config<
         Stage: 'static,
         M,
         S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static,
@@ -92,6 +100,19 @@ impl AppExt for bevy_app::App {
             .world_mut()
             .get_resource_or_init::<RenderStageManager>();
         render_stage_manager.insert_system::<Stage, S>(id, configs);
+        self
+    }
+
+    fn add_render_system<T, M, S>(
+        &mut self,
+        system: S,
+        stage_config: impl Into<RenderStageConfig<T>>,
+    ) -> &mut Self
+    where
+        T: RenderStage + 'static,
+        S: IntoSystem<InMut<'static, RenderContext>, (), M> + 'static,
+    {
+        self.add_render_system_with_config::<T, _, _>(system, stage_config.into().configs);
         self
     }
 }

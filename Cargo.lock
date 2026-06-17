@@ -4991,6 +4991,7 @@ dependencies = [
  "lentille_core",
  "lentille_math",
  "lentille_render",
+ "lentille_wgpu_macros",
  "lentille_wgpu_utils",
  "rand",
  "tiny_bail",

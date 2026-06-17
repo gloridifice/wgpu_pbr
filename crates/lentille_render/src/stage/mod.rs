@@ -1,4 +1,7 @@
-use std::any::{TypeId, type_name};
+use std::{
+    any::{TypeId, type_name},
+    marker::PhantomData,
+};
 
 use crate::{
     FrameSets, SurfaceState,
@@ -30,7 +33,39 @@ impl Plugin for StagePlugin {
 
 #[derive(Resource, Default)]
 pub struct RenderStageManager {
-    pub stages: TypeIdGraph<RenderStage>,
+    pub stages: TypeIdGraph<RenderStageInstance>,
+}
+
+pub struct RenderStageConfig<T> {
+    pub configs: Vec<InsertConfig>,
+    pub _p: PhantomData<T>,
+}
+
+#[allow(unused)]
+impl<T> RenderStageConfig<T> {
+    fn after<R: 'static>(mut self, _a: R) -> Self {
+        self.configs.push(InsertConfig::After(TypeId::of::<R>()));
+        self
+    }
+    fn before<R: 'static>(mut self, _a: R) -> Self {
+        self.configs.push(InsertConfig::Before(TypeId::of::<R>()));
+        self
+    }
+}
+
+pub trait RenderStage {
+    type S: 'static;
+    fn after<T: 'static>(self, _a: T) -> RenderStageConfig<Self::S>;
+    fn before<T: 'static>(self, _b: T) -> RenderStageConfig<Self::S>;
+}
+
+impl<T: 'static + RenderStage> From<T> for RenderStageConfig<T> {
+    fn from(_value: T) -> Self {
+        RenderStageConfig {
+            configs: vec![],
+            _p: PhantomData,
+        }
+    }
 }
 
 /// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
@@ -50,7 +85,7 @@ type FrameSystemId = SystemId<InMut<'static, RenderContext>>;
 
 /// [`RenderStage`] 管理着一张渲染系统图，允许开发者自定义渲染系统的顺序。
 /// 一系列 [`RenderStage`] 由 [`RenderStageManager`] 管理。
-pub struct RenderStage {
+pub struct RenderStageInstance {
     pub name: &'static str,
     /// 帧系统图
     pub systems: TypeIdGraph<FrameSystemId>,
@@ -60,8 +95,10 @@ impl RenderStageManager {
     /// 如果 Stage 未初始化则初始化它，否则什么都不做
     pub fn try_init_stage<Stage: 'static>(&mut self) {
         if self.stages.get::<Stage>().is_none() {
-            self.stages
-                .add_node(TypeId::of::<Stage>(), Some(RenderStage::new::<Stage>()));
+            self.stages.add_node(
+                TypeId::of::<Stage>(),
+                Some(RenderStageInstance::new::<Stage>()),
+            );
         }
     }
 
@@ -77,9 +114,9 @@ impl RenderStageManager {
     }
 }
 
-impl RenderStage {
-    pub fn new<Label: 'static>() -> RenderStage {
-        RenderStage {
+impl RenderStageInstance {
+    pub fn new<Label: 'static>() -> RenderStageInstance {
+        RenderStageInstance {
             name: type_name::<Label>(),
             systems: Default::default(),
         }

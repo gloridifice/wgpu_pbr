@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, quote_spanned};
 use syn::{
     Attribute, DeriveInput, Ident, LitInt, Token, Type, bracketed,
     parse::{Parse, ParseStream},
@@ -218,6 +218,37 @@ pub fn binding_define(input: TokenStream) -> TokenStream {
                         #(#bg_entries),*
                     ],
                 })
+            }
+        }
+    };
+
+    expanded.into()
+}
+
+/// Derive `RenderStage` for a unit-like struct.
+///
+/// Resolves through `lentille_render` at call site by default. Inside the
+/// `lentille_render` crate, add `use crate as lentille_render;` before deriving.
+#[proc_macro_derive(RenderStage)]
+pub fn derive_render_stage(input: TokenStream) -> TokenStream {
+    let DeriveInput { ident, .. } = parse_macro_input!(input as DeriveInput);
+    let span = ident.span();
+
+    let expanded = quote_spanned! {span=>
+        impl lentille_render::stage::RenderStage for #ident {
+            type S = #ident;
+            fn after<T: 'static>(self, _p: T) -> lentille_render::stage::RenderStageConfig<Self::S> {
+                lentille_render::stage::RenderStageConfig {
+                    configs: vec![lentille_render::graph::InsertConfig::After(std::any::TypeId::of::<T>())],
+                    _p: std::marker::PhantomData::<Self::S>,
+                }
+            }
+
+            fn before<T: 'static>(self, _p: T) -> lentille_render::stage::RenderStageConfig<Self::S> {
+                lentille_render::stage::RenderStageConfig {
+                    configs: vec![lentille_render::graph::InsertConfig::Before(std::any::TypeId::of::<T>())],
+                    _p: std::marker::PhantomData::<Self::S>,
+                }
             }
         }
     };
