@@ -68,7 +68,7 @@ impl Plugin for OutlinePlugin {
                 before::<PostProcessStage>(),
             ])
             .add_render_system(sys_render_mask, WriteMaskStage)
-            .add_render_system(sys_render_mask, PostProcessStage)
+            .add_render_system(sys_jump_flood_and_render_outline, PostProcessStage)
             .init_render_resource_with_config::<OutlineMaskPipeline>([
                 after::<CameraBindGroupLayout>(),
                 after::<PbrMaterialBindGroupLayout>(),
@@ -163,6 +163,7 @@ pub struct Outline {
 }
 
 impl Outline {
+    #[allow(unused)]
     pub fn new<T: OutlineGroupType>() -> Self {
         Self::with_config::<T>(OutlineConfig::default())
     }
