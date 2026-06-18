@@ -8,7 +8,13 @@ use lentille_render::{RenderState, SurfaceState};
 
 use crate::editor::gui::EditorGuiPlugin;
 
-mod gui;
+pub(crate) mod data_types;
+pub(crate) mod gui;
+pub(crate) mod iced_renderer;
+pub(crate) mod logic;
+pub(crate) mod palette;
+pub(crate) mod preview_blit;
+pub(crate) mod view;
 
 pub struct EditorPlugin;
 

@@ -115,7 +115,7 @@ pub fn sampler_desc_no_filter() -> SamplerDescriptor<'static> {
         address_mode_w: wgpu::AddressMode::ClampToEdge,
         mag_filter: wgpu::FilterMode::Nearest,
         min_filter: wgpu::FilterMode::Nearest,
-        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+        mipmap_filter: wgpu::FilterMode::Nearest,
         compare: None,
         lod_min_clamp: 0.0,
         lod_max_clamp: 100.0,
@@ -160,7 +160,7 @@ pub fn full_screen_pipeline_desc<'a>(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
         }),
-        multiview_mask: None,
+        multiview: None,
         cache: None,
     }
 }
@@ -203,7 +203,7 @@ pub fn no_depth_stencil_pipeline_desc<'a>(
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             targets,
         }),
-        multiview_mask: None,
+        multiview: None,
         cache: None,
     }
 }

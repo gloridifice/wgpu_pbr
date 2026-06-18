@@ -13,7 +13,7 @@ Powered by
 - [winit](https://github.com/rust-windowing/winit): Cross-platform window creation and management in Rust.
 - [cgmath](https://github.com/rustgd/cgmath): Mathmatic library.
 - [bevy_ecs](https://docs.rs/bevy_ecs/latest/bevy_ecs/): Entity Component System architecture in Rust by bevy engine.
-- [egui](https://github.com/emilk/egui): An easy-to-use GUI in pure Rust.
+- [iced](https://github.com/iced-rs/iced): A cross-platform GUI library inspired by Elm.
 
 ## Roadmap
 

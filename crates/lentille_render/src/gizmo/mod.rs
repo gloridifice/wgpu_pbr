@@ -164,8 +164,8 @@ impl FromWorld for GizmoPipeline {
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Gizmo Pipeline Layout"),
-            bind_group_layouts: &[Some(gizmo_layout.0.as_ref())],
-            immediate_size: 0,
+            bind_group_layouts: &[gizmo_layout.0.as_ref()],
+            push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -198,8 +198,8 @@ impl FromWorld for GizmoPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::LessEqual,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -208,7 +208,7 @@ impl FromWorld for GizmoPipeline {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview_mask: None,
+            multiview: None,
             cache: None,
         });
 

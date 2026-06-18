@@ -56,17 +56,17 @@ impl FromWorld for DeferredComputePipeline {
         let full_screen_shader = world.resource::<FullScreenVertexShader>();
 
         let bind_group_layouts = vec![
-            Some(&world.resource::<CameraBindGroupLayout>().0),
-            Some(&world.resource::<GBufferTextureBindGroupLayout>().0),
-            Some(&world.resource::<PbrMaterialBindGroupLayout>().0),
-            Some(&world.resource::<DynamicLightBindGroupLayout>().0),
+            &world.resource::<CameraBindGroupLayout>().0,
+            &world.resource::<GBufferTextureBindGroupLayout>().0,
+            &world.resource::<PbrMaterialBindGroupLayout>().0,
+            &world.resource::<DynamicLightBindGroupLayout>().0,
         ];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("PBR Main Pipeline"),
                 bind_group_layouts: &bind_group_layouts,
-                immediate_size: 0,
+                push_constant_ranges: &[],
             });
 
         let render_pipeline =

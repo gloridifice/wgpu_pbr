@@ -77,7 +77,7 @@ impl BlitPipeline {
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("Blit"),
-            bind_group_layouts: &[Some(&bgl)],
+            bind_group_layouts: &[&bgl],
             ..Default::default()
         });
 
@@ -99,7 +99,7 @@ impl BlitPipeline {
             primitive: Default::default(),
             multisample: Default::default(),
             depth_stencil: None,
-            multiview_mask: None,
+            multiview: None,
             cache: None,
         }));
 
@@ -132,7 +132,6 @@ pub fn blit(
     {
         let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
             label: Some("Blit render pass"),
-            multiview_mask: None,
             color_attachments: &[Some(RenderPassColorAttachment {
                 view: dst,
                 resolve_target: None,

@@ -82,8 +82,8 @@ impl FromWorld for ShadowMappingPipeline {
         let layout = Arc::new(
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Shadow mapping pipeline"),
-                bind_group_layouts: &[Some(&global_bg_layout.layout), Some(&object_bg_layout.0)],
-                immediate_size: 0,
+                bind_group_layouts: &[&global_bg_layout.layout, &object_bg_layout.0],
+                push_constant_ranges: &[],
             }),
         );
 
@@ -114,8 +114,8 @@ impl FromWorld for ShadowMappingPipeline {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: RenderState::DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
                     stencil: Default::default(),
                     bias: wgpu::DepthBiasState {
                         constant: 4,
@@ -128,7 +128,7 @@ impl FromWorld for ShadowMappingPipeline {
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview_mask: None,
+                multiview: None,
                 cache: None,
             }),
         );

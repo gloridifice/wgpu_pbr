@@ -24,8 +24,8 @@ derive_builder = "0.20.2"
 wesl = "0.4.0"
 
 # graphics
-winit = { version = "0.30", features = ["rwh_05"] }
-wgpu = { version = "29", features = ["naga-ir", "trace"] }
+winit = { version = "0.30", features = ["rwh_06"] }
+wgpu = { version = "27", features = ["naga-ir"] }
 cgmath = "0.18.0"
 
 # bevy
@@ -46,11 +46,11 @@ color-backtrace = { version = "0.7" }
 
 tiny_bail = "0.4.3"
 
-# egui
-egui = "0.34"
-egui-wgpu = "0.34"
-egui-winit = "0.34"
-egui_dock = "0.19"
+# iced
+iced = { version = "0.14", default-features = false, features = ["wgpu", "thread-pool"] }
+iced_wgpu = "0.14"
+iced_winit = "0.14"
+iced_runtime = "0.14"
 
 # Workspace
 lentille_render = { path = "crates/lentille_render" }

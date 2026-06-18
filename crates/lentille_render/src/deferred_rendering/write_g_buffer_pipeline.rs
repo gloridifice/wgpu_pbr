@@ -131,16 +131,16 @@ impl FromWorld for DeferredWriteGBufferPipeline {
         let object_bind_group_layout = &world.resource::<ObjectBindGroupLayout>().0;
 
         let bind_group_layouts = vec![
-            Some(global_bind_group_layout),
-            Some(material_bind_group_layout),
-            Some(object_bind_group_layout),
+            global_bind_group_layout,
+            material_bind_group_layout,
+            object_bind_group_layout,
         ];
 
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Write G-Buffer Layout"),
                 bind_group_layouts: &bind_group_layouts,
-                immediate_size: 0,
+                push_constant_ranges: &[],
             });
 
         let targets = [
@@ -179,8 +179,8 @@ impl FromWorld for DeferredWriteGBufferPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: Some(true),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_write_enabled: true,
+                depth_compare: wgpu::CompareFunction::Less,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -190,7 +190,7 @@ impl FromWorld for DeferredWriteGBufferPipeline {
                 alpha_to_coverage_enabled: false,
             },
             // relate with array layers
-            multiview_mask: None,
+            multiview: None,
             // cache allows wgpu to cache shader compilation data. Only really useful for Android build targets.
             cache: None,
         });

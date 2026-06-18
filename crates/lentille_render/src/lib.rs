@@ -60,7 +60,7 @@ pub mod systems;
 pub mod transform;
 
 pub static DEVICE_FEATURES: LazyLock<Arc<Vec<Features>>> =
-    LazyLock::new(|| Arc::new(vec![Features::TIMESTAMP_QUERY]));
+    LazyLock::new(|| Arc::new(vec![Features::TIMESTAMP_QUERY, Features::PUSH_CONSTANTS]));
 
 pub mod app_ext;
 /// 想要一个物体以 Transparent 的管线渲染，需要至少有以下 Component:
@@ -184,12 +184,12 @@ pub struct SurfaceState {
 
 impl FromWorld for RenderState {
     fn from_world(_world: &mut World) -> Self {
-        let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+        let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
             backends: wgpu::Backends::GL,
-            ..wgpu::InstanceDescriptor::new_without_display_handle()
+            ..Default::default()
         });
 
         block_on(Self::new(instance))
@@ -228,7 +228,7 @@ impl RenderState {
                 label: None,
                 memory_hints: Default::default(),
                 experimental_features: wgpu::ExperimentalFeatures::default(),
-                trace: wgpu::Trace::default(),
+                trace: wgpu::Trace::Off,
             })
             .await
             .unwrap();
@@ -259,7 +259,7 @@ impl RenderState {
         info!("Surface format is: '{:?}'.", surface_format);
 
         let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_DST,
             format: surface_format,
             width: size.width,
             height: size.height,

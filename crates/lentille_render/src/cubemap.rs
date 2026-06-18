@@ -142,8 +142,8 @@ impl CubemapConverter {
             });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Render Cubemap"),
-            bind_group_layouts: &[Some(&cubemap_matrices_bind_groups.layout), Some(&texture_bgl)],
-            immediate_size: 0,
+            bind_group_layouts: &[&cubemap_matrices_bind_groups.layout, &texture_bgl],
+            push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -176,7 +176,7 @@ impl CubemapConverter {
                 compilation_options: Default::default(),
                 targets: &[Some((format).into())],
             }),
-            multiview_mask: None,
+            multiview: None,
             cache: None,
         });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -241,7 +241,6 @@ impl CubemapConverter {
             });
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render cubemap"),
-                multiview_mask: None,
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &target,
                     resolve_target: None,

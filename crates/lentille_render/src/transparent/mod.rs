@@ -60,11 +60,8 @@ impl FromWorld for TransparentPipeline {
 
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Transparent Pipeline"),
-            bind_group_layouts: &bind_group_layouts
-                .iter()
-                .map(|it| Some(*it))
-                .collect::<Vec<_>>(),
-            immediate_size: 0,
+            bind_group_layouts: &bind_group_layouts,
+            push_constant_ranges: &[],
         });
 
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -97,8 +94,8 @@ impl FromWorld for TransparentPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Less),
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::Less,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -107,7 +104,7 @@ impl FromWorld for TransparentPipeline {
                 mask: !0,
                 alpha_to_coverage_enabled: false,
             },
-            multiview_mask: None,
+            multiview: None,
             cache: None,
         });
 

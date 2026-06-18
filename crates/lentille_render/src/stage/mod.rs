@@ -237,13 +237,12 @@ pub fn sys_copy_to_real_target(
             TargetType::WindowAndSurface(entity) => {
                 let surface_state = q_surface_state.get(*entity).unwrap();
                 match surface_state.surface.get_current_texture() {
-                    wgpu::CurrentSurfaceTexture::Success(st)
-                    | wgpu::CurrentSurfaceTexture::Suboptimal(st) => {
+                    Ok(st) => {
                         surface_texture_storage = Some(st);
                         // Safe: surface_texture_storage outlives this reference via let binding
                         &surface_texture_storage.as_ref().unwrap().texture
                     }
-                    status => {
+                    Err(status) => {
                         bevy_log::warn!("Failed to get current surface texture: {:?}", status);
                         continue;
                     }

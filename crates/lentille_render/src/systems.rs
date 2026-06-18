@@ -48,7 +48,7 @@ pub fn sys_render_cascade_shadow_mapping_pass(
 
         let mut csm_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("CSM Pass"),
-            multiview_mask: None,
+    
             color_attachments: &[],
             depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                 depth_ops: Some(wgpu::Operations {
@@ -82,7 +82,7 @@ pub fn sys_render_shadow_mapping_pass(
     // let render_light = world.resource::<RenderLight>();
     let mut shadow_map_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Shadow Mapping Pass"),
-        multiview_mask: None,
+
         color_attachments: &[],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             depth_ops: Some(wgpu::Operations {
@@ -136,7 +136,7 @@ pub fn sys_render_write_g_buffer_pass(
     let color_attachment = g_buffer_gb.color_attachment();
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Write G Buffer Pass"),
-        multiview_mask: None,
+
         color_attachments: &[color_attachment],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
             view: &depth_target.view,
@@ -179,7 +179,7 @@ pub fn sys_render_main_pass(
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Main Pass"),
-        multiview_mask: None,
+
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &color_target.view,
             resolve_target: None,
@@ -232,7 +232,7 @@ pub fn sys_render_transparent(
 
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Main Pass"),
-        multiview_mask: None,
+
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
             view: &color_target.view,
             resolve_target: None,

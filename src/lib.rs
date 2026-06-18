@@ -29,7 +29,6 @@ use crate::{
 
 mod control;
 mod editor;
-mod egui_renderer;
 mod material;
 
 struct DefaultOutlineGroup;

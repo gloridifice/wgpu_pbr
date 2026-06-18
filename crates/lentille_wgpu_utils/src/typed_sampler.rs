@@ -55,7 +55,7 @@ impl NonFilteringSampler {
     pub fn new(device: &Device, mut descriptor: SamplerDescriptor<'_>) -> Self {
         descriptor.min_filter = wgpu::FilterMode::Nearest;
         descriptor.mag_filter = wgpu::FilterMode::Nearest;
-        descriptor.mipmap_filter = wgpu::MipmapFilterMode::Nearest;
+        descriptor.mipmap_filter = wgpu::FilterMode::Nearest;
         Self {
             sampler: device.create_sampler(&descriptor),
             _binding_type: PhantomData,

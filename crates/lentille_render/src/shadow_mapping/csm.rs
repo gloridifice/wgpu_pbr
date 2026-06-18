@@ -153,8 +153,8 @@ impl CascadeShadowMapping {
         let pipeline_layout = Arc::new(device.create_pipeline_layout(
             &wgpu::PipelineLayoutDescriptor {
                 label: Some("CSM pipeline"),
-                bind_group_layouts: &[Some(&csm_uniform_layout), Some(&object_bgl.0)],
-                immediate_size: 0,
+                bind_group_layouts: &[&csm_uniform_layout, &object_bgl.0],
+                push_constant_ranges: &[],
             },
         ));
 
@@ -185,8 +185,8 @@ impl CascadeShadowMapping {
                 },
                 depth_stencil: Some(wgpu::DepthStencilState {
                     format: RenderState::DEPTH_FORMAT,
-                    depth_write_enabled: Some(true),
-                    depth_compare: Some(wgpu::CompareFunction::Less),
+                    depth_write_enabled: true,
+                    depth_compare: wgpu::CompareFunction::Less,
                     stencil: Default::default(),
                     bias: wgpu::DepthBiasState {
                         constant: 4,
@@ -199,7 +199,7 @@ impl CascadeShadowMapping {
                     mask: !0,
                     alpha_to_coverage_enabled: false,
                 },
-                multiview_mask: None,
+                multiview: None,
                 cache: None,
             }),
         );

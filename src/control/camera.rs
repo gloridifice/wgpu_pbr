@@ -51,7 +51,7 @@ pub fn sys_update_camera_control(
         &mut CameraController,
     )>,
 ) {
-    if !control_state.is_focused {
+    if !control_state.is_focused || !control_state.is_over_scene {
         return;
     }
 

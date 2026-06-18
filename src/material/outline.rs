@@ -239,11 +239,11 @@ impl FromWorld for OutlineMaskPipeline {
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Outline Mask Layout"),
                 bind_group_layouts: &[
-                    Some(camera_layout),
-                    Some(material_layout),
-                    Some(object_layout),
+                    camera_layout,
+                    material_layout,
+                    object_layout,
                 ],
-                immediate_size: 0,
+                push_constant_ranges: &[],
             })
         };
         let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
@@ -276,13 +276,13 @@ impl FromWorld for OutlineMaskPipeline {
             },
             depth_stencil: Some(wgpu::DepthStencilState {
                 format: RenderState::DEPTH_FORMAT,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::LessEqual),
+                depth_write_enabled: false,
+                depth_compare: wgpu::CompareFunction::LessEqual,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
             multisample: Default::default(),
-            multiview_mask: None,
+            multiview: None,
             cache: None,
         });
         Self { pipeline }
@@ -307,8 +307,8 @@ impl FromWorld for OutlineJumpFloodPipeline {
         let layout = Arc::new(OutlineJumpFloodBindGroupLayout::new(device));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Outline Jump Flood Layout"),
-            bind_group_layouts: &[Some(&layout.0)],
-            immediate_size: 0,
+            bind_group_layouts: &[&layout.0],
+            push_constant_ranges: &[],
         });
         let pipeline =
             device.create_render_pipeline(&lentille_wgpu_utils::full_screen_pipeline_desc(
@@ -344,8 +344,8 @@ impl FromWorld for OutlineCompositePipeline {
         let layout = Arc::new(OutlineCompositeBindGroupLayout::new(device));
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Outline Composite Layout"),
-            bind_group_layouts: &[Some(&layout.0)],
-            immediate_size: 0,
+            bind_group_layouts: &[&layout.0],
+            push_constant_ranges: &[],
         });
         let pipeline =
             device.create_render_pipeline(&lentille_wgpu_utils::full_screen_pipeline_desc(
