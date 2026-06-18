@@ -1,15 +1,27 @@
+use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 use egui::*;
 use lentille_render::prelude::*;
 use std::any::type_name;
 
-use crate::control::camera::CameraController;
+use crate::{
+    control::camera::CameraController,
+    editor::gui::components::property_window::PropertyWindowPlugin,
+};
 
 pub mod depth_to_rgba;
+pub mod property_window;
 pub mod texture_preview;
 
+pub struct EditorComponentPlugin;
+impl Plugin for EditorComponentPlugin {
+    fn build(&self, app: &mut bevy_app::App) {
+        app.add_plugins(PropertyWindowPlugin);
+    }
+}
+
 fn value(ui: &mut Ui, v: &mut f32) {
-    ui.add_sized([40.0, 20.0], DragValue::new(v).max_decimals(1).speed(0.05));
+    ui.add_sized([60.0, 22.0], DragValue::new(v).max_decimals(1).speed(0.05));
 }
 
 fn color_rgba(ui: &mut Ui, color: &mut Color) -> egui::Response {
@@ -32,8 +44,8 @@ fn color_rgba(ui: &mut Ui, color: &mut Color) -> egui::Response {
 fn property_grid(ui: &mut Ui, id_source: impl std::hash::Hash, contents: impl FnOnce(&mut Ui)) {
     egui::Grid::new(id_source)
         .num_columns(2)
-        .spacing([10.0, 6.0])
-        .min_col_width(70.0)
+        .spacing([12.0, 8.0])
+        .min_col_width(80.0)
         .striped(true)
         .show(ui, contents);
 }
@@ -123,7 +135,7 @@ pub fn option_value<T>(
     });
 }
 
-pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
+pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World, clicked_entity: &mut Option<Entity>) {
     let display_name = {
         let mut ret = format!(" #{}", id.index());
         if let Some(name) = world.get::<Name>(id) {
@@ -132,96 +144,134 @@ pub fn world_tree(ui: &mut Ui, id: Entity, world: &mut World) {
         ret
     };
 
-    ui.collapsing(display_name, |ui: &mut Ui| {
-        ui.separator();
+    let children = world
+        .get::<Transform>(id)
+        .map(|t| t.children.clone())
+        .unwrap_or_default();
 
-        impl_component_ui!(Camera, world, id, ui, ui, camera, {
-            property_grid(ui, format!("cam {}", id.index()), |ui| {
-                ui.label("FOV");
-                ui.add(DragValue::new(&mut camera.fovy).speed(0.05));
-                ui.end_row();
+    let has_children = !children.is_empty();
+
+    if has_children {
+        // Entities with children: clickable collapsible tree node.
+        let header = egui::CollapsingHeader::new(display_name)
+            .default_open(false)
+            .show(ui, |ui| {
+                for child_id in &children {
+                    world_tree(ui, *child_id, world, clicked_entity);
+                }
             });
-        });
-
-        impl_component_ui!(CameraController, world, id, ui, ui, camera, {
-            property_grid(ui, format!("camctrl {}", id.index()), |ui| {
-                ui.label("Yaw");
-                ui.add(DragValue::new(&mut camera.yaw).speed(0.05));
-                ui.end_row();
-                ui.label("Row");
-                ui.add(DragValue::new(&mut camera.row).speed(0.05));
-                ui.end_row();
-            });
-        });
-
-        impl_component_ui!(PointLight, world, id, ui, ui, light, {
-            property_grid(ui, format!("pl {}", id.index()), |ui| {
-                ui.label("Color");
-                color_rgba(ui, &mut light.color);
-                ui.end_row();
-                ui.label("Intensity");
-                value(ui, &mut light.intensity);
-                ui.end_row();
-                ui.label("Decay");
-                value(ui, &mut light.decay);
-                ui.end_row();
-            });
-        });
-
-        impl_component_ui!(PbrMaterial, world, id, ui, ui, mat, {
-            property_grid(ui, format!("PBR {}", id.index()), |ui| {
-                ui.label("Roughness");
-                option_value(ui, &mut mat.roughness, 0.0, |ui, roughness| {
-                    ui.add(egui::Slider::new(roughness, 0.0f32..=1.0f32));
-                });
-                ui.end_row();
-
-                ui.label("Metallic");
-                option_value(ui, &mut mat.metallic, 0.0, |ui, it| {
-                    ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
-                });
-                ui.end_row();
-
-                ui.label("Reflectance");
-                option_value(ui, &mut mat.reflectance, 0.0, |ui, it| {
-                    ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
-                });
-                ui.end_row();
-
-                ui.label("Color");
-                option_value(ui, &mut mat.color, Color::WHITE, |ui, it| {
-                    let mut array_color = (*it).into_array();
-                    ui.color_edit_button_rgba_unmultiplied(&mut array_color);
-                    *it = Color::from_linear_array(array_color);
-                });
-                ui.end_row();
-            });
-        });
-
-        impl_component_ui!(ParallelLight, world, id, ui, ui, light, {
-            property_grid(ui, format!("ParallelLight {}", id.index()), |ui| {
-                ui.label("Intensity");
-                value(ui, &mut light.intensity);
-                ui.end_row();
-
-                ui.label("Size");
-                value(ui, &mut light.size);
-                ui.end_row();
-
-                ui.label("Color");
-                color_rgba(ui, &mut light.color);
-                ui.end_row();
-            });
-        });
-
-        let mut children = vec![];
-        impl_component_ui!(Transform, world, id, ui, ui, trans, {
-            transform_ui(ui, id, &mut trans);
-            children = trans.children.clone()
-        });
-
-        for id in children.into_iter() {
-            world_tree(ui, id, world);
+        if header.header_response.clicked() {
+            *clicked_entity = Some(id);
         }
+    } else {
+        // Leaf entities: simple clickable label with indent to align with tree.
+        let resp = ui.add(
+            egui::Label::new(egui::RichText::new(format!("  {display_name}")).strong())
+                .selectable(false)
+                .sense(egui::Sense::click()),
+        );
+        if resp.clicked() {
+            *clicked_entity = Some(id);
+        }
+    }
+}
+
+/// Renders all editable components for `entity` in a flat property-editor layout.
+/// Designed to be called inside an egui Window / Area (not inside the hierarchy tree).
+pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) {
+    let display_name = {
+        let mut ret = format!("#{}", entity.index());
+        if let Some(name) = world.get::<Name>(entity) {
+            ret.insert_str(0, name.as_str());
+        }
+        ret
+    };
+    ui.colored_label(Color32::LIGHT_YELLOW, &display_name);
+    ui.separator();
+
+    impl_component_ui!(Camera, world, entity, ui, ui, camera, {
+        property_grid(ui, format!("cam {}", entity.index()), |ui| {
+            ui.label("FOV");
+            ui.add(DragValue::new(&mut camera.fovy).speed(0.05));
+            ui.end_row();
+        });
     });
+
+    impl_component_ui!(CameraController, world, entity, ui, ui, camera, {
+        property_grid(ui, format!("camctrl {}", entity.index()), |ui| {
+            ui.label("Yaw");
+            ui.add(DragValue::new(&mut camera.yaw).speed(0.05));
+            ui.end_row();
+            ui.label("Row");
+            ui.add(DragValue::new(&mut camera.row).speed(0.05));
+            ui.end_row();
+        });
+    });
+
+    impl_component_ui!(PointLight, world, entity, ui, ui, light, {
+        property_grid(ui, format!("pl {}", entity.index()), |ui| {
+            ui.label("Color");
+            color_rgba(ui, &mut light.color);
+            ui.end_row();
+            ui.label("Intensity");
+            value(ui, &mut light.intensity);
+            ui.end_row();
+            ui.label("Decay");
+            value(ui, &mut light.decay);
+            ui.end_row();
+        });
+    });
+
+    impl_component_ui!(PbrMaterial, world, entity, ui, ui, mat, {
+        property_grid(ui, format!("PBR {}", entity.index()), |ui| {
+            ui.label("Roughness");
+            option_value(ui, &mut mat.roughness, 0.0, |ui, roughness| {
+                ui.add(egui::Slider::new(roughness, 0.0f32..=1.0f32));
+            });
+            ui.end_row();
+
+            ui.label("Metallic");
+            option_value(ui, &mut mat.metallic, 0.0, |ui, it| {
+                ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
+            });
+            ui.end_row();
+
+            ui.label("Reflectance");
+            option_value(ui, &mut mat.reflectance, 0.0, |ui, it| {
+                ui.add(egui::Slider::new(it, 0.0f32..=1.0f32));
+            });
+            ui.end_row();
+
+            ui.label("Color");
+            option_value(ui, &mut mat.color, Color::WHITE, |ui, it| {
+                let mut array_color = (*it).into_array();
+                ui.color_edit_button_rgba_unmultiplied(&mut array_color);
+                *it = Color::from_linear_array(array_color);
+            });
+            ui.end_row();
+        });
+    });
+
+    impl_component_ui!(ParallelLight, world, entity, ui, ui, light, {
+        property_grid(ui, format!("ParallelLight {}", entity.index()), |ui| {
+            ui.label("Intensity");
+            value(ui, &mut light.intensity);
+            ui.end_row();
+
+            ui.label("Size");
+            value(ui, &mut light.size);
+            ui.end_row();
+
+            ui.label("Color");
+            color_rgba(ui, &mut light.color);
+            ui.end_row();
+        });
+    });
+
+    impl_component_ui!(Transform, world, entity, ui, ui, trans, {
+        transform_ui(ui, entity, &mut trans);
+    });
+
+    ui.add_space(4.0);
+    ui.colored_label(Color32::GRAY, "Click outside or press ✖ to close");
 }

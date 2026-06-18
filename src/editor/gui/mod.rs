@@ -4,8 +4,8 @@ use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
 use bevy_log::info;
 use egui::{
-    Color32, LayerId, PointerButton, ScrollArea, Visuals, epaint::text::InsertFontFamily,
-    load::SizedTexture,
+    CentralPanel, Color32, Panel, PointerButton, ScrollArea, Visuals, ahash::HashMap,
+    epaint::text::InsertFontFamily, load::SizedTexture,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use egui_wgpu::ScreenDescriptor;
@@ -27,10 +27,17 @@ use lentille_render::{
 
 use components::{
     depth_to_rgba::CsmDepthToRgbaConverter, depth_to_rgba::DepthToRgbaConverter,
-    texture_preview::TexturePreview, world_tree,
+    property_window::EntityPropertyWindow, property_window_ui, texture_preview::TexturePreview,
+    world_tree,
 };
 
-use crate::{control::camera::MainCamera, egui_renderer::EguiRenderer};
+use crate::{
+    control::camera::MainCamera,
+    editor::gui::components::{
+        EditorComponentPlugin, property_window::TryCreateEntityPropertyWindowCmd,
+    },
+    egui_renderer::EguiRenderer,
+};
 
 pub mod components;
 
@@ -38,7 +45,7 @@ pub struct EditorGuiPlugin;
 
 impl Plugin for EditorGuiPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.add_plugins(EguiRendererPlugin)
+        app.add_plugins((EguiRendererPlugin, EditorComponentPlugin))
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
             .init_resource::<DockLayout>()
@@ -159,7 +166,8 @@ struct DockLayout(DockState<Pane>);
 
 impl Default for DockLayout {
     fn default() -> Self {
-        Self(create_dock_state())
+        // Fallback width used before the first frame (actual width unknown).
+        Self(create_dock_state(1920.0))
     }
 }
 
@@ -179,9 +187,9 @@ impl TabViewer for DockTabViewer<'_> {
 
     fn title(&mut self, tab: &mut Self::Tab) -> egui::WidgetText {
         match tab {
-            Pane::RightPanel => "CSM Preview".into(),
-            Pane::WorldPanel => "Control Panel".into(),
-            Pane::Scene => "Scene".into(),
+            Pane::RightPanel => "🗺️ CSM Preview".into(),
+            Pane::WorldPanel => "📋 Control Panel".into(),
+            Pane::Scene => "🎬 Scene".into(),
         }
     }
 
@@ -195,130 +203,189 @@ impl TabViewer for DockTabViewer<'_> {
             Pane::RightPanel => {
                 let device: &wgpu::Device = unsafe { &**device };
 
-                {
-                    let mut config_query = world.query::<&mut CsmConfig>();
-                    if let Ok(mut config) = config_query.single_mut(world) {
-                        ui.add(egui::Slider::new(&mut config.linear_log_factor, 0.0..=1.0));
-                    }
-                }
-
                 ScrollArea::vertical().show(ui, |ui| {
+                    // --- CSM Settings ---
+                    egui::CollapsingHeader::new("⚙️ CSM Settings")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let mut config_query = world.query::<&mut CsmConfig>();
+                            if let Ok(mut config) = config_query.single_mut(world) {
+                                ui.horizontal(|ui| {
+                                    ui.label("Linear/Log Factor:");
+                                    ui.add(
+                                        egui::Slider::new(&mut config.linear_log_factor, 0.0..=1.0)
+                                            .text(""),
+                                    );
+                                });
+                            } else {
+                                ui.colored_label(Color32::GRAY, "No CSM config");
+                            }
+                        });
+
                     // --- ShadowMap single preview ---
-                    if let Some(mut state) = world.get_resource_mut::<ShadowMapPreviewState>() {
-                        let sw = state.width;
-                        let sh = state.height;
-                        let rgba_view = state.rgba_view.take();
-                        if let Some(ref rgba_view) = rgba_view {
-                            ui.collapsing("ShadowMap", |ui| {
-                                state.preview.show_view(
-                                    ui,
-                                    &mut egui_renderer.renderer,
-                                    device,
-                                    rgba_view,
-                                    wgpu::Extent3d {
-                                        width: sw,
-                                        height: sh,
-                                        depth_or_array_layers: 1,
-                                    },
-                                    wgpu::TextureFormat::Rgba8Unorm,
-                                );
+                    let has_shadow_map = world
+                        .get_resource::<ShadowMapPreviewState>()
+                        .is_some_and(|s| s.rgba_view.is_some());
+                    if has_shadow_map {
+                        ui.separator();
+                        egui::CollapsingHeader::new("🗺️ ShadowMap")
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                if let Some(mut state) =
+                                    world.get_resource_mut::<ShadowMapPreviewState>()
+                                {
+                                    let sw = state.width;
+                                    let sh = state.height;
+                                    let rgba_view = state.rgba_view.take();
+                                    if let Some(ref rgba_view) = rgba_view {
+                                        state.preview.show_view(
+                                            ui,
+                                            &mut egui_renderer.renderer,
+                                            device,
+                                            rgba_view,
+                                            wgpu::Extent3d {
+                                                width: sw,
+                                                height: sh,
+                                                depth_or_array_layers: 1,
+                                            },
+                                            wgpu::TextureFormat::Rgba8Unorm,
+                                        );
+                                    }
+                                    state.rgba_view = rgba_view;
+                                }
                             });
-                            ui.separator();
-                        }
-                        state.rgba_view = rgba_view;
                     }
 
                     // --- CSM cascade layers ---
-                    ui.colored_label(Color32::LIGHT_YELLOW, "CSM Depth Layers");
-                    ui.separator();
-
-                    let mut has_preview = false;
-                    let mut converter_query =
-                        world.query::<(&mut CsmDepthToRgbaConverter, &Name)>();
-                    for (mut converter, name) in converter_query.iter_mut(world) {
-                        has_preview = true;
-                        ui.collapsing(name.as_str(), |ui| {
-                            for (i, output) in converter.outputs_mut().iter_mut().enumerate() {
-                                ui.label(format!("Cascade {}", i));
-                                ui.label(format!("Depth format: {:?}", output.original_format));
-                                output.preview.size(128., 128.).show_view(
-                                    ui,
-                                    &mut egui_renderer.renderer,
-                                    device,
-                                    &output.rgba_view,
-                                    wgpu::Extent3d {
-                                        width: output.width,
-                                        height: output.height,
-                                        depth_or_array_layers: 1,
-                                    },
-                                    wgpu::TextureFormat::Rgba8Unorm,
-                                );
-                            }
-                        });
-                    }
-                    if !has_preview {
-                        ui.colored_label(Color32::GRAY, "No depth data available");
+                    let converter_count = world
+                        .query::<&CsmDepthToRgbaConverter>()
+                        .iter(world)
+                        .count();
+                    if converter_count > 0 {
+                        ui.separator();
+                        egui::CollapsingHeader::new("📚 CSM Depth Layers")
+                            .default_open(true)
+                            .show(ui, |ui| {
+                                let mut converter_query =
+                                    world.query::<(&mut CsmDepthToRgbaConverter, &Name)>();
+                                for (mut converter, name) in converter_query.iter_mut(world) {
+                                    ui.collapsing(name.as_str(), |ui| {
+                                        for (i, output) in
+                                            converter.outputs_mut().iter_mut().enumerate()
+                                        {
+                                            ui.label(format!("Cascade {}", i));
+                                            ui.label(format!(
+                                                "Depth format: {:?}",
+                                                output.original_format
+                                            ));
+                                            output.preview.size(128., 128.).show_view(
+                                                ui,
+                                                &mut egui_renderer.renderer,
+                                                device,
+                                                &output.rgba_view,
+                                                wgpu::Extent3d {
+                                                    width: output.width,
+                                                    height: output.height,
+                                                    depth_or_array_layers: 1,
+                                                },
+                                                wgpu::TextureFormat::Rgba8Unorm,
+                                            );
+                                        }
+                                    });
+                                }
+                            });
                     }
                 });
             }
             Pane::WorldPanel => {
                 egui::ScrollArea::vertical().show(ui, |ui| {
-                    if let Some(time) = world.get_resource::<Time>() {
-                        ui.horizontal(|ui| {
-                            ui.label("FPS:");
-                            ui.colored_label(
-                                egui::Color32::LIGHT_GREEN,
-                                format!("{:.1}", time.fps),
-                            );
-                        });
-                        ui.horizontal(|ui| {
-                            ui.label("Frame:");
-                            ui.colored_label(
-                                egui::Color32::LIGHT_GREEN,
-                                format!("{:.2} ms", time.frame_time_ms),
-                            );
-                        });
-                        ui.separator();
-                    }
-
-                    let id_root = world
-                        .query::<(Entity, &Transform)>()
-                        .iter(world)
-                        .filter_map(|(id, trans)| {
-                            if trans.parent.is_none() {
-                                Some(id)
+                    // --- Performance section ---
+                    egui::CollapsingHeader::new("📊 Performance")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            if let Some(time) = world.get_resource::<Time>() {
+                                ui.horizontal(|ui| {
+                                    ui.label("FPS:");
+                                    ui.colored_label(
+                                        egui::Color32::LIGHT_GREEN,
+                                        format!("{:.1}", time.fps),
+                                    );
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Frame:");
+                                    ui.colored_label(
+                                        egui::Color32::LIGHT_GREEN,
+                                        format!("{:.2} ms", time.frame_time_ms),
+                                    );
+                                });
                             } else {
-                                None
+                                ui.colored_label(Color32::GRAY, "No time data");
                             }
-                        })
-                        .collect::<Vec<_>>();
+                        });
 
-                    for id in id_root.into_iter() {
-                        world_tree(ui, id, world);
-                    }
+                    ui.separator();
+
+                    // --- Scene Hierarchy section ---
+                    egui::CollapsingHeader::new("🌳 Scene Hierarchy")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let id_root = world
+                                .query::<(Entity, &Transform)>()
+                                .iter(world)
+                                .filter_map(|(id, trans)| {
+                                    if trans.parent.is_none() {
+                                        Some(id)
+                                    } else {
+                                        None
+                                    }
+                                })
+                                .collect::<Vec<_>>();
+
+                            let mut entity_clicked: Option<Entity> = None;
+
+                            if id_root.is_empty() {
+                                ui.colored_label(Color32::GRAY, "No entities in scene");
+                            } else {
+                                for id in id_root.into_iter() {
+                                    world_tree(ui, id, world, &mut entity_clicked);
+                                }
+                            }
+
+                            if let Some(clicked_id) = entity_clicked {
+                                if let Some(pos) =
+                                    egui_renderer.context().input(|i| i.pointer.latest_pos())
+                                {
+                                    TryCreateEntityPropertyWindowCmd {
+                                        pos: pos,
+                                        entity: clicked_id,
+                                    }
+                                    .apply(world);
+                                }
+                            };
+                        });
                 });
             }
             Pane::Scene => {
                 let size = ui.available_size();
                 if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>()
-                    && let Some(render_target_egui_tex_id) = ids.0.as_ref() {
-                        let main_view =
-                            ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
-                        let mut input = world.resource_mut::<Input>();
-                        for (ec, mc) in [
-                            (PointerButton::Primary, CursorButton::Left),
-                            (PointerButton::Secondary, CursorButton::Right),
-                            (PointerButton::Middle, CursorButton::Middle),
-                        ] {
-                            if main_view.clicked_by(ec) {
-                                input.down_cursor_buttons.insert(mc);
-                            }
+                    && let Some(render_target_egui_tex_id) = ids.0.as_ref()
+                {
+                    let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
+                    let mut input = world.resource_mut::<Input>();
+                    for (ec, mc) in [
+                        (PointerButton::Primary, CursorButton::Left),
+                        (PointerButton::Secondary, CursorButton::Right),
+                        (PointerButton::Middle, CursorButton::Middle),
+                    ] {
+                        if main_view.clicked_by(ec) {
+                            input.down_cursor_buttons.insert(mc);
                         }
-                        input.cursor_position = main_view
-                            .hover_pos()
-                            .map(|it| Vec2::new(it.x, it.y))
-                            .unwrap_or(Vec2::zero());
                     }
+                    input.cursor_position = main_view
+                        .hover_pos()
+                        .map(|it| Vec2::new(it.x, it.y))
+                        .unwrap_or(Vec2::zero());
+                }
 
                 if let Ok(mut target_size) = world
                     .query_filtered::<&mut RenderTargetSize, With<MainCamera>>()
@@ -360,25 +427,90 @@ pub fn sys_egui_dock(world: &mut World) {
         &rs.device as *const wgpu::Device
     };
 
-    world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
-        let mut ui = {
-            let ctx = egui.context().clone();
-            egui::Ui::new(
-                ctx.clone(),
-                egui::Id::new("dock_ui"),
-                egui::UiBuilder::new()
-                    .layer_id(LayerId::background())
-                    .max_rect(ctx.content_rect()),
-            )
-        };
+    // Collect status-bar data before entering resource_scope.
+    let status_fps = world.get_resource::<Time>().map(|t| t.fps).unwrap_or(0.0);
+    let status_frame_ms = world
+        .get_resource::<Time>()
+        .map(|t| t.frame_time_ms)
+        .unwrap_or(0.0);
+    let status_entity_count = world.query::<Entity>().iter(world).count();
 
-        world.resource_scope(|world, mut dock: Mut<DockLayout>| {
-            let mut viewer = DockTabViewer {
-                world,
-                egui_renderer: &mut egui,
-                device: device_ptr,
-            };
-            DockArea::new(&mut dock.0).show_inside(&mut ui, &mut viewer);
+    // Use Cell so the menu-bar closure can signal the dock-area closure.
+    let reset_layout = std::cell::Cell::new(false);
+    let show_about = std::cell::Cell::new(false);
+
+    world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
+        let ctx = egui.context().clone();
+        let mut ui = egui::Ui::new(
+            ctx.clone(),
+            egui::Id::new("editor_root"),
+            egui::UiBuilder::new().max_rect(ctx.content_rect()),
+        );
+
+        // ---- Menu Bar ----
+        Panel::top("menu_bar").show_inside(&mut ui, |ui| {
+            egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button("View", |ui| {
+                    if ui.button("🔄 Reset Layout").clicked() {
+                        reset_layout.set(true);
+                        ui.close();
+                    }
+                });
+                ui.menu_button("Help", |ui| {
+                    if ui.button("About").clicked() {
+                        show_about.set(true);
+                        ui.close();
+                    }
+                });
+            });
+        });
+
+        // ---- Status Bar ----
+        Panel::bottom("status_bar").show_inside(&mut ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(format!(
+                    "🖥️  FPS: {:.1}  |  Frame: {:.2} ms",
+                    status_fps, status_frame_ms
+                ));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(format!("Entities: {}  ", status_entity_count));
+                });
+            });
+        });
+
+        // ---- About Window ----
+        let mut show_about_window = show_about.take();
+        if show_about_window {
+            egui::Window::new("About wgpu_pbr Editor")
+                .open(&mut show_about_window)
+                .collapsible(false)
+                .resizable(false)
+                .show(&ctx, |ui| {
+                    ui.label("wgpu_pbr — Real-time PBR Renderer");
+                    ui.separator();
+                    ui.label("A deferred rendering engine with PBR materials,");
+                    ui.label("IBL lighting, CSM shadows, and an egui-based editor.");
+                });
+        }
+
+        // ---- Central Area: DockArea ----
+        let content_width = ctx.content_rect().width();
+        CentralPanel::default().show_inside(&mut ui, |ui| {
+            world.resource_scope(|world, mut dock: Mut<DockLayout>| {
+                if reset_layout.take() {
+                    *dock = DockLayout(create_dock_state(content_width));
+                }
+                let mut viewer = DockTabViewer {
+                    world,
+                    egui_renderer: &mut egui,
+                    device: device_ptr,
+                };
+                let mut dock_style = egui_dock::Style::from_egui(ui.style().as_ref());
+                dock_style.tab_bar.height = 28.0;
+                DockArea::new(&mut dock.0)
+                    .style(dock_style)
+                    .show_inside(ui, &mut viewer);
+            });
         });
     });
 }
@@ -564,15 +696,42 @@ fn sys_on_resize_scene_render_target(
     }
 }
 
-fn create_dock_state() -> DockState<Pane> {
-    // Main area = Scene. Split left 1/4 for WorldPanel, right 1/4 for CSM Preview.
-    // Original share ratio: 1:2:1
+fn create_dock_state(total_width: f32) -> DockState<Pane> {
+    /// Desired pixel widths for side panels.
+    const LEFT_PANEL_PX: f32 = 280.0;
+    const RIGHT_PANEL_PX: f32 = 320.0;
+
+    // Convert pixel widths to ratios of the total available width.
+    let left_ratio = (LEFT_PANEL_PX / total_width).clamp(0.10, 0.35);
+    let right_ratio = (RIGHT_PANEL_PX / total_width).clamp(0.10, 0.40);
+    let center_ratio = 1.0 - left_ratio - right_ratio;
+
+    // If the window is too narrow, scale side panels down proportionally
+    // while keeping the center at least 25% of the total.
+    let (left_ratio, right_ratio) = if center_ratio < 0.25 {
+        let scale = 0.75 / (left_ratio + right_ratio);
+        (left_ratio * scale, right_ratio * scale)
+    } else {
+        (left_ratio, right_ratio)
+    };
+
     let mut state = DockState::new(vec![Pane::Scene]);
     let surface = state.main_surface_mut();
-    let [_root, _left] = surface.split_left(NodeIndex::root(), 0.25, vec![Pane::WorldPanel]);
-    // Remaining width is 0.75 of total. To get 0.25 of total for right panel,
-    // split 1/3 of remaining (0.75 * 1/3 = 0.25).
-    let [_root2, _right] =
-        surface.split_right(NodeIndex::root(), 2.0 / 3.0, vec![Pane::RightPanel]);
+
+    // Split left: left_ratio goes to WorldPanel, remaining (1-left_ratio) stays with Scene.
+    let [_root, _left] = surface.split_left(NodeIndex::root(), left_ratio, vec![Pane::WorldPanel]);
+
+    // Remaining width after left split = 1.0 - left_ratio.
+    // To allocate right_ratio of the *total* width, we need:
+    //   right_share_of_remaining = right_ratio / (1.0 - left_ratio)
+    // split_right keeps `ratio` for existing content (Scene), gives `1-ratio` to new (Right).
+    // So Scene keeps: 1.0 - right_ratio / (1.0 - left_ratio) of the remaining.
+    let scene_share_of_remaining = 1.0 - right_ratio / (1.0 - left_ratio);
+    let [_root2, _right] = surface.split_right(
+        NodeIndex::root(),
+        scene_share_of_remaining,
+        vec![Pane::RightPanel],
+    );
+
     state
 }
