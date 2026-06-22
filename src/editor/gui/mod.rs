@@ -27,14 +27,14 @@ use lentille_render::{
 
 use components::{
     depth_to_rgba::CsmDepthToRgbaConverter, depth_to_rgba::DepthToRgbaConverter,
-    property_window::EntityPropertyWindow, property_window_ui, texture_preview::TexturePreview,
-    world_tree,
+    texture_preview::TexturePreview,
 };
 
 use crate::{
     control::camera::MainCamera,
     editor::gui::components::{
         EditorComponentPlugin, property_window::TryCreateEntityPropertyWindowCmd,
+        world_hierarchy::WorldHierarchy,
     },
     egui_renderer::EguiRenderer,
 };
@@ -347,11 +347,15 @@ impl TabViewer for DockTabViewer<'_> {
                                 ui.colored_label(Color32::GRAY, "No entities in scene");
                             } else {
                                 for id in id_root.into_iter() {
-                                    world_tree(ui, id, world, &mut entity_clicked);
+                                    let clicked = WorldHierarchy::new().show(ui, id, world);
+                                    if entity_clicked.is_none() {
+                                        entity_clicked = clicked;
+                                    }
                                 }
                             }
 
                             if let Some(clicked_id) = entity_clicked {
+                                info!("Clicked!");
                                 if let Some(pos) =
                                     egui_renderer.context().input(|i| i.pointer.latest_pos())
                                 {
