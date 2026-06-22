@@ -139,16 +139,6 @@ pub fn option_value<T>(
 /// Renders all editable components for `entity` in a flat property-editor layout.
 /// Designed to be called inside an egui Window / Area (not inside the hierarchy tree).
 pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) {
-    let display_name = {
-        let mut ret = format!("#{}", entity.index());
-        if let Some(name) = world.get::<Name>(entity) {
-            ret.insert_str(0, name.as_str());
-        }
-        ret
-    };
-    ui.colored_label(Color32::LIGHT_YELLOW, &display_name);
-    ui.separator();
-
     impl_component_ui!(Camera, world, entity, ui, ui, camera, {
         property_grid(ui, format!("cam {}", entity.index()), |ui| {
             ui.label("FOV");

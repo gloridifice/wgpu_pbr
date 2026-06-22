@@ -8,6 +8,7 @@ use egui::{
     epaint::text::InsertFontFamily, load::SizedTexture,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
+use egui_ltreeview::Action;
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
     input::{CursorButton, Input},
@@ -33,8 +34,9 @@ use components::{
 use crate::{
     control::camera::MainCamera,
     editor::gui::components::{
-        EditorComponentPlugin, property_window::TryCreateEntityPropertyWindowCmd,
-        world_hierarchy::WorldHierarchy,
+        EditorComponentPlugin,
+        property_window::TryCreateEntityPropertyWindowCmd,
+        world_hierarchy::{HierarchyEntityQuery, WorldHierarchy},
     },
     egui_renderer::EguiRenderer,
 };
@@ -326,48 +328,39 @@ impl TabViewer for DockTabViewer<'_> {
                     ui.separator();
 
                     // --- Scene Hierarchy section ---
-                    egui::CollapsingHeader::new("🌳 Scene Hierarchy")
-                        .default_open(true)
-                        .show(ui, |ui| {
-                            let id_root = world
-                                .query::<(Entity, &Transform)>()
-                                .iter(world)
-                                .filter_map(|(id, trans)| {
-                                    if trans.parent.is_none() {
-                                        Some(id)
-                                    } else {
-                                        None
-                                    }
-                                })
-                                .collect::<Vec<_>>();
+                    // egui::CollapsingHeader::new("🌳 Scene Hierarchy")
+                    //     .default_open(true)
+                    //     .show(ui, |ui| {
+                    let mut query_state = world.query::<HierarchyEntityQuery>();
+                    let query = query_state.query(world);
+                    let root_entities = query.iter().filter_map(|(id, _, trans)| {
+                        if trans.parent.is_none() {
+                            Some(id)
+                        } else {
+                            None
+                        }
+                    });
 
-                            let mut entity_clicked: Option<Entity> = None;
+                    let (_, actions) =
+                        WorldHierarchy::new().show(ui, &root_entities.collect(), &query);
 
-                            if id_root.is_empty() {
-                                ui.colored_label(Color32::GRAY, "No entities in scene");
-                            } else {
-                                for id in id_root.into_iter() {
-                                    let clicked = WorldHierarchy::new().show(ui, id, world);
-                                    if entity_clicked.is_none() {
-                                        entity_clicked = clicked;
+                    for action in actions {
+                        match action {
+                            Action::SetSelected(list) => {
+                                for entity in list {
+                                    if let Some(pos) =
+                                        egui_renderer.context().input(|i| i.pointer.latest_pos())
+                                    {
+                                        TryCreateEntityPropertyWindowCmd { pos: pos, entity }
+                                            .apply(world);
                                     }
                                 }
                             }
-
-                            if let Some(clicked_id) = entity_clicked {
-                                info!("Clicked!");
-                                if let Some(pos) =
-                                    egui_renderer.context().input(|i| i.pointer.latest_pos())
-                                {
-                                    TryCreateEntityPropertyWindowCmd {
-                                        pos: pos,
-                                        entity: clicked_id,
-                                    }
-                                    .apply(world);
-                                }
-                            };
-                        });
+                            _ => {}
+                        }
+                    }
                 });
+                // });
             }
             Pane::Scene => {
                 let size = ui.available_size();

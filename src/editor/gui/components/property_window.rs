@@ -26,8 +26,10 @@ impl Command for TryCreateEntityPropertyWindowCmd {
             .contains_key(&self.entity);
         if should_create {
             world.spawn((
+                Name::new("property_window"),
                 EntityPropertyWindow {
                     init_pos: self.pos,
+                    entity: Some(self.entity),
                     ..Default::default()
                 },
                 AutoDelete,
@@ -58,9 +60,9 @@ pub struct AutoDelete;
 impl Default for EntityPropertyWindow {
     fn default() -> Self {
         Self {
-            pinned: Default::default(),
+            pinned: false,
             open: true,
-            entity: Default::default(),
+            entity: None,
             egui_id: egui::Id::new(Uuid::new_v4()),
             init_pos: Default::default(),
         }
@@ -83,77 +85,87 @@ fn sys_delete(
 }
 
 fn sys_show(world: &mut World) {
-    let mut q_windows = world.query::<&EntityPropertyWindow>();
+    let mut q_windows = world.query::<(Entity, &EntityPropertyWindow)>();
     let openned = q_windows
         .iter(world)
-        .filter(|it| it.open && it.entity.is_some())
-        .map(|it| it.clone())
+        .filter(|(_, it)| it.open && it.entity.is_some())
+        .map(|(id, window)| (id, window.clone()))
         .collect::<Vec<_>>();
 
     let ctx = world.resource::<EguiRenderer>().context().clone();
 
-    for mut pinnable_window in openned {
-        let response = pinnable_window.show(&ctx, world);
+    for (id, pinnable_window) in openned {
+        let (response, mut new_state) = pinnable_window.show(&ctx, world);
 
         // Unpin when click blank area
-        if !pinnable_window.pinned && ctx.input(|it| it.pointer.any_click()) {
+        if !new_state.pinned && ctx.input(|it| it.pointer.any_click()) {
             if let Some(InnerResponse { response, .. }) = response {
-                if !response.clicked() {
-                    pinnable_window.close();
+                if !response.contains_pointer() {
+                    new_state.close();
                 }
             }
         }
+
+        world.entity_mut(id).insert(new_state);
     }
 }
 
 impl EntityPropertyWindow {
     pub fn show(
-        &mut self,
+        mut self,
         ctx: &egui::Context,
         world: &mut World,
-    ) -> Option<InnerResponse<Option<()>>> {
+    ) -> (Option<InnerResponse<Option<()>>>, EntityPropertyWindow) {
         let Self {
             pinned,
-            open: _,
+            open,
             entity: Some(entity),
             egui_id,
             init_pos,
-        } = self
+        } = &mut self
         else {
-            return None;
+            return (None, self);
         };
 
         let window = egui::Window::new("entity_properties")
             .id(*egui_id)
             .title_bar(false)
-            .auto_sized()
+            .default_height(400.)
+            .default_width(400.)
             .default_pos(*init_pos);
 
-        window.show(ctx, |ui| {
+        let response = window.show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if *pinned {
-                    if ui
-                        .small_button("📌")
-                        .on_hover_text("Unpin window")
-                        .clicked()
-                    {
-                        *pinned = true;
-                    }
+                let pin_button = if *pinned {
+                    ui.small_button("📌").on_hover_text("Unpin window")
                 } else {
-                    if ui.small_button("📍").on_hover_text("Pin window").clicked() {
-                        *pinned = true;
+                    ui.small_button("📍").on_hover_text("Pin window")
+                };
+
+                if pin_button.clicked() {
+                    *pinned = !*pinned;
+                };
+
+                let display_name = {
+                    let mut ret = format!("#{}", entity.index());
+                    if let Some(name) = world.get::<Name>(*entity) {
+                        ret.insert_str(0, name.as_str());
                     }
-                }
+                    ret
+                };
+                ui.label(&display_name);
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.small_button("✖").on_hover_text("Close").clicked() {
-                        *pinned = true;
+                        *open = false;
                     }
                 });
             });
             ui.separator();
 
             property_window_ui(ui, *entity, world);
-        })
+        });
+        (response, self)
     }
 
     /// Close the window and reset pin state.

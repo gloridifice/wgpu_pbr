@@ -1,63 +1,65 @@
 use bevy_ecs::prelude::*;
-use egui::Ui;
+use egui::{Color32, Response, Stroke, Ui};
+use egui_ltreeview::{IndentHintStyle, TreeView, TreeViewBuilder};
 use lentille_render::prelude::Transform;
 
 pub struct WorldHierarchy {}
+
+pub type HierarchyEntityQuery<'a> = (Entity, Option<&'a Name>, &'a Transform);
 
 impl WorldHierarchy {
     pub fn new() -> Self {
         Self {}
     }
 
-    pub fn show(&self, ui: &mut Ui, root: Entity, world: &mut World) -> Option<Entity> {
-        let mut clicked = None;
-        self.tree_recursive(ui, root, world, &mut clicked);
-        clicked
-    }
-
-    fn tree_recursive(
+    pub fn show(
         &self,
         ui: &mut Ui,
+        root: &Vec<Entity>,
+        query: &Query<HierarchyEntityQuery>,
+    ) -> (Response, Vec<egui_ltreeview::Action<Entity>>) {
+        ui.visuals_mut().widgets.noninteractive.bg_stroke = Stroke {
+            width: 1.0,
+            color: Color32::from_gray(42),
+        };
+        TreeView::new(ui.make_persistent_id("Hierarchy"))
+            .indent_hint_style(IndentHintStyle::Hook)
+            .override_striped(Some(true))
+            .show(ui, |builder| {
+                builder.dir(Entity::PLACEHOLDER, "World");
+                for id in root {
+                    self.build_tree(*id, query, builder);
+                }
+                builder.close_dir();
+            })
+    }
+
+    fn build_tree(
+        &self,
         id: Entity,
-        world: &mut World,
-        clicked_entity: &mut Option<Entity>,
+        query: &Query<HierarchyEntityQuery>,
+        builder: &mut TreeViewBuilder<'_, Entity>,
     ) {
-        let display_name = {
-            let mut ret = format!(" #{}", id.index());
-            if let Some(name) = world.get::<Name>(id) {
-                ret.insert_str(0, name.as_str());
-            }
-            ret
+        let Ok((id, name, transform)) = query.get(id) else {
+            return;
         };
 
-        let children = world
-            .get::<Transform>(id)
-            .map(|t| t.children.clone())
-            .unwrap_or_default();
-
-        let has_children = !children.is_empty();
-
-        if has_children {
-            // Entities with children: clickable collapsible tree node.
-            let header = egui::CollapsingHeader::new(display_name)
-                .default_open(false)
-                .show(ui, |ui| {
-                    for child_id in &children {
-                        self.tree_recursive(ui, *child_id, world, clicked_entity);
-                    }
-                });
-            if header.header_response.clicked() {
-                *clicked_entity = Some(id);
-            }
+        let display_name = if let Some(name) = name {
+            format!("{} #{}", &name, id.index())
         } else {
-            // Leaf entities: simple clickable label with indent to align with tree.
-            let resp = ui.add(
-                egui::Label::new(egui::RichText::new(format!("  {display_name}")).strong())
-                    .sense(egui::Sense::click()),
-            );
-            if resp.clicked() {
-                *clicked_entity = Some(id);
+            format!("#{}", id.index())
+        };
+
+        let children = &transform.children;
+
+        if !children.is_empty() {
+            builder.dir(id, &display_name);
+            for child_id in children {
+                self.build_tree(*child_id, query, builder);
             }
+            builder.close_dir();
+        } else {
+            builder.leaf(id, &display_name);
         }
     }
 }
