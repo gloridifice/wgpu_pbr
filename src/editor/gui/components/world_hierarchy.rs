@@ -1,6 +1,6 @@
 use bevy_ecs::prelude::*;
 use egui::{Color32, Response, Stroke, Ui};
-use egui_ltreeview::{IndentHintStyle, TreeView, TreeViewBuilder};
+use egui_ltreeview::{IndentHintStyle, NodeBuilder, TreeView, TreeViewBuilder};
 use lentille_render::prelude::Transform;
 
 pub struct WorldHierarchy {}
@@ -59,7 +59,10 @@ impl WorldHierarchy {
             }
             builder.close_dir();
         } else {
-            builder.leaf(id, &display_name);
+            builder.node(NodeBuilder::leaf(id).label_ui(|ui| {
+                use egui::Label;
+                ui.add(Label::new(&display_name).selectable(false));
+            }));
         }
     }
 }

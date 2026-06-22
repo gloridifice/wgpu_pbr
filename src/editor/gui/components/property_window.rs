@@ -136,15 +136,9 @@ impl EntityPropertyWindow {
 
         let response = window.show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let pin_button = if *pinned {
-                    ui.small_button("📌").on_hover_text("Unpin window")
-                } else {
-                    ui.small_button("📍").on_hover_text("Pin window")
-                };
-
-                if pin_button.clicked() {
-                    *pinned = !*pinned;
-                };
+                if ui.small_button("✖").on_hover_text("Close").clicked() {
+                    *open = false;
+                }
 
                 let display_name = {
                     let mut ret = format!("#{}", entity.index());
@@ -156,9 +150,15 @@ impl EntityPropertyWindow {
                 ui.label(&display_name);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("✖").on_hover_text("Close").clicked() {
-                        *open = false;
-                    }
+                    let pin_button = if *pinned {
+                        ui.small_button("📌").on_hover_text("Unpin window")
+                    } else {
+                        ui.small_button("📍").on_hover_text("Pin window")
+                    };
+
+                    if pin_button.clicked() {
+                        *pinned = !*pinned;
+                    };
                 });
             });
             ui.separator();

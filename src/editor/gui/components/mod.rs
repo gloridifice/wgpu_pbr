@@ -9,7 +9,9 @@ use crate::{
     editor::gui::components::property_window::PropertyWindowPlugin,
 };
 
+pub mod basics;
 pub mod depth_to_rgba;
+pub mod dock_style_editor;
 pub mod property_window;
 pub mod texture_preview;
 pub mod world_hierarchy;
@@ -96,23 +98,6 @@ pub fn transform_ui(ui: &mut Ui, id: Entity, transform: &mut Transform) {
     transform.rotation = Euler::new(Deg(euler_deg.x), Deg(euler_deg.y), Deg(euler_deg.z)).into();
 }
 
-macro_rules! impl_component_ui {
-    ($A: ty, $W: expr, $I: expr, $ui: expr, $nui: ident, $N: ident, $B: block) => {
-        if let Some(mut $N) = $W.get_mut::<$A>($I) {
-            let ty_name = type_name::<$A>();
-            egui::Frame::dark_canvas($ui.style())
-                .inner_margin(egui::Vec2::new(10., 8.))
-                .show($ui, |$nui| {
-                    $nui.colored_label(
-                        Color32::LIGHT_GRAY,
-                        ty_name.split("::").last().unwrap_or(ty_name),
-                    );
-                    $B
-                });
-        }
-    };
-}
-
 pub fn option_value<T>(
     ui: &mut Ui,
     opt: &mut Option<T>,
@@ -134,6 +119,23 @@ pub fn option_value<T>(
             behaviour(ui, value);
         }
     });
+}
+
+macro_rules! impl_component_ui {
+    ($A: ty, $W: expr, $I: expr, $ui: expr, $nui: ident, $N: ident, $B: block) => {
+        if let Some(mut $N) = $W.get_mut::<$A>($I) {
+            let ty_name = type_name::<$A>();
+            basics::Frame::new()
+                .inner_margin(egui::Vec2::new(10., 8.))
+                .show($ui, |$nui| {
+                    $nui.colored_label(
+                        Color32::LIGHT_GRAY,
+                        ty_name.split("::").last().unwrap_or(ty_name),
+                    );
+                    $B
+                });
+        }
+    };
 }
 
 /// Renders all editable components for `entity` in a flat property-editor layout.

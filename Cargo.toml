@@ -47,11 +47,15 @@ color-backtrace = { version = "0.7" }
 tiny_bail = "0.4.3"
 
 # egui
-egui = "0.34"
+egui = { version = "0.34", features = ["serde"] }
 egui-wgpu = "0.34"
 egui-winit = "0.34"
-egui_dock = "0.19"
 egui_ltreeview = "0.7"
+egui_dock = { version = "0.19", features = ["serde"] }
+
+# serialization
+serde = { version = "1", features = ["derive"] }
+ron = "0.8"
 
 # Workspace
 lentille_render = { path = "crates/lentille_render" }

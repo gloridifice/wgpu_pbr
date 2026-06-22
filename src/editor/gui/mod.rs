@@ -2,9 +2,8 @@ use std::fs::{self};
 
 use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
-use bevy_log::info;
 use egui::{
-    CentralPanel, Color32, Panel, PointerButton, ScrollArea, Visuals, ahash::HashMap,
+    CentralPanel, Color32, Panel, PointerButton, ScrollArea, Visuals,
     epaint::text::InsertFontFamily, load::SizedTexture,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
@@ -51,7 +50,8 @@ impl Plugin for EditorGuiPlugin {
             .init_resource::<EguiConfig>()
             .init_resource::<RenderTargetEguiTexId>()
             .init_resource::<DockLayout>()
-            .add_systems(RenderPreparedStartup, sys_setup_egui_visual)
+            .init_resource::<EditorThemeConfig>()
+            .add_systems(RenderPreparedStartup, sys_setup_egui_visual_theme)
             .add_systems(Update, sys_egui_dock)
             .add_observer(sys_on_resize_scene_render_target);
     }
@@ -165,6 +165,39 @@ struct RenderTargetEguiTexId(Option<egui::TextureId>);
 
 #[derive(Resource)]
 struct DockLayout(DockState<Pane>);
+
+/// Combined theme: egui native style + egui_dock style, both persisted together.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct EditorTheme {
+    egui_style: egui::Style,
+    dock_style: egui_dock::Style,
+}
+
+/// Holds the editor theme, visibility, and baseline snapshots for reset.
+#[derive(Resource)]
+struct EditorThemeConfig {
+    pub egui_style: egui::Style,
+    pub dock_style: egui_dock::Style,
+    pub visible: bool,
+    pub initialized: bool,
+    pub egui_baseline_style: egui::Style,
+    pub dock_baseline_style: egui_dock::Style,
+    pub dock_default_style: egui_dock::Style,
+}
+
+impl Default for EditorThemeConfig {
+    fn default() -> Self {
+        Self {
+            egui_style: egui::Style::default(),
+            dock_style: egui_dock::Style::default(),
+            visible: false,
+            initialized: false,
+            egui_baseline_style: egui::Style::default(),
+            dock_baseline_style: egui_dock::Style::default(),
+            dock_default_style: egui_dock::Style::default(),
+        }
+    }
+}
 
 impl Default for DockLayout {
     fn default() -> Self {
@@ -328,9 +361,6 @@ impl TabViewer for DockTabViewer<'_> {
                     ui.separator();
 
                     // --- Scene Hierarchy section ---
-                    // egui::CollapsingHeader::new("🌳 Scene Hierarchy")
-                    //     .default_open(true)
-                    //     .show(ui, |ui| {
                     let mut query_state = world.query::<HierarchyEntityQuery>();
                     let query = query_state.query(world);
                     let root_entities = query.iter().filter_map(|(id, _, trans)| {
@@ -360,7 +390,6 @@ impl TabViewer for DockTabViewer<'_> {
                         }
                     }
                 });
-                // });
             }
             Pane::Scene => {
                 let size = ui.available_size();
@@ -435,6 +464,7 @@ pub fn sys_egui_dock(world: &mut World) {
     // Use Cell so the menu-bar closure can signal the dock-area closure.
     let reset_layout = std::cell::Cell::new(false);
     let show_about = std::cell::Cell::new(false);
+    let toggle_style_window = std::cell::Cell::new(false);
 
     world.resource_scope(|world, mut egui: Mut<EguiRenderer>| {
         let ctx = egui.context().clone();
@@ -450,6 +480,10 @@ pub fn sys_egui_dock(world: &mut World) {
                 ui.menu_button("View", |ui| {
                     if ui.button("🔄 Reset Layout").clicked() {
                         reset_layout.set(true);
+                        ui.close();
+                    }
+                    if ui.button("🎨 Dock Style").clicked() {
+                        toggle_style_window.set(true);
                         ui.close();
                     }
                 });
@@ -475,6 +509,80 @@ pub fn sys_egui_dock(world: &mut World) {
             });
         });
 
+        // ---- Editor Theme Config (init + toggle + editor window) ----
+        {
+            let mut cfg = world.resource_mut::<EditorThemeConfig>();
+
+            // Lazy-init on the first frame: try loading saved theme, fall back to defaults.
+            if !cfg.initialized {
+                let current_style = ctx.global_style().as_ref().clone();
+                cfg.egui_baseline_style = current_style.clone();
+
+                let dock_theme = egui_dock::Style::from_egui(&current_style);
+                cfg.dock_baseline_style = dock_theme.clone();
+                cfg.dock_default_style = egui_dock::Style::default();
+
+                // Try loading saved theme; if missing/invalid, use current live defaults.
+                if let Some(saved) = load_editor_theme() {
+                    cfg.egui_style = saved.egui_style;
+                    cfg.dock_style = saved.dock_style;
+                } else {
+                    cfg.egui_style = current_style;
+                    cfg.dock_style = {
+                        let mut s = dock_theme;
+                        s.tab_bar.height = 28.0;
+                        s
+                    };
+                }
+                cfg.initialized = true;
+            }
+
+            // Apply the egui style to the context every frame for live preview.
+            ctx.set_global_style(cfg.egui_style.clone());
+
+            // Toggle visibility via menu signal.
+            if toggle_style_window.take() {
+                cfg.visible = !cfg.visible;
+            }
+
+            // Render the style editor window.
+            // We copy state out to avoid overlapping borrows between .open() and .show().
+            if cfg.visible {
+                let egui_baseline = cfg.egui_baseline_style.clone();
+                let dock_baseline = cfg.dock_baseline_style.clone();
+                let dock_default = cfg.dock_default_style.clone();
+                let mut egui_style = cfg.egui_style.clone();
+                let mut dock_style = cfg.dock_style.clone();
+                let mut win_visible = cfg.visible;
+                let mut save_requested = false;
+
+                egui::Window::new("🎨 Editor Theme")
+                    .open(&mut win_visible)
+                    .default_width(420.0)
+                    .default_height(700.0)
+                    .show(&ctx, |ui| {
+                        save_requested = components::dock_style_editor::show(
+                            ui,
+                            &mut egui_style,
+                            &egui_baseline,
+                            &mut dock_style,
+                            &dock_baseline,
+                            &dock_default,
+                        );
+                    });
+
+                if save_requested {
+                    save_editor_theme(&EditorTheme {
+                        egui_style: egui_style.clone(),
+                        dock_style: dock_style.clone(),
+                    });
+                }
+                cfg.egui_style = egui_style;
+                cfg.dock_style = dock_style;
+                cfg.visible = win_visible;
+            }
+        }
+
         // ---- About Window ----
         let mut show_about_window = show_about.take();
         if show_about_window {
@@ -493,6 +601,10 @@ pub fn sys_egui_dock(world: &mut World) {
         // ---- Central Area: DockArea ----
         let content_width = ctx.content_rect().width();
         CentralPanel::default().show_inside(&mut ui, |ui| {
+            // Clone style before entering DockLayout resource_scope to avoid
+            // conflicting borrows with DockTabViewer's mutable world reference.
+            let dock_style = world.resource::<EditorThemeConfig>().dock_style.clone();
+
             world.resource_scope(|world, mut dock: Mut<DockLayout>| {
                 if reset_layout.take() {
                     *dock = DockLayout(create_dock_state(content_width));
@@ -502,8 +614,6 @@ pub fn sys_egui_dock(world: &mut World) {
                     egui_renderer: &mut egui,
                     device: device_ptr,
                 };
-                let mut dock_style = egui_dock::Style::from_egui(ui.style().as_ref());
-                dock_style.tab_bar.height = 28.0;
                 DockArea::new(&mut dock.0)
                     .style(dock_style)
                     .show_inside(ui, &mut viewer);
@@ -637,12 +747,12 @@ fn convert_shadow_map_depth_to_rgba(world: &mut World) {
     });
 }
 
-fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
-    info!("Render prepared");
-    let mut visual = Visuals::dark();
+fn sys_setup_egui_visual_theme(egui: ResMut<EguiRenderer>) {
+    let visual = Visuals::dark();
     let ctx = egui.context();
 
-    visual.widgets.noninteractive.bg_stroke.width = 0.0;
+    //visual.widgets.noninteractive.bg_stroke.width = 0.0;
+
     ctx.set_visuals(visual);
 
     let font_data =
@@ -655,6 +765,38 @@ fn sys_setup_egui_visual(egui: ResMut<EguiRenderer>) {
             priority: egui::epaint::text::FontPriority::Highest,
         }],
     ));
+}
+
+fn save_editor_theme(theme: &EditorTheme) {
+    let path = AssetPath::Assets("egui_themes/default.ron".to_string()).final_path();
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    match ron::ser::to_string_pretty(theme, ron::ser::PrettyConfig::default()) {
+        Ok(s) => {
+            if let Err(e) = fs::write(&path, s) {
+                bevy_log::error!("Failed to write editor theme to {}: {}", path, e);
+            } else {
+                bevy_log::info!("Editor theme saved to {}", path);
+            }
+        }
+        Err(e) => bevy_log::error!("Failed to serialize editor theme: {}", e),
+    }
+}
+
+fn load_editor_theme() -> Option<EditorTheme> {
+    let path = AssetPath::Assets("egui_themes/default.ron".to_string()).final_path();
+    let data = fs::read_to_string(&path).ok()?;
+    match ron::from_str(&data) {
+        Ok(theme) => {
+            bevy_log::info!("Editor theme loaded from {}", path);
+            Some(theme)
+        }
+        Err(e) => {
+            bevy_log::warn!("Failed to deserialize editor theme from {}: {}", path, e);
+            None
+        }
+    }
 }
 
 fn sys_on_resize_scene_render_target(
