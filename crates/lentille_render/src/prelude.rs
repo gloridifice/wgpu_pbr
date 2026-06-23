@@ -22,7 +22,7 @@ pub use crate::{
         Mesh, Model, Primitive, UploadedMesh, UploadedPrimitive, Vertex, renderer::MeshRenderer,
     },
     shader_loader::ShaderLoader,
-    shadow_mapping::CastShadow,
+    shadow::CastShadow,
     skybox::Skybox,
     transform::{Transform, TransformBuilder, WorldTransform},
 };

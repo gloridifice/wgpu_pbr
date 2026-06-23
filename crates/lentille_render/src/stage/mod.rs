@@ -12,7 +12,7 @@ use crate::{
     graph::{InsertConfig, TypeIdGraph},
     light::LightUnifromBuffer,
     prelude::*,
-    shadow_mapping::csm::CascadeShadowMapping,
+    shadow::csm::CascadeShadowMapping,
     skybox::{DefaultSkybox, SkyboxSHBuffer},
 };
 use bevy_app::Plugin;

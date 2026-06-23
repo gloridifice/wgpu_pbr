@@ -19,10 +19,7 @@ use lentille_render::{
     app_ext::AppExt,
     camera::{RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
-    shadow_mapping::{
-        ShadowMap,
-        csm::{CascadeShadowMapping, CsmConfig},
-    },
+    shadow::csm::{CascadeShadowMapping, CsmConfig},
 };
 
 use components::{
@@ -51,6 +48,7 @@ impl Plugin for EditorGuiPlugin {
             .init_resource::<RenderTargetEguiTexId>()
             .init_resource::<DockLayout>()
             .init_resource::<EditorThemeConfig>()
+            .init_resource::<CsmPreviewRefreshState>()
             .add_systems(RenderPreparedStartup, sys_setup_egui_visual_theme)
             .add_systems(Update, sys_egui_dock)
             .add_observer(sys_on_resize_scene_render_target);
@@ -206,15 +204,15 @@ impl Default for DockLayout {
     }
 }
 
-/// Cached state for previewing the single [`ShadowMap`] depth texture.
-#[derive(Resource)]
-struct ShadowMapPreviewState {
-    converter: DepthToRgbaConverter,
-    rgba_tex: Option<wgpu::Texture>,
-    rgba_view: Option<wgpu::TextureView>,
-    preview: TexturePreview,
-    width: u32,
-    height: u32,
+/// Controls when CSM depth textures are converted to RGBA for preview.
+///
+/// `refresh_once` is set by the "Refresh Once" button and consumed next frame.
+/// `continuous` is toggled by the "Continuous" button — when true the preview
+/// is refreshed every frame.
+#[derive(Resource, Default)]
+struct CsmPreviewRefreshState {
+    continuous: bool,
+    refresh_once: bool,
 }
 
 impl TabViewer for DockTabViewer<'_> {
@@ -257,36 +255,33 @@ impl TabViewer for DockTabViewer<'_> {
                             }
                         });
 
-                    // --- ShadowMap single preview ---
-                    let has_shadow_map = world
-                        .get_resource::<ShadowMapPreviewState>()
-                        .is_some_and(|s| s.rgba_view.is_some());
-                    if has_shadow_map {
+                    // --- CSM Preview Refresh Controls ---
+                    let has_csm = world
+                        .query::<&CascadeShadowMapping>()
+                        .iter(world)
+                        .next()
+                        .is_some();
+                    if has_csm {
                         ui.separator();
-                        egui::CollapsingHeader::new("🗺️ ShadowMap")
-                            .default_open(false)
+                        egui::CollapsingHeader::new("🔄 CSM Preview Refresh")
+                            .default_open(true)
                             .show(ui, |ui| {
                                 if let Some(mut state) =
-                                    world.get_resource_mut::<ShadowMapPreviewState>()
+                                    world.get_resource_mut::<CsmPreviewRefreshState>()
                                 {
-                                    let sw = state.width;
-                                    let sh = state.height;
-                                    let rgba_view = state.rgba_view.take();
-                                    if let Some(ref rgba_view) = rgba_view {
-                                        state.preview.show_view(
-                                            ui,
-                                            &mut egui_renderer.renderer,
-                                            device,
-                                            rgba_view,
-                                            wgpu::Extent3d {
-                                                width: sw,
-                                                height: sh,
-                                                depth_or_array_layers: 1,
-                                            },
-                                            wgpu::TextureFormat::Rgba8Unorm,
-                                        );
-                                    }
-                                    state.rgba_view = rgba_view;
+                                    ui.horizontal(|ui| {
+                                        if ui.button("🔄 Refresh Once").clicked() {
+                                            state.refresh_once = true;
+                                        }
+                                        let label = if state.continuous {
+                                            "🔁 Continuous: ON"
+                                        } else {
+                                            "🔁 Continuous: OFF"
+                                        };
+                                        if ui.button(label).clicked() {
+                                            state.continuous = !state.continuous;
+                                        }
+                                    });
                                 }
                             });
                     }
@@ -430,11 +425,6 @@ impl TabViewer for DockTabViewer<'_> {
 }
 
 pub fn sys_egui_dock(world: &mut World) {
-    // Convert depth textures to RGBA so egui can display them
-    // (depth-format textures cannot be sampled by egui_wgpu directly).
-    if world.contains_resource::<ShadowMap>() {
-        convert_shadow_map_depth_to_rgba(world);
-    }
     {
         let has_csm = world
             .query::<&CascadeShadowMapping>()
@@ -442,7 +432,15 @@ pub fn sys_egui_dock(world: &mut World) {
             .next()
             .is_some();
         if has_csm {
-            convert_csm_depth_to_rgba(world);
+            let should_refresh = world
+                .get_resource::<CsmPreviewRefreshState>()
+                .is_some_and(|s| s.continuous || s.refresh_once);
+            if should_refresh {
+                convert_csm_depth_to_rgba(world);
+                if let Some(mut s) = world.get_resource_mut::<CsmPreviewRefreshState>() {
+                    s.refresh_once = false;
+                }
+            }
         }
     }
 
@@ -671,80 +669,6 @@ fn convert_csm_depth_to_rgba(world: &mut World) {
         let mut converter = entity_mut.get_mut::<CsmDepthToRgbaConverter>().unwrap();
         converter.convert(device, queue, &depth_views, *w, *h, *format);
     }
-}
-
-fn convert_shadow_map_depth_to_rgba(world: &mut World) {
-    if !world.contains_resource::<ShadowMap>() {
-        return;
-    }
-
-    if !world.contains_resource::<ShadowMapPreviewState>() {
-        let converter = {
-            let rs = world.resource::<RenderState>();
-            DepthToRgbaConverter::new(&rs.device)
-        };
-        world.insert_resource(ShadowMapPreviewState {
-            converter,
-            rgba_tex: None,
-            rgba_view: None,
-            preview: TexturePreview::new(),
-            width: 0,
-            height: 0,
-        });
-    }
-
-    world.resource_scope(|world, mut state: Mut<ShadowMapPreviewState>| {
-        let shadow_map = world.resource::<ShadowMap>();
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let queue = &rs.queue;
-
-        let tex = &shadow_map.image.texture;
-        let size = tex.size();
-        let w = size.width;
-        let h = size.height;
-
-        if state
-            .rgba_tex
-            .as_ref()
-            .is_none_or(|t| t.size().width != w || t.size().height != h)
-        {
-            let out_tex = device.create_texture(&wgpu::TextureDescriptor {
-                label: Some("shadow_map depth_to_rgba output"),
-                size: wgpu::Extent3d {
-                    width: w,
-                    height: h,
-                    depth_or_array_layers: 1,
-                },
-                mip_level_count: 1,
-                sample_count: 1,
-                dimension: wgpu::TextureDimension::D2,
-                format: wgpu::TextureFormat::Rgba8Unorm,
-                usage: wgpu::TextureUsages::STORAGE_BINDING | wgpu::TextureUsages::TEXTURE_BINDING,
-                view_formats: &[],
-            });
-            let out_view = out_tex.create_view(&Default::default());
-            state.rgba_tex = Some(out_tex);
-            state.rgba_view = Some(out_view);
-            state.width = w;
-            state.height = h;
-            state.preview.invalidate();
-        }
-
-        if let Some(ref output_view) = state.rgba_view {
-            let mut encoder =
-                device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: None });
-            state.converter.convert_to(
-                device,
-                &mut encoder,
-                &shadow_map.image.view,
-                output_view,
-                w,
-                h,
-            );
-            queue.submit(std::iter::once(encoder.finish()));
-        }
-    });
 }
 
 fn sys_setup_egui_visual_theme(egui: ResMut<EguiRenderer>) {

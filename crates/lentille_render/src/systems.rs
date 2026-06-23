@@ -8,16 +8,13 @@ use crate::{
     },
     material::pbr::PBRMaterialOverride,
     prelude::*,
-    shadow_mapping::csm::{CascadeShadowMapping, LayerContext},
+    shadow::csm::{CascadeShadowMapping, LayerContext},
     stage::RenderContext,
     transparent::TransparentPipeline,
 };
 use bevy_ecs::prelude::*;
 
-use super::{
-    DefaultPBRMaterial,
-    shadow_mapping::{CastShadow, ShadowMap, ShadowMapGlobalBindGroup, ShadowMappingPipeline},
-};
+use super::{DefaultPBRMaterial, shadow::CastShadow};
 
 const BACKGROUND_COLOR: wgpu::Color = wgpu::Color {
     r: 0.157,
@@ -67,43 +64,6 @@ pub fn sys_render_cascade_shadow_mapping_pass(
         for mesh_renderer in mesh_renderers.iter() {
             mesh_renderer.draw(&mut csm_pass);
         }
-    }
-}
-
-pub fn sys_render_shadow_mapping_pass(
-    mut ctx: InMut<RenderContext>,
-    shadow_map: Res<ShadowMap>,
-    shadow_mapping_pipeline: Res<ShadowMappingPipeline>,
-    shadow_map_global_bind_group: Res<ShadowMapGlobalBindGroup>,
-    mesh_renderers: Query<&MeshRenderer, With<CastShadow>>,
-) {
-    let encoder = &mut ctx.encoder;
-
-    // let render_light = world.resource::<RenderLight>();
-    let mut shadow_map_render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Shadow Mapping Pass"),
-        multiview_mask: None,
-        color_attachments: &[],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            depth_ops: Some(wgpu::Operations {
-                load: wgpu::LoadOp::Clear(1.0),
-                store: wgpu::StoreOp::Store,
-            }),
-            view: &shadow_map.image.view,
-            stencil_ops: None,
-        }),
-        occlusion_query_set: None,
-        timestamp_writes: None,
-    });
-
-    shadow_map_render_pass.set_pipeline(&shadow_mapping_pipeline.pipeline);
-    shadow_map_render_pass.set_bind_group(
-        0,
-        Some(shadow_map_global_bind_group.bind_group.as_ref()),
-        &[],
-    );
-    for mesh_renderer in mesh_renderers.iter() {
-        mesh_renderer.draw(&mut shadow_map_render_pass);
     }
 }
 

@@ -3,11 +3,11 @@ use std::{
     sync::{Arc, LazyLock},
 };
 
+use crate as lentille_render;
 use bevy_app::prelude::*;
 use bevy_ecs::{prelude::*, schedule::ScheduleLabel};
 use bevy_log::info;
 use lentille_core::window::{PrimaryWindowCreatedEvent, WinitWindow};
-use crate as lentille_render;
 use lentille_wgpu_macros::RenderStage;
 use pollster::block_on;
 use prelude::*;
@@ -29,7 +29,7 @@ use crate::{
     graph::after,
     light::LightPlugin,
     resource::{RENDER_RESOURCES_TO_ADD, ResourceGraph},
-    shadow_mapping::ShadowMappingPlugin,
+    shadow::ShadowPlugin,
     skybox::SkyBoxPlugin,
     stage::{RenderStage, StagePlugin},
     transform::TransformPlugin,
@@ -53,7 +53,7 @@ pub mod mipmap;
 pub mod prelude;
 pub mod resource;
 pub mod shader_loader;
-pub mod shadow_mapping;
+pub mod shadow;
 pub mod skybox;
 pub mod stage;
 pub mod systems;
@@ -90,7 +90,7 @@ impl Plugin for RenderPlugin {
             CubemapPlugin,
             SkyBoxPlugin,
             BindingsPlugin,
-            ShadowMappingPlugin,
+            ShadowPlugin,
             TransparentPlugin,
             BaseAssetsPlugin,
             DeferredRenderingPlugin,

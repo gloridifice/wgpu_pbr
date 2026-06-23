@@ -13,7 +13,7 @@ use lentille_render::{
     camera::RenderTargetConfig,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
     prelude::*,
-    shadow_mapping::csm::CsmConfig,
+    shadow::csm::CsmConfig,
     skybox::{Skybox, prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path},
     utils::cube::CubeVerticesBuffer,
 };

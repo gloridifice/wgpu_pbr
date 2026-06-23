@@ -1,5 +1,5 @@
 use crate::{
-    camera::CameraUniform, light::LightUniform, prelude::*, shadow_mapping::csm::GpuCsmInfoUniform,
+    camera::CameraUniform, light::LightUniform, prelude::*, shadow::csm::GpuCsmInfoUniform,
     skybox::ComputedSHUniform,
 };
 use bevy_ecs::prelude::*;
