@@ -1,7 +1,7 @@
 # Wgpu PBR
 
 A realtime PBR renderer project for personal learning. Now it's in progress.
-![cover](readme/cover.gif)
+![cover](readme/preview.png)
 
 - Column major
 - Right hand
