@@ -22,10 +22,7 @@ use lentille_render::{
     shadow::csm::{CascadeShadowMapping, CsmConfig},
 };
 
-use components::{
-    depth_to_rgba::CsmDepthToRgbaConverter, depth_to_rgba::DepthToRgbaConverter,
-    texture_preview::TexturePreview,
-};
+use components::depth_to_rgba::CsmDepthToRgbaConverter;
 
 use crate::{
     control::camera::MainCamera,
