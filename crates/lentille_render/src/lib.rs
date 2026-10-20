@@ -50,6 +50,7 @@ pub mod light;
 pub mod material;
 pub mod mesh;
 pub mod mipmap;
+pub mod picking;
 pub mod prelude;
 pub mod resource;
 pub mod shader_loader;
@@ -143,6 +144,8 @@ pub struct OpaqueStage;
 pub struct TransparentStage;
 #[derive(RenderStage)]
 pub struct PostProcessStage;
+#[derive(RenderStage)]
+pub struct PickStage;
 
 #[derive(Component, Clone)]
 pub struct MainPassObject;

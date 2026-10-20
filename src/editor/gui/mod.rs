@@ -24,6 +24,9 @@ use lentille_render::{
 
 use components::depth_to_rgba::CsmDepthToRgbaConverter;
 
+use lentille_render::picking::resources::PickRequest;
+use lentille_math::Vec2 as LVec2;
+
 use crate::{
     control::camera::MainCamera,
     editor::gui::components::{
@@ -403,6 +406,33 @@ impl TabViewer for DockTabViewer<'_> {
                         .hover_pos()
                         .map(|it| Vec2::new(it.x, it.y))
                         .unwrap_or(Vec2::zero());
+
+                    // ---- Ray picking on left-click ----
+                    if main_view.clicked_by(PointerButton::Primary) {
+                        if let Some(cursor_pos) = main_view.hover_pos() {
+                            // Map from display coordinates to render-target coordinates.
+                            let camera_info = world
+                                .query_filtered::<(Entity, &RenderTargetSize), With<MainCamera>>()
+                                .single(world)
+                                .ok();
+
+                            if let Some((camera_entity, render_size)) = camera_info {
+                                let scale_x = render_size.width as f32 / size.x.max(1.0);
+                                let scale_y = render_size.height as f32 / size.y.max(1.0);
+                                world.insert_resource(PickRequest {
+                                    screen_pos: LVec2::new(
+                                        cursor_pos.x * scale_x,
+                                        cursor_pos.y * scale_y,
+                                    ),
+                                    target_size: LVec2::new(
+                                        render_size.width as f32,
+                                        render_size.height as f32,
+                                    ),
+                                    camera_entity,
+                                });
+                            }
+                        }
+                    }
                 }
 
                 if let Ok(mut target_size) = world

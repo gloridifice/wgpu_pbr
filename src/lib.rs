@@ -12,6 +12,10 @@ use lentille_render::{
     RenderPlugin, RenderPreparedStartup, SCREEN_FORMAT,
     camera::RenderTargetConfig,
     cubemap::{CubemapConverterRgba16Float, CubemapMatrixBindGroups},
+    picking::{
+        PickingPlugin,
+        resources::{PickEvent, Pickable, Selected, SelectedObjects},
+    },
     prelude::*,
     shadow::csm::CsmConfig,
     skybox::{Skybox, prefiltering::PrefilteringPipeline, sys_update_skybox_sh_from_path},
@@ -35,6 +39,40 @@ mod material;
 struct DefaultOutlineGroup;
 impl material::outline::OutlineGroupType for DefaultOutlineGroup {}
 
+/// Outline group for selected objects in the editor.
+struct SelectionOutlineGroup;
+impl material::outline::OutlineGroupType for SelectionOutlineGroup {}
+
+/// Observer: when a `PickEvent` fires, update the selection state and
+/// add/remove the `Outline` component for visual feedback.
+fn sys_on_pick_event(
+    trigger: On<PickEvent>,
+    mut commands: Commands,
+    mut selected: ResMut<SelectedObjects>,
+    q_old_selected: Query<Entity, With<Selected>>,
+) {
+    // Remove outline from previously-selected entities.
+    for entity in q_old_selected.iter() {
+        commands.entity(entity).remove::<Selected>();
+        commands.entity(entity)
+            .remove::<Outline>();
+    }
+
+    // Apply new selection.
+    if let Some(entity) = trigger.entity {
+        selected.set_single(Some(entity));
+        commands.entity(entity).insert(Selected);
+        commands.entity(entity).insert(Outline::with_config::<SelectionOutlineGroup>(
+            OutlineConfig {
+                thickness: 4.0,
+                color: Color::new(1.0, 0.85, 0.2, 1.0), // warm yellow
+            },
+        ));
+    } else {
+        selected.clear();
+    }
+}
+
 pub struct WgpuPbrPlugin;
 
 impl Plugin for WgpuPbrPlugin {
@@ -46,14 +84,15 @@ impl Plugin for WgpuPbrPlugin {
             TimePlugin,
             WindowPlugin,
         ))
-        .add_plugins((ControlPlugin, EditorPlugin, OutlinePlugin));
+        .add_plugins((ControlPlugin, EditorPlugin, OutlinePlugin, PickingPlugin));
 
         app.add_systems(RenderPreparedStartup, sys_spawn_camera)
             .add_systems(
                 Startup,
                 (sys_generate_plane_scene, sys_startup_light_and_environment),
             )
-            .add_systems(Update, (sys_update_rotation, sys_gizmo));
+            .add_systems(Update, (sys_update_rotation, sys_gizmo))
+            .add_observer(sys_on_pick_event);
     }
 }
 
@@ -200,6 +239,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
                 metallic: Some(0.05),
                 ..Default::default()
             },
+            Pickable,
         ),
     });
 
@@ -279,6 +319,7 @@ fn sys_generate_single_model(
             MainPassObject,
             PbrMaterial::default(),
             children_bundle,
+            Pickable,
         ),
     });
 
@@ -333,7 +374,7 @@ fn sys_startup_light_and_environment(world: &mut World) {
         SpawnModelCmd {
             model: Arc::new(light_arrow_model),
             parent_bundle: Transform::default(),
-            child_bundle: (MainPassObject,),
+            child_bundle: (MainPassObject, Pickable),
         }
         .apply(world);
     }
