@@ -391,7 +391,10 @@ impl TabViewer for DockTabViewer<'_> {
                 if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>()
                     && let Some(render_target_egui_tex_id) = ids.0.as_ref()
                 {
-                    let main_view = ui.image(SizedTexture::new(*render_target_egui_tex_id, size));
+                    let main_view = ui.add(
+                        egui::Image::new(SizedTexture::new(*render_target_egui_tex_id, size))
+                            .sense(egui::Sense::click()),
+                    );
                     let mut input = world.resource_mut::<Input>();
                     for (ec, mc) in [
                         (PointerButton::Primary, CursorButton::Left),
@@ -410,15 +413,18 @@ impl TabViewer for DockTabViewer<'_> {
                     // ---- Ray picking on left-click ----
                     if main_view.clicked_by(PointerButton::Primary) {
                         if let Some(cursor_pos) = main_view.hover_pos() {
-                            // Map from display coordinates to render-target coordinates.
+                            // Pointer positions are global egui coordinates; picking
+                            // needs coordinates relative to the scene image.
+                            let cursor_pos = cursor_pos - main_view.rect.min;
+                            let image_size = main_view.rect.size();
                             let camera_info = world
                                 .query_filtered::<(Entity, &RenderTargetSize), With<MainCamera>>()
                                 .single(world)
                                 .ok();
 
                             if let Some((camera_entity, render_size)) = camera_info {
-                                let scale_x = render_size.width as f32 / size.x.max(1.0);
-                                let scale_y = render_size.height as f32 / size.y.max(1.0);
+                                let scale_x = render_size.width as f32 / image_size.x.max(1.0);
+                                let scale_y = render_size.height as f32 / image_size.y.max(1.0);
                                 world.insert_resource(PickRequest {
                                     screen_pos: LVec2::new(
                                         cursor_pos.x * scale_x,

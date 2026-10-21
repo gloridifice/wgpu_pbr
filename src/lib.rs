@@ -36,9 +36,6 @@ mod editor;
 mod egui_renderer;
 mod material;
 
-struct DefaultOutlineGroup;
-impl material::outline::OutlineGroupType for DefaultOutlineGroup {}
-
 /// Outline group for selected objects in the editor.
 struct SelectionOutlineGroup;
 impl material::outline::OutlineGroupType for SelectionOutlineGroup {}
@@ -249,10 +246,7 @@ pub fn sys_generate_plane_scene(world: &mut World) {
             (
                 AssetPath::new("models/stanford_dragon_pbr.glb"),
                 (Name::new("Dragon"), Transform::new().scale(0.05)),
-                (Outline::with_config::<DefaultOutlineGroup>(OutlineConfig {
-                    thickness: 6.0,
-                    color: Color::new(1.0, 0.55, 0.0, 1.0),
-                }),),
+                (),
             ),
         )
         .unwrap();

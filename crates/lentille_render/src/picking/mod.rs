@@ -230,8 +230,10 @@ fn sys_render_picking_pass(
             buffer: &staging,
             layout: TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(16),
-                rows_per_image: Some(1),
+                // A single row/layer needs no stride. An explicit stride
+                // would have to meet COPY_BYTES_PER_ROW_ALIGNMENT (256).
+                bytes_per_row: None,
+                rows_per_image: None,
             },
         },
         Extent3d {
@@ -362,5 +364,22 @@ mod test {
         )
         .validate(&naga_module)
         .expect("composed pick_entity shader must validate");
+
+        // Valid WGSL alone does not guarantee compatibility with the bound
+        // CPU buffer. Check the object uniform ABI used by the picking pass.
+        let (_, object_uniform) = naga_module.global_variables.iter().find(|(_, var)| {
+            var.binding.as_ref().is_some_and(|binding| {
+                binding.group == 2 && binding.binding == 0
+            })
+        }).expect("picking must bind the object transform");
+        let wgpu::naga::TypeInner::Struct { span, .. } =
+            &naga_module.types[object_uniform.ty].inner else {
+                panic!("object transform must be a uniform struct");
+            };
+        assert_eq!(
+            *span as usize,
+            std::mem::size_of::<crate::transform::TransformUniform>(),
+            "picking shader and CPU object uniform sizes must match",
+        );
     }
 }

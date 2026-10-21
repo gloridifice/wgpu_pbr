@@ -1,12 +1,8 @@
 import package::libs::vertex::{ VertexInput };
 import package::libs::primary::global_bindings::{ camera };
 
-// Transform uniform (matches ObjectBindGroupLayout at group 2).
-struct TransformUniform {
-    model: mat4x4<f32>,
-    normal_matrix: mat4x4<f32>,
-};
-@group(2) @binding(0) var<uniform> transform: TransformUniform;
+// Reuse the main pass's object uniform layout (group 2, binding 0).
+import package::libs::primary::object_bindings::{ transform };
 
 // Per-entity picking ID (group 1, binding 0).
 struct PickIDUniform {
