@@ -198,7 +198,7 @@ macro_rules! impl_component_ui {
                     );
                     $B
                 });
-            if $N != original {
+            if $N != original && !$W.resource::<crate::scene::SceneController>().read_only() {
                 $W.entity_mut($I).insert($N);
             }
         }
@@ -208,6 +208,12 @@ macro_rules! impl_component_ui {
 /// Renders all editable components for `entity` in a flat property-editor layout.
 /// Designed to be called inside an egui Window / Area (not inside the hierarchy tree).
 pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) {
+    let editable = !world
+        .resource::<crate::scene::SceneController>()
+        .read_only();
+    ui.add_enabled_ui(editable, |ui| property_window_contents(ui, entity, world));
+}
+fn property_window_contents(ui: &mut egui::Ui, entity: Entity, world: &mut World) {
     use lentille_render::asset::{AssetRef, MeshSource, PreparationState, SubAsset};
     impl_component_ui!(MeshSource, world, entity, ui, ui, source, {
         let mut file = matches!(source, MeshSource::Asset(_));

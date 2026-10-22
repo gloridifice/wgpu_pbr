@@ -64,7 +64,10 @@ impl Plugin for WgpuPbrPlugin {
             PickingPlugin,
             scene::ScenePlugin,
         ))
-        .add_systems(Update, (sys_update_rotation, sys_gizmo))
+        .add_systems(
+            Update,
+            (sys_update_rotation.run_if(scene::scene_editable), sys_gizmo),
+        )
         .add_observer(sys_on_pick_event);
     }
 }

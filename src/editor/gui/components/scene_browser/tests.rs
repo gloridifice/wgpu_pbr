@@ -168,6 +168,38 @@ fn cards_select_before_double_click_navigation_and_route_scene_open_unless_busy(
         ui.world.resource::<SceneController>().request.is_none(),
         "confirmation must block another open"
     );
+    {
+        let mut controller = ui.world.resource_mut::<SceneController>();
+        controller.pending_open = None;
+        controller.loading = Some(crate::scene::controller::SceneLoadProgress {
+            id: 1,
+            path: "scenes/Alpha.scn.ron".into(),
+            stage: "Loading CPU".into(),
+            detail: "Reading assets".into(),
+            uploaded_bytes: 0,
+            total_bytes: 0,
+        });
+    }
+    let output = ui.settle();
+    let folder = card_label(&output, "nested");
+    ui.time += 0.7;
+    ui.click(folder);
+    ui.click(folder);
+    assert_eq!(
+        ui.world.resource::<SceneBrowser>().directory,
+        Path::new("scenes/nested"),
+        "Directory browsing remains available during loading"
+    );
+    let output = ui.settle();
+    let cancel = positions(&output, "X")
+        .into_iter()
+        .max_by(|a, b| a.y.total_cmp(&b.y))
+        .unwrap();
+    ui.click(cancel);
+    assert!(matches!(
+        ui.world.resource::<SceneController>().request,
+        Some(SceneRequest::CancelLoad)
+    ));
 }
 
 #[test]

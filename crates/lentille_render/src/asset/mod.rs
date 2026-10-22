@@ -14,7 +14,10 @@ pub mod load;
 pub mod path;
 pub mod runtime;
 pub use path::{AssetRef, AssetRoot, MeshAsset, SubAsset, TextureAsset};
-pub use runtime::{GpuHandle, MeshSource, PreparationState, SceneAssetCache, sys_prepare_assets};
+pub use runtime::{
+    AssetPreparationSet, AssetUpload, CpuAssets, FrameBudget, GpuHandle, MeshSource,
+    PreparationState, RgbaImageData, SceneAssetCache, sys_prepare_assets,
+};
 
 #[derive(Resource)]
 pub struct UuidManager<T> {

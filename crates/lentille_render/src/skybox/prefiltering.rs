@@ -12,6 +12,14 @@ use crate::{
 
 const LABEL: Option<&'static str> = Some("Prefiltering Env Map");
 
+#[derive(Resource)]
+pub struct EnvironmentPrefilterPipeline(pub PrefilteringPipeline);
+impl FromWorld for EnvironmentPrefilterPipeline {
+    fn from_world(world: &mut World) -> Self {
+        Self(PrefilteringPipeline::new(world, TextureFormat::Rgba16Float))
+    }
+}
+
 #[derive(Component)]
 pub struct PrefilteringPipeline {
     pub pipeline: Arc<RenderPipeline>,
@@ -187,8 +195,9 @@ pub fn prefilter(
     if size.depth_or_array_layers != 6 {
         return Err(anyhow::anyhow!("Not a cubemap!"));
     }
-    let texture: Tex2D<SampleFloatFilterable> =
-        TypedTexture::from_descriptor(device, &wgpu::TextureDescriptor {
+    let texture: Tex2D<SampleFloatFilterable> = TypedTexture::from_descriptor(
+        device,
+        &wgpu::TextureDescriptor {
             label,
             size,
             mip_level_count: level_count,
@@ -199,7 +208,8 @@ pub fn prefilter(
                 | TextureUsages::RENDER_ATTACHMENT
                 | TextureUsages::COPY_DST,
             view_formats: &[],
-        });
+        },
+    );
 
     let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
 

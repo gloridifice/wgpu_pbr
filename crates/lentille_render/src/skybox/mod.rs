@@ -20,6 +20,10 @@ pub(super) struct SkyBoxPlugin;
 impl Plugin for SkyBoxPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.init_render_resource::<SkyboxSHBuffer>()
+            .init_render_resource_with_config::<prefiltering::EnvironmentPrefilterPipeline>([
+                after::<CubemapMatrixBindGroups>(),
+                after::<crate::cubemap::CubemapVertexShader>(),
+            ])
             .init_render_resource_with_config::<DefaultSkybox>([
                 after::<CubemapMatrixBindGroups>(),
                 after::<CubeVerticesBuffer>(),

@@ -17,6 +17,7 @@ impl Plugin for CameraControlPlugin {
         app.init_resource::<CameraConfig>().add_systems(
             Update,
             sys_update_camera_control
+                .run_if(crate::scene::scene_editable)
                 .after(crate::editor::EditorUiSet)
                 .after(super::sys_input_implement),
         );

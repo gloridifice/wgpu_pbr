@@ -126,7 +126,9 @@ impl Plugin for RenderPlugin {
             .add_systems(Update, sys_create_surface)
             .add_systems(
                 PostUpdate,
-                asset::sys_prepare_assets.before(transform::TransformPostUpdateSet),
+                asset::sys_prepare_assets
+                    .in_set(asset::AssetPreparationSet)
+                    .before(transform::TransformPostUpdateSet),
             )
             .add_render_system(sys_render_cascade_shadow_mapping_pass, PreStage)
             .add_render_system(sys_render_write_g_buffer_pass, OpaqueStage)

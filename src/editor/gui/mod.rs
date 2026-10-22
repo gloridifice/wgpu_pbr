@@ -258,15 +258,21 @@ impl TabViewer for DockTabViewer<'_> {
                     egui::CollapsingHeader::new("⚙️ CSM Settings")
                         .default_open(true)
                         .show(ui, |ui| {
+                            let editable = !world
+                                .resource::<crate::scene::SceneController>()
+                                .read_only();
                             let mut config_query = world.query::<&mut CsmConfig>();
                             if let Ok(mut config) = config_query.single_mut(world) {
-                                ui.horizontal(|ui| {
-                                    ui.label("Linear/Log Factor:");
-                                    ui.add(
-                                        egui::Slider::new(&mut config.linear_log_factor, 0.0..=1.0)
-                                            .text(""),
-                                    );
+                                let mut factor = config.linear_log_factor;
+                                ui.add_enabled_ui(editable, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label("Linear/Log Factor:");
+                                        ui.add(egui::Slider::new(&mut factor, 0.0..=1.0).text(""));
+                                    });
                                 });
+                                if editable && factor != config.linear_log_factor {
+                                    config.linear_log_factor = factor;
+                                }
                             } else {
                                 ui.colored_label(Color32::GRAY, "No CSM config");
                             }
@@ -691,6 +697,9 @@ pub fn sys_egui_dock(world: &mut World) {
                 .resource::<crate::scene::SceneController>()
                 .pending_open
                 .is_some()
+            || world
+                .resource::<crate::scene::SceneController>()
+                .read_only()
             || world
                 .resource::<crate::scene::SceneController>()
                 .needs_save_path

@@ -34,7 +34,9 @@ MeshRenderer / 相机与环境派生状态
 
 `src/scene/codec.rs` 使用 Bevy 0.18 DynamicScene 提取实体白名单，负责版本化 RON、实体引用映射、结构与参数校验；不启用默认 Bevy 场景资产加载器。升级到 bevy_world_serialization 尚未实施。
 
-`src/scene/controller.rs` 统一处理 Open、Reload、Save、SaveAs 和 Retry。打开先在临时 World 恢复持久数据、准备候选 GPU 资源，再由排他系统提交。可恢复的 IO/解析/资源错误不会删除活动场景。提交时同步相机控制器、环境 SH，清理选择与属性窗口；旧拾取读回按场景 epoch 丢弃。
+`src/scene/controller.rs` 统一处理 Open、Reload、Save、SaveAs、Retry 和取消加载。`src/scene/loading.rs` 用单个后台线程和有界单槽邮箱完成 CPU 候选 World、校验、世界变换、模型/纹理导入和环境 SH；任务编号及取消令牌隔离迟到结果。`CpuAssets` 与 `AssetUpload` 分离 CPU 依赖闭包和分块 GPU 上传，环境转换/预过滤按 tile 分帧，预过滤管线为应用级公共资源。GPU 候选至多一批工作在途，靠完成回调和非阻塞 polling 推进。
+
+候选全部就绪后由排他系统提交。可恢复的 IO/解析/资源错误或取消不会删除活动场景、改变当前路径或保存基线。提交时同步相机控制器、环境 SH，清理选择与属性窗口；旧拾取读回按场景 epoch 丢弃。确认和加载期间通过控制器只读状态保护属性、CSM、相机及行为写入，暂停活动资产/环境准备；仍可选择、浏览目录和 resize。Save/Retry 仍同步，渲染初始化与最终 O(实体数) 提交仍可产生耗时尖峰。
 
 UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后更新变换、相机和灯光，Last 中执行渲染。旧 viewport 的 egui 纹理注册延迟到本帧 UI 绘制之后释放，避免切换时引用已释放的纹理。
 
@@ -49,6 +51,6 @@ UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后
 - 默认加载 `assets/scenes/minimal.scn.ron`；`--scene scenes/demo.scn.ron` 可选择演示场景。
 - `examples/generate_scenes.rs` 是场景数据生成工具；运行演示数据生成需要相关模型文件。
 - 普通契约测试位于根 `tests/`、render crate 和浏览面板单元测试，不需要 GPU。
-- 显式 GPU 测试与 `examples/scene_smoke.rs` 验证缓存共享、准备/释放和真实场景生命周期，需要 GPU；不属于默认无 GPU 测试。
+- 显式 GPU 测试与 `examples/scene_smoke.rs` 验证缓存共享、分块准备/释放、异步场景切换、取消、加载中快照保护及 resize，需要 GPU；不属于默认无 GPU 测试。
 
 功能契约见 [资产与运行时](specs/asset-runtime.md)、[场景持久化](specs/scene-persistence.md)、[场景浏览面板](specs/scene-browser.md)。

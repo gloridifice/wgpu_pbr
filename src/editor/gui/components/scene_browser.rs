@@ -127,9 +127,8 @@ pub fn show(ui: &mut egui::Ui, world: &mut World) {
         if !browser.loaded {
             browser.refresh(&root);
         }
-        let busy = controller.request.is_some()
-            || controller.pending_open.is_some()
-            || controller.needs_save_path;
+        let busy = controller.busy();
+        let mut cancel_load = false;
         let mut navigate = None;
         let mut activated = None;
         ui.scope(|ui| {
@@ -139,6 +138,34 @@ pub fn show(ui: &mut egui::Ui, world: &mut World) {
                 .frame(egui::Frame::new().fill(widgets::SURFACE).inner_margin(6))
                 .show_inside(ui, |ui| {
                     toolbar(ui, &mut browser, &mut navigate);
+                    if let Some(loading) = &controller.loading {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            cancel_load =
+                                ui.button("X").on_hover_text("Cancel scene load").clicked();
+                            ui.add(
+                                egui::Label::new(format!(
+                                    "{}: {}",
+                                    loading.stage,
+                                    loading.path.display()
+                                ))
+                                .truncate(),
+                            )
+                            .on_hover_text(&loading.detail);
+                        });
+                        if loading.total_bytes > 0 {
+                            ui.add(
+                                egui::ProgressBar::new(
+                                    loading.uploaded_bytes as f32 / loading.total_bytes as f32,
+                                )
+                                .text(format!(
+                                    "{} / {} MiB uploaded",
+                                    loading.uploaded_bytes / 1048576,
+                                    loading.total_bytes / 1048576
+                                )),
+                            );
+                        }
+                    }
                     let errors = [controller.error.as_ref(), browser.error.as_ref()];
                     for error in errors.into_iter().flatten() {
                         let text = egui::RichText::new(error).color(egui::Color32::LIGHT_RED);
@@ -237,6 +264,11 @@ pub fn show(ui: &mut egui::Ui, world: &mut World) {
                     activated = grid(ui, &mut browser, &entries, controller.path.as_deref(), busy);
                 });
         });
+        if cancel_load {
+            world
+                .resource_mut::<SceneController>()
+                .request(SceneRequest::CancelLoad);
+        }
         if let Some(entry) = activated {
             match root.resolve_path(&entry.path) {
                 Ok(path) if entry.kind == BrowserEntryKind::Folder && path.is_dir() => {
@@ -265,7 +297,7 @@ fn grid(
     busy: bool,
 ) -> Option<BrowserEntry> {
     let mut activated = None;
-    ui.add_enabled_ui(!busy, |ui| {
+    ui.scope(|ui| {
         if entries.is_empty() && browser.error.is_none() {
             ui.weak(if browser.search.trim().is_empty() {
                 "No scenes or folders"
@@ -306,7 +338,9 @@ fn grid(
                             if response.clicked() {
                                 browser.selected = Some(entry.path.clone());
                             }
-                            if response.double_clicked() {
+                            if response.double_clicked()
+                                && (!busy || entry.kind == BrowserEntryKind::Folder)
+                            {
                                 activated = Some(entry.clone());
                             }
                         }
@@ -441,6 +475,9 @@ fn folder_tree(
         });
 }
 pub fn file_menu(ui: &mut egui::Ui, world: &mut World) {
+    if world.resource::<SceneController>().busy() {
+        ui.disable();
+    }
     if ui.button("Open…").clicked() {
         world.resource_mut::<SceneBrowser>().open_dialog = true;
         ui.close();
@@ -510,7 +547,7 @@ pub fn dialogs(ctx: &egui::Context, world: &mut World) {
                             path.set_extension("scn.ron");
                         }
                         if opening {
-                            controller.request = Some(SceneRequest::Open(path));
+                            controller.request(SceneRequest::Open(path));
                             browser.open_dialog = false;
                         } else {
                             match world_path(&root, &path) {

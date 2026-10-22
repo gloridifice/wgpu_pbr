@@ -395,6 +395,15 @@ fn scene_controller_protects_edits_and_preserves_state_on_io_failure() {
         .resource_mut::<SceneController>()
         .resolve_unsaved(UnsavedDecision::Discard);
     sys_scene_requests(&mut world);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while world.resource::<SceneController>().loading.is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "CPU scene failure timed out"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        sys_scene_requests(&mut world);
+    }
     let state = world.resource::<SceneController>();
     assert!(state.error.as_ref().unwrap().contains("missing.scn.ron"));
     assert_eq!(state.path.as_deref(), Some(Path::new("current.scn.ron")));
@@ -403,6 +412,92 @@ fn scene_controller_protects_edits_and_preserves_state_on_io_failure() {
         world.get::<PbrMaterial>(entity).unwrap().roughness,
         Some(0.75)
     );
+}
+
+#[test]
+fn cancelled_cpu_load_cannot_replace_the_scene_or_contaminate_the_next_result() {
+    use wgpu_pbr::scene::{
+        SceneController, SceneLoadSettings, SceneRequest, controller::sys_scene_requests,
+    };
+    let codec = SceneCodec::new();
+    let mut world = fixture(&codec);
+    let directory = tempfile::tempdir().unwrap();
+    let root = AssetRoot(directory.path().into());
+    save_atomic(
+        &root,
+        Path::new("candidate.scn.ron"),
+        &encode(&codec, &mut world),
+    )
+    .unwrap();
+    let original: Vec<_> = world.query::<Entity>().iter(&world).collect();
+    for e in &original {
+        world.entity_mut(*e).insert(SceneOwned);
+    }
+    world.insert_resource(codec);
+    world.insert_resource(root);
+    world.insert_resource(lentille_render::RenderReady);
+    world.insert_resource(SceneController::default());
+    world
+        .resource_mut::<SceneController>()
+        .request(SceneRequest::Open("candidate.scn.ron".into()));
+    sys_scene_requests(&mut world);
+    let first_id = world
+        .resource::<SceneController>()
+        .loading
+        .as_ref()
+        .unwrap()
+        .id;
+    world
+        .resource_mut::<SceneController>()
+        .request(SceneRequest::SaveAs("blocked.scn.ron".into()));
+    assert!(
+        world.resource::<SceneController>().request.is_none(),
+        "Busy controller must reject external saves"
+    );
+    world
+        .resource_mut::<SceneController>()
+        .request(SceneRequest::CancelLoad);
+    sys_scene_requests(&mut world);
+    assert!(!world.resource::<SceneController>().read_only());
+    assert!(world.resource::<SceneController>().path.is_none());
+    // A valid next request with an impossibly small CPU budget must fail before GPU access.
+    world.insert_resource(SceneLoadSettings {
+        max_cpu_bytes: 1,
+        ..Default::default()
+    });
+    world
+        .resource_mut::<SceneController>()
+        .request(SceneRequest::Open("candidate.scn.ron".into()));
+    sys_scene_requests(&mut world);
+    assert!(
+        world
+            .resource::<SceneController>()
+            .loading
+            .as_ref()
+            .unwrap()
+            .id
+            > first_id
+    );
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while world.resource::<SceneController>().loading.is_some() {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "Cancelled worker failed to release its slot"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        sys_scene_requests(&mut world);
+    }
+    assert!(
+        world
+            .resource::<SceneController>()
+            .error
+            .as_ref()
+            .unwrap()
+            .contains("budget")
+    );
+    assert!(world.resource::<SceneController>().path.is_none());
+    assert!(original.iter().all(|e| world.get_entity(*e).is_ok()));
+    assert!(!directory.path().join("blocked.scn.ron").exists());
 }
 
 #[test]

@@ -19,6 +19,9 @@ use std::{
     },
 };
 
+mod loading;
+pub use loading::{AssetUpload, CpuAssets, FrameBudget, RgbaImageData};
+
 #[derive(Component, Clone, Debug, PartialEq, Reflect)]
 #[reflect(Component)]
 pub enum MeshSource {
@@ -56,6 +59,7 @@ pub struct SceneAssetCache {
     textures:
         HashMap<(AssetRef<TextureAsset>, bool), Arc<UploadedImage<Dim2D, SampleFloatFilterable>>>,
     materials: Vec<(PbrMaterial, Arc<UploadedPbrMaterial>)>,
+    preloaded: bool,
 }
 impl Default for SceneAssetCache {
     fn default() -> Self {
@@ -74,6 +78,7 @@ impl SceneAssetCache {
             mesh_data: Vec::new(),
             textures: HashMap::new(),
             materials: Vec::new(),
+            preloaded: false,
         }
     }
     pub fn model(&mut self, path: &AssetPath) -> Result<Arc<Model>> {
@@ -81,6 +86,10 @@ impl SceneAssetCache {
         if let Some(v) = self.models.get(&path) {
             return Ok(v.clone());
         }
+        ensure!(
+            !self.preloaded,
+            "Model missing from CPU load plan: {path:?}"
+        );
         let model = Arc::new(import_model(&self.root, &path)?);
         self.models.insert(path, model.clone());
         Ok(model)
@@ -93,6 +102,29 @@ impl SceneAssetCache {
     }
     pub fn counts(&self) -> (usize, usize, usize) {
         (self.models.len(), self.meshes.len(), self.textures.len())
+    }
+    pub fn estimated_bytes(&self) -> (u64, u64) {
+        let cpu = self
+            .models
+            .values()
+            .map(|m| loading::model_bytes(m))
+            .sum::<u64>()
+            + self
+                .mesh_data
+                .iter()
+                .map(|m| loading::mesh_bytes(m))
+                .sum::<u64>();
+        let gpu = self
+            .mesh_data
+            .iter()
+            .map(|m| loading::mesh_bytes(m))
+            .sum::<u64>()
+            + self
+                .textures
+                .values()
+                .map(|t| u64::from(t.texture.width()) * u64::from(t.texture.height()) * 4)
+                .sum::<u64>();
+        (cpu, gpu)
     }
     pub fn request_mesh(
         &mut self,
@@ -110,6 +142,10 @@ impl SceneAssetCache {
                         marker: PhantomData,
                     });
                 }
+                ensure!(
+                    !self.preloaded,
+                    "Mesh missing from CPU upload plan: {source:?}"
+                );
                 let SubAsset::Mesh(index) = reference.label else {
                     anyhow::bail!("Mesh reference requires Mesh(index)");
                 };
@@ -135,6 +171,7 @@ impl SceneAssetCache {
                         marker: PhantomData,
                     });
                 }
+                ensure!(!self.preloaded, "Plane missing from CPU upload plan");
                 (key, Arc::new(Mesh::plane(*size)))
             }
         };
@@ -168,6 +205,10 @@ impl SceneAssetCache {
         if let Some(v) = self.textures.get(&key) {
             return Ok(v.clone());
         }
+        ensure!(
+            !self.preloaded,
+            "Texture missing from CPU load plan: {source:?}"
+        );
         let data = match source.label {
             SubAsset::File => load_image(&self.root.resolve(&source.path)?)?,
             SubAsset::Image(index) => self
@@ -261,6 +302,9 @@ pub struct PreparationState {
     pub material: Option<PbrMaterial>,
     pub error: Option<String>,
 }
+
+#[derive(SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct AssetPreparationSet;
 
 pub fn sys_prepare_assets(world: &mut World) {
     if !world.contains_resource::<crate::RenderReady>() {
@@ -475,6 +519,57 @@ mod gpu_tests {
                 .error
                 .is_none()
         );
+        let stream_path = dir.path().join("stream.png");
+        image::RgbaImage::from_pixel(513, 257, image::Rgba([17, 31, 63, 255]))
+            .save(&stream_path)
+            .unwrap();
+        let description = PbrMaterial {
+            base_color_texture: TextureOverride::Set(AssetRef::new("stream.png", SubAsset::File)),
+            normal_texture: TextureOverride::Set(AssetRef::new("stream.png", SubAsset::File)),
+            ..Default::default()
+        };
+        let source = MeshSource::Plane { size: 3.0 };
+        let cpu = CpuAssets::load(
+            AssetRoot(dir.path().into()),
+            &[(source.clone(), Some(description.clone()))],
+            16 * 1024 * 1024,
+            |_| Ok(()),
+        )
+        .unwrap();
+        std::fs::remove_file(stream_path).unwrap();
+        let mut upload = cpu.into_upload();
+        let mut batches = 0;
+        loop {
+            batches += 1;
+            assert!(batches < 1000, "Partial row uploads must make progress");
+            let mut budget = FrameBudget::new(std::time::Duration::from_millis(10), 65536);
+            if upload.advance(world, &mut budget).unwrap() {
+                break;
+            }
+        }
+        assert!(batches > 1, "Textures must upload across budgeted steps");
+        assert_eq!(upload.uploaded_bytes, upload.total_bytes);
+        let mut loaded_cache = upload.finish().unwrap();
+        assert_eq!(loaded_cache.counts(), (0, 1, 2));
+        loaded_cache
+            .prepare(&source, Some(&description), world)
+            .unwrap();
+        image::RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]))
+            .save(dir.path().join("edited.png"))
+            .unwrap();
+        loaded_cache
+            .prepare(
+                &source,
+                Some(&PbrMaterial {
+                    base_color_texture: TextureOverride::Set(AssetRef::new(
+                        "edited.png",
+                        SubAsset::File,
+                    )),
+                    ..Default::default()
+                }),
+                world,
+            )
+            .expect("Committed caches must permit synchronous runtime asset edits");
         world.despawn(first);
         world.despawn(second);
         world.insert_resource(SceneAssetCache::default());

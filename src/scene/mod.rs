@@ -8,7 +8,13 @@ use lentille_render::{
 pub mod browser;
 pub mod codec;
 pub mod controller;
+pub mod loading;
 pub use controller::{SceneController, SceneRequest};
+pub use loading::SceneLoadSettings;
+
+pub(crate) fn scene_editable(controller: Res<SceneController>) -> bool {
+    !controller.read_only()
+}
 pub struct ScenePlugin;
 #[derive(Component)]
 pub(crate) struct EnvironmentState {
@@ -24,6 +30,12 @@ impl Plugin for ScenePlugin {
                 request: Some(SceneRequest::Open("scenes/minimal.scn.ron".into())),
                 ..Default::default()
             })
+            .init_resource::<SceneLoadSettings>()
+            .init_resource::<loading::SceneLoader>()
+            .configure_sets(
+                PostUpdate,
+                lentille_render::asset::AssetPreparationSet.run_if(scene_editable),
+            )
             .add_systems(
                 PostUpdate,
                 (controller::sys_scene_requests, sys_environment)
@@ -33,7 +45,9 @@ impl Plugin for ScenePlugin {
     }
 }
 fn sys_environment(world: &mut World) {
-    if !world.contains_resource::<lentille_render::RenderReady>() {
+    if !world.contains_resource::<lentille_render::RenderReady>()
+        || world.resource::<SceneController>().read_only()
+    {
         return;
     }
     let removed: Vec<_> = world

@@ -1,5 +1,8 @@
-use super::codec::{SceneCodec, SceneMetadata, SceneOwned, save_atomic, validate};
-use anyhow::{Context, Result, ensure};
+use super::{
+    codec::{SceneCodec, SceneMetadata, SceneOwned, save_atomic},
+    loading::{SceneLoadSettings, SceneLoader},
+};
+use anyhow::{Result, ensure};
 use bevy_ecs::{entity::EntityHashMap, prelude::*};
 use lentille_render::{
     asset::{AssetRoot, MeshSource, PreparationState, SceneAssetCache},
@@ -13,9 +16,9 @@ use lentille_render::{
     picking::resources::{LastPickResult, PickRequest, PickingIDMap, SelectedObjects},
     prelude::*,
     shadow::csm::{CascadeShadowMapping, CsmConfig, CsmShader},
-    skybox::{ComputedSHUniform, Environment, Skybox, SkyboxSHBuffer, prepare_environment},
+    skybox::{ComputedSHUniform, Skybox, SkyboxSHBuffer},
 };
-use std::{collections::HashMap, path::PathBuf};
+use std::{path::PathBuf, time::Instant};
 
 #[derive(Clone, Debug)]
 pub enum SceneRequest {
@@ -24,6 +27,7 @@ pub enum SceneRequest {
     Save,
     SaveAs(PathBuf),
     Retry(Entity),
+    CancelLoad,
 }
 #[derive(Clone, Copy)]
 pub enum UnsavedDecision {
@@ -32,6 +36,15 @@ pub enum UnsavedDecision {
     Cancel,
 }
 
+#[derive(Clone, Debug)]
+pub struct SceneLoadProgress {
+    pub id: u64,
+    pub path: PathBuf,
+    pub stage: String,
+    pub detail: String,
+    pub uploaded_bytes: u64,
+    pub total_bytes: u64,
+}
 #[derive(Resource, Default)]
 pub struct SceneController {
     pub path: Option<PathBuf>,
@@ -44,9 +57,26 @@ pub struct SceneController {
     pub save_then_open: bool,
     pub discard_next_open: bool,
     pub refresh: u64,
+    pub loading: Option<SceneLoadProgress>,
     pub(super) saved_baseline: String,
 }
 impl SceneController {
+    pub fn busy(&self) -> bool {
+        self.request.is_some()
+            || self.pending_open.is_some()
+            || self.needs_save_path
+            || self.loading.is_some()
+    }
+    pub fn read_only(&self) -> bool {
+        self.loading.is_some()
+            || self.pending_open.is_some()
+            || self.save_then_open
+            || self.discard_next_open
+            || matches!(
+                self.request,
+                Some(SceneRequest::Open(_) | SceneRequest::Reload)
+            )
+    }
     pub fn resolve_unsaved(&mut self, decision: UnsavedDecision) {
         if self.pending_open.is_none() {
             return;
@@ -67,7 +97,9 @@ impl SceneController {
         }
     }
     pub fn request(&mut self, request: SceneRequest) {
-        if self.request.is_none() && self.pending_open.is_none() {
+        if matches!(request, SceneRequest::CancelLoad) && self.loading.is_some() {
+            self.request = Some(request);
+        } else if !self.busy() {
             self.request = Some(request);
         }
     }
@@ -78,24 +110,41 @@ pub fn snapshot(world: &mut World, codec: &SceneCodec) -> Result<String> {
         .query_filtered::<Entity, With<SceneOwned>>()
         .iter(world)
         .collect();
-    let scene = codec.capture(world, ids.into_iter())?;
-    codec.encode(&scene)
+    codec.encode(&codec.capture(world, ids.into_iter())?)
 }
 pub fn sys_scene_requests(world: &mut World) {
     if !world.contains_resource::<lentille_render::RenderReady>() {
         return;
     }
+    world.init_resource::<SceneLoader>();
+    world.init_resource::<SceneLoadSettings>();
     let codec = world.resource::<SceneCodec>().clone();
     world.resource_scope(|world, mut controller: Mut<SceneController>| {
+        let request = controller.request.take();
+        if controller.loading.is_some() {
+            if matches!(request, Some(SceneRequest::CancelLoad)) {
+                world.resource_mut::<SceneLoader>().cancel();
+                controller.loading = None;
+                controller.error = None;
+                controller.status = "Scene load cancelled".into();
+                return;
+            }
+            // Recheck here as well: direct request-field writers cannot bypass the gate.
+            poll_loading(world, &mut controller, &codec);
+            return;
+        }
         if controller.path.is_some() {
             match snapshot(world, &codec) {
                 Ok(value) => controller.dirty = value != controller.saved_baseline,
                 Err(error) => controller.error = Some(format!("{error:#}")),
             }
         }
-        let Some(request) = controller.request.take() else {
+        // Drain late CPU results and finish polling a cancelled GPU batch while idle.
+        if request.is_none() {
+            poll_loading(world, &mut controller, &codec);
             return;
-        };
+        }
+        let request = request.unwrap();
         let discard = std::mem::take(&mut controller.discard_next_open);
         let result = (|| -> Result<()> {
             match request {
@@ -104,11 +153,7 @@ pub fn sys_scene_requests(world: &mut World) {
                         controller.pending_open = Some(path);
                         return Ok(());
                     }
-                    open_scene(world, &codec, &path)?;
-                    controller.path = Some(path);
-                    controller.saved_baseline = snapshot(world, &codec)?;
-                    controller.dirty = false;
-                    controller.status = "Scene ready".into();
+                    start_loading(world, &mut controller, &codec, path)?;
                 }
                 SceneRequest::Reload => {
                     if let Some(path) = controller.path.clone() {
@@ -116,13 +161,14 @@ pub fn sys_scene_requests(world: &mut World) {
                             controller.pending_open = Some(path);
                             return Ok(());
                         }
-                        open_scene(world, &codec, &path)?;
-                        controller.saved_baseline = snapshot(world, &codec)?;
-                        controller.dirty = false;
-                        controller.status = "Scene reloaded".into();
+                        start_loading(world, &mut controller, &codec, path)?;
                     }
                 }
                 SceneRequest::Save | SceneRequest::SaveAs(_) => {
+                    ensure!(
+                        controller.pending_open.is_none() || controller.save_then_open,
+                        "Resolve the pending scene switch first"
+                    );
                     let path = match request {
                         SceneRequest::SaveAs(path) => Some(path),
                         _ => controller.path.clone(),
@@ -132,7 +178,6 @@ pub fn sys_scene_requests(world: &mut World) {
                         return Ok(());
                     };
                     let text = snapshot(world, &codec)?;
-                    // Validate structure without requiring successfully prepared assets.
                     codec.instantiate(&codec.decode(&text)?)?;
                     save_atomic(world.resource::<AssetRoot>(), &path, &text)?;
                     controller.path = Some(path);
@@ -149,9 +194,11 @@ pub fn sys_scene_requests(world: &mut World) {
                     }
                 }
                 SceneRequest::Retry(e) => {
+                    ensure!(
+                        controller.pending_open.is_none(),
+                        "Resolve the pending scene switch first"
+                    );
                     if world.get::<MeshSource>(e).is_some() {
-                        // Explicit retry also rereads repaired source files. Rebuild
-                        // this small scene's scope rather than retaining stale imports.
                         let root = world.resource::<AssetRoot>().clone();
                         let entities: Vec<_> = world
                             .query_filtered::<Entity, With<MeshSource>>()
@@ -168,73 +215,73 @@ pub fn sys_scene_requests(world: &mut World) {
                         entity.remove::<super::EnvironmentState>();
                     }
                 }
+                SceneRequest::CancelLoad => {}
             }
             Ok(())
         })();
         match result {
             Ok(()) => controller.error = None,
-            Err(error) => {
-                controller.error = Some(format!("{error:#}"));
-                controller.status = "Operation failed".into();
-                controller.save_then_open = false;
-            }
+            Err(error) => operation_failed(&mut controller, error),
         }
     });
 }
-
-struct PreparedScene {
-    world: World,
-    cache: SceneAssetCache,
-    sh: ComputedSHUniform,
+fn start_loading(
+    world: &mut World,
+    controller: &mut SceneController,
+    codec: &SceneCodec,
+    path: PathBuf,
+) -> Result<()> {
+    let progress = world
+        .resource_scope(|world, mut loader: Mut<SceneLoader>| loader.start(world, codec, path))?;
+    controller.status = "Loading scene".into();
+    controller.loading = Some(progress);
+    Ok(())
 }
-fn prepare_scene(world: &mut World, mut candidate: World) -> Result<PreparedScene> {
-    validate(&mut candidate)?;
-    let mut cache = SceneAssetCache::new(world.resource::<AssetRoot>().clone());
-    let transforms: HashMap<_, _> = candidate
-        .query::<(Entity, &Transform)>()
-        .iter(&candidate)
-        .map(|(e, t)| (e, t.clone()))
-        .collect();
-    for (entity, transform) in lentille_render::transform::compute_world_transforms(&transforms)? {
-        candidate.entity_mut(entity).insert(transform);
+fn operation_failed(controller: &mut SceneController, error: anyhow::Error) {
+    controller.error = Some(format!("{error:#}"));
+    controller.status = "Operation failed".into();
+    controller.save_then_open = false;
+}
+fn poll_loading(world: &mut World, controller: &mut SceneController, codec: &SceneCodec) {
+    let result =
+        world.resource_scope(|world, mut loader: Mut<SceneLoader>| loader.poll(world, controller));
+    match result {
+        Ok(Some((scene, path))) => {
+            let started = Instant::now();
+            match commit_scene(world, codec, scene) {
+                Ok(baseline) => {
+                    controller.path = Some(path);
+                    controller.saved_baseline = baseline;
+                    controller.dirty = false;
+                    controller.error = None;
+                    controller.status = "Scene ready".into();
+                    bevy_log::info!("Scene committed in {:?}", started.elapsed());
+                }
+                Err(error) => operation_failed(controller, error),
+            }
+            controller.loading = None;
+        }
+        Ok(None) => {}
+        Err(error) => {
+            world.resource_mut::<SceneLoader>().cancel();
+            controller.loading = None;
+            operation_failed(controller, error);
+        }
     }
-    let requests: Vec<_> = candidate
-        .query::<(Entity, &MeshSource, Option<&PbrMaterial>)>()
-        .iter(&candidate)
-        .map(|(e, s, m)| (e, s.clone(), m.cloned()))
-        .collect();
-    for (e, source, material) in requests {
-        let renderer = cache
-            .prepare(&source, material.as_ref(), world)
-            .with_context(|| format!("Entity {e:?}, source {source:?}"))?;
-        renderer.update_transform_buffer(
-            &world.resource::<RenderState>().queue,
-            candidate.get::<WorldTransform>(e).unwrap().get_uniform(),
-        );
-        candidate.entity_mut(e).insert((
-            renderer,
-            PreparationState {
-                source,
-                material,
-                error: None,
-            },
-        ));
-    }
-    let (root, active) = candidate
-        .query::<(Entity, &SceneMetadata)>()
-        .iter(&candidate)
+}
+
+pub(super) struct PreparedScene {
+    pub world: World,
+    pub cache: SceneAssetCache,
+    pub sh: ComputedSHUniform,
+}
+pub(super) fn prepare_camera(world: &mut World, candidate: &mut World) -> Result<()> {
+    let active = candidate
+        .query::<&SceneMetadata>()
+        .iter(candidate)
         .next()
-        .map(|(e, m)| (e, m.active_camera))
-        .unwrap();
-    let env = candidate.get::<Environment>(root).unwrap().clone();
-    let (skybox, sh) = prepare_environment(world, &env)?;
-    candidate.entity_mut(root).insert((
-        skybox,
-        crate::scene::EnvironmentState {
-            source: env,
-            error: None,
-        },
-    ));
+        .unwrap()
+        .active_camera;
     let camera = candidate.get::<Camera>(active).unwrap().clone();
     let config = candidate.get::<CsmConfig>(active).unwrap().clone();
     let size = match candidate.get::<RenderTargetConfig>(active).unwrap() {
@@ -296,20 +343,15 @@ fn prepare_scene(world: &mut World, mut candidate: World) -> Result<PreparedScen
             height: size.1,
         },
     ));
-    Ok(PreparedScene {
-        world: candidate,
-        cache,
-        sh,
-    })
+    Ok(())
 }
 
-pub fn open_scene(world: &mut World, codec: &SceneCodec, path: &std::path::Path) -> Result<()> {
-    let candidate = codec.load(world.resource::<AssetRoot>(), path)?;
+fn commit_scene(world: &mut World, codec: &SceneCodec, scene: PreparedScene) -> Result<String> {
     let PreparedScene {
         world: mut candidate,
         cache,
         sh,
-    } = prepare_scene(world, candidate)?;
+    } = scene;
     let ids: Vec<_> = candidate.query::<Entity>().iter(&candidate).collect();
     let dynamic = codec.capture(&candidate, ids.iter().copied())?;
     let mut map = EntityHashMap::default();
@@ -317,13 +359,20 @@ pub fn open_scene(world: &mut World, codec: &SceneCodec, path: &std::path::Path)
         .query_filtered::<Entity, With<SceneOwned>>()
         .iter(world)
         .collect();
-    if let Err(error) = dynamic.write_to_world_with(world, &mut map, &codec.registry) {
-        for e in map.values() {
-            let _ = world.despawn(*e);
+    let baseline = (|| -> Result<String> {
+        dynamic.write_to_world_with(world, &mut map, &codec.registry)?;
+        // Compute the baseline with destination entity IDs before destroying the old scene.
+        codec.encode(&codec.capture(world, map.values().copied())?)
+    })();
+    let baseline = match baseline {
+        Ok(value) => value,
+        Err(error) => {
+            for e in map.values() {
+                let _ = world.despawn(*e);
+            }
+            return Err(error);
         }
-        return Err(error.into());
-    }
-    // No schedules run while both generations exist. All recoverable work is complete.
+    };
     for (source, target) in &map {
         let mut from = candidate.entity_mut(*source);
         macro_rules! transfer {($($ty:ty),+)=> {$(if let Some(value)=from.take::<$ty>() {world.entity_mut(*target).insert(value);})+};}
@@ -389,5 +438,5 @@ pub fn open_scene(world: &mut World, codec: &SceneCodec, path: &std::path::Path)
         new_height: size.height,
     };
     world.trigger(event);
-    Ok(())
+    Ok(baseline)
 }

@@ -19,24 +19,7 @@ impl UploadedImage<Dim2D, SampleFloatFilterable> {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Result<Self> {
-        let pixels = match data.format {
-            gltf::image::Format::R8G8B8A8 => data.pixels.clone(),
-            gltf::image::Format::R8G8B8 => data
-                .pixels
-                .chunks_exact(3)
-                .flat_map(|p| [p[0], p[1], p[2], 255])
-                .collect(),
-            gltf::image::Format::R8 => data.pixels.iter().flat_map(|v| [*v, *v, *v, 255]).collect(),
-            gltf::image::Format::R8G8 => data
-                .pixels
-                .chunks_exact(2)
-                .flat_map(|p| [p[0], p[0], p[0], p[1]])
-                .collect(),
-            _ => anyhow::bail!(
-                "Unsupported image format {:?}; use 8-bit textures",
-                data.format
-            ),
-        };
+        let pixels = rgba8_pixels(data)?;
         ensure!(
             data.width > 0
                 && data.height > 0
@@ -159,6 +142,27 @@ impl UploadedImage<Dim2D, SampleFloatFilterable> {
         Ok(Self { texture, view })
     }
 }
+pub fn rgba8_pixels(data: &gltf::image::Data) -> Result<Vec<u8>> {
+    Ok(match data.format {
+        gltf::image::Format::R8G8B8A8 => data.pixels.clone(),
+        gltf::image::Format::R8G8B8 => data
+            .pixels
+            .chunks_exact(3)
+            .flat_map(|p| [p[0], p[1], p[2], 255])
+            .collect(),
+        gltf::image::Format::R8 => data.pixels.iter().flat_map(|v| [*v, *v, *v, 255]).collect(),
+        gltf::image::Format::R8G8 => data
+            .pixels
+            .chunks_exact(2)
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
+        _ => anyhow::bail!(
+            "Unsupported image format {:?}; use 8-bit textures",
+            data.format
+        ),
+    })
+}
+
 pub fn load_image(path: &Path) -> Result<gltf::image::Data> {
     let image = image::open(path)
         .with_context(|| format!("Image {}", path.display()))?
