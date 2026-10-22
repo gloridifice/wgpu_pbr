@@ -26,16 +26,36 @@ fn main() {
             lentille_render::FrameSets::Present,
             sys_end_frame_and_present,
         )
-        .add_systems(Startup, wgpu_pbr::sys_spawn_camera)
+        .add_systems(Startup, spawn_camera)
         .add_observer(sys_on_window_resize)
         .run();
 }
 
+fn spawn_camera(mut commands: Commands) {
+    use lentille_render::{camera::RenderTargetConfig, prelude::*, shadow::csm::CsmConfig};
+    commands.spawn((
+        Camera::new(1.0),
+        RenderTargetConfig::Texture {
+            width: 1280,
+            height: 720,
+        },
+        Transform::from_position(Vec3::new(0.0, 3.0, 8.0)),
+        CsmConfig {
+            level_count: 4,
+            texture_size: 1024,
+            linear_log_factor: 0.5,
+            shadow_near: 1.0,
+            shadow_far: 80.0,
+        },
+    ));
+    commands.spawn((ParallelLight::default(), Transform::default()));
+}
+
 fn sys_on_window_resize(
     event: On<WinitWindowResizeEvent>,
-    q_camera: Single<(&mut RenderTargetSize), With<Camera>>,
+    q_camera: Single<&mut RenderTargetSize, With<Camera>>,
 ) {
-    let (mut target_size) = q_camera.into_inner();
+    let mut target_size = q_camera.into_inner();
     let size = event.physical_size;
     target_size.width = size.width;
     target_size.height = size.height;

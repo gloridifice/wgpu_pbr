@@ -1,23 +1,31 @@
-use std::sync::Arc;
-
+use super::UploadedMaterial;
 use crate::{
+    asset::{AssetRef, TextureAsset},
     bindings::material_binding::PbrMaterialBindGroupBuilder,
-    deferred_rendering::DeferredComputePipeline, prelude::*,
+    prelude::*,
 };
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use lentille_wgpu_utils::typed_sampler::FilteringSampler;
-
-use super::UploadedMaterial;
+use std::sync::Arc;
 
 type Tex2D = UploadedImage<Dim2D, SampleFloatFilterable>;
 
-#[derive(Component, Clone, Default)]
-#[require(PBRMaterialOverride)]
+#[derive(Clone, Debug, Default, PartialEq, Reflect)]
+pub enum TextureOverride {
+    #[default]
+    Inherit,
+    Set(AssetRef<TextureAsset>),
+    Clear,
+}
+
+#[derive(Component, Clone, Debug, Default, PartialEq, Reflect)]
+#[reflect(Component)]
 pub struct PbrMaterial {
-    pub base_color_texture: Option<Arc<Tex2D>>,
-    pub normal_texture: Option<Arc<Tex2D>>,
-    pub metallic_roughness_ao_texture: Option<Arc<Tex2D>>,
-    pub emission_texture: Option<Arc<Tex2D>>,
+    pub base_color_texture: TextureOverride,
+    pub normal_texture: TextureOverride,
+    pub metallic_roughness_ao_texture: TextureOverride,
+    pub emission_texture: TextureOverride,
     pub color: Option<Color>,
     pub roughness: Option<f32>,
     pub metallic: Option<f32>,
@@ -26,91 +34,80 @@ pub struct PbrMaterial {
 }
 
 impl PbrMaterial {
-    fn color_or_default(&self) -> Color {
-        self.color.unwrap_or(Color::WHITE)
+    pub fn merged(&self, base: &Self) -> Self {
+        fn texture(value: &TextureOverride, base: &TextureOverride) -> TextureOverride {
+            match value {
+                TextureOverride::Inherit => base.clone(),
+                _ => value.clone(),
+            }
+        }
+        Self {
+            base_color_texture: texture(&self.base_color_texture, &base.base_color_texture),
+            normal_texture: texture(&self.normal_texture, &base.normal_texture),
+            metallic_roughness_ao_texture: texture(
+                &self.metallic_roughness_ao_texture,
+                &base.metallic_roughness_ao_texture,
+            ),
+            emission_texture: texture(&self.emission_texture, &base.emission_texture),
+            color: self.color.or(base.color),
+            roughness: self.roughness.or(base.roughness),
+            metallic: self.metallic.or(base.metallic),
+            reflectance: self.reflectance.or(base.reflectance),
+            alpha_mode: self.alpha_mode.or(base.alpha_mode),
+        }
     }
-
-    fn roughness_or_default(&self) -> f32 {
-        self.roughness.unwrap_or(1.0)
-    }
-
-    fn metallic_or_default(&self) -> f32 {
-        self.metallic.unwrap_or(1.0)
-    }
-
-    fn reflectance_or_default(&self) -> f32 {
-        self.reflectance.unwrap_or(0.0)
-    }
-
     pub fn alpha_mode_or_default(&self) -> AlphaMode {
         self.alpha_mode.unwrap_or(AlphaMode::Opaque)
     }
 }
 
+#[derive(Default)]
+pub struct ResolvedMaterial {
+    pub description: PbrMaterial,
+    pub textures: [Option<Arc<Tex2D>>; 4],
+}
+
 pub struct UploadedPbrMaterial {
     pub bind_group: Arc<BindGroup>,
     pub pipeline: Arc<RenderPipeline>,
+    pub alpha_mode: AlphaMode,
 }
-
 impl UploadedPbrMaterial {
     pub fn new(
         device: &wgpu::Device,
         layout: &PbrMaterialBindGroupLayout,
-        white_texture: &Tex2D,
-        fallback_normal_texture: &Tex2D,
+        white: &Tex2D,
+        normal: &Tex2D,
         sampler: &FilteringSampler,
-        main_pipeline: Arc<RenderPipeline>,
-        material: &PbrMaterial,
+        pipeline: Arc<RenderPipeline>,
+        material: &ResolvedMaterial,
     ) -> Self {
-        let base_color = material
-            .base_color_texture
-            .as_ref()
-            .map(|it| it.as_ref())
-            .unwrap_or(white_texture);
-        let metallic_roughness_ao_texture = material
-            .metallic_roughness_ao_texture
-            .as_ref()
-            .map(|it| it.as_ref())
-            .unwrap_or(white_texture);
-        let emission_texture = material
-            .emission_texture
-            .as_ref()
-            .map(|it| it.as_ref())
-            .unwrap_or(white_texture);
-        let normal = material
-            .normal_texture
-            .as_ref()
-            .map(|it| it.as_ref())
-            .unwrap_or(fallback_normal_texture);
-
-        let raw = PbrMaterialUniform::from(material);
-
+        let [base, normal_tex, metallic, emission] = &material.textures;
+        let raw = PbrMaterialUniform::from(&material.description);
         let buffer = TypedBuffer::new_init(
             device,
             Some("PBR"),
             raw,
             BufferUsages::UNIFORM | BufferUsages::COPY_DST,
         );
-
         let bind_group = Arc::new(
             PbrMaterialBindGroupBuilder {
                 pbr_uniform: &buffer,
-                sampler: &sampler,
-                base_color_texture: &base_color.view,
-                normal_texture: &normal.view,
-                metallic_roughness_ao_texture: &metallic_roughness_ao_texture.view,
-                emission_texture: &emission_texture.view,
+                sampler,
+                base_color_texture: &base.as_deref().unwrap_or(white).view,
+                normal_texture: &normal_tex.as_deref().unwrap_or(normal).view,
+                metallic_roughness_ao_texture: &metallic.as_deref().unwrap_or(white).view,
+                emission_texture: &emission.as_deref().unwrap_or(white).view,
             }
-            .build(&device, &layout),
+            .build(device, layout),
         );
-
         Self {
             bind_group,
-            pipeline: main_pipeline,
+            pipeline,
+            alpha_mode: material.description.alpha_mode_or_default(),
         }
     }
 }
-
 impl UploadedMaterial for UploadedPbrMaterial {
     fn get_bind_group(&self) -> &BindGroup {
         &self.bind_group
@@ -118,12 +115,6 @@ impl UploadedMaterial for UploadedPbrMaterial {
     fn get_render_pipeline(&self) -> &RenderPipeline {
         &self.pipeline
     }
-}
-
-#[derive(Component, Clone, Default)]
-pub struct PBRMaterialOverride {
-    pub material: PbrMaterial,
-    pub uploaded_material: Option<Arc<UploadedPbrMaterial>>,
 }
 
 #[repr(C)]
@@ -135,87 +126,15 @@ pub struct PbrMaterialUniform {
     pub reflectance: f32,
     pub padding: f32,
 }
-
 impl_pod_zeroable!(PbrMaterialUniform);
-
 impl From<&PbrMaterial> for PbrMaterialUniform {
     fn from(value: &PbrMaterial) -> Self {
         Self {
-            metallic: value.metallic_or_default(),
-            roughness: value.roughness_or_default(),
-            reflectance: value.reflectance_or_default(),
-            color: value.color_or_default().into_array(),
+            color: value.color.unwrap_or(Color::WHITE).into_array(),
+            metallic: value.metallic.unwrap_or(1.0),
+            roughness: value.roughness.unwrap_or(1.0),
+            reflectance: value.reflectance.unwrap_or(0.0),
             padding: 0.0,
         }
-    }
-}
-
-pub fn sys_update_override_pbr_material_bind_group(
-    rs: Res<RenderState>,
-    main_pipeline: Res<DeferredComputePipeline>,
-    white: Res<WhiteTexture>,
-    normal_default: Res<NormalDefaultTexture>,
-    layout: Res<PbrMaterialBindGroupLayout>,
-    material_sampler: Res<DefaultMaterialSampler>,
-    mut pbr_mats: Query<
-        (&MeshRenderer, &PbrMaterial, &mut PBRMaterialOverride),
-        Changed<PbrMaterial>,
-    >,
-) {
-    for (mesh, pbr_mat, mut override_pbr_mat) in pbr_mats.iter_mut() {
-        let raw_mat = mesh
-            .mesh
-            .as_ref()
-            .and_then(|it| {
-                it.primitives
-                    .first()
-                    .as_ref()
-                    .map(|primitive| primitive.material.as_ref())
-            })
-            .flatten();
-
-        let mut mat = raw_mat
-            .as_ref()
-            .map(|it| it.as_ref().clone())
-            .unwrap_or_default();
-
-        if let Some(base_color_texture) = pbr_mat.base_color_texture.clone() {
-            mat.base_color_texture = Some(base_color_texture);
-        }
-        if let Some(normal_texture) = pbr_mat.normal_texture.clone() {
-            mat.normal_texture = Some(normal_texture);
-        }
-        if let Some(metallic_roughness_ao_texture) = pbr_mat.metallic_roughness_ao_texture.clone() {
-            mat.metallic_roughness_ao_texture = Some(metallic_roughness_ao_texture);
-        }
-        if let Some(emission_texture) = pbr_mat.emission_texture.clone() {
-            mat.emission_texture = Some(emission_texture);
-        }
-        if let Some(color) = pbr_mat.color {
-            mat.color = Some(color);
-        }
-        if let Some(roughness) = pbr_mat.roughness {
-            mat.roughness = Some(roughness);
-        }
-        if let Some(metallic) = pbr_mat.metallic {
-            mat.metallic = Some(metallic);
-        }
-        if let Some(reflectance) = pbr_mat.reflectance {
-            mat.reflectance = Some(reflectance);
-        }
-        if let Some(alpha_mode) = pbr_mat.alpha_mode {
-            mat.alpha_mode = Some(alpha_mode);
-        }
-
-        override_pbr_mat.material = pbr_mat.clone();
-        override_pbr_mat.uploaded_material = Some(Arc::new(UploadedPbrMaterial::new(
-            &rs.device,
-            &layout,
-            &white.0,
-            &normal_default.0,
-            &material_sampler.0,
-            Arc::clone(&main_pipeline.pipeline),
-            &mat,
-        )))
     }
 }

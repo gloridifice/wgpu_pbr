@@ -1,0 +1,54 @@
+# 当前架构
+
+## 工作区
+
+项目使用 Bevy 0.18 的 bevy_app / bevy_ecs 管理调度和实体，使用 wgpu 29 自制渲染器，不使用完整 Bevy Renderer。所有工作区 crate 使用 Rust 2024。
+
+- 根 crate `wgpu_pbr`：应用组装、场景控制器、编辑器、相机控制及选择描边。
+- `lentille_core`：winit 窗口、输入、时间；在首帧前完成窗口观察者与渲染初始化命令，响应 AppExit。
+- `lentille_math`：cgmath 别名、Color 与持久化需要的 remote reflection 适配。
+- `lentille_render`：资产导入/缓存、组件准备、渲染阶段、材质、相机、灯光、环境与拾取。
+- `lentille_wgpu_utils` / `lentille_wgpu_macros`：类型化 GPU 包装与绑定/阶段宏。
+
+## 持久数据与运行时结果
+
+实体上的局部 Transform、MeshSource、PbrMaterial、Camera、RenderTargetConfig、灯光、CsmConfig、Environment 和测试行为参数可以保存；GPU 对象、缓存索引、世界变换、children 索引、加载状态和编辑器选择不能保存。
+
+PbrMaterial 只保存覆盖参数与纹理引用。每个 primitive 以自己的导入材质为基础合并覆盖。CPU Model 不包含 Device、UploadedImage 或 BindGroup；网格上传与材质准备在资源层单独执行。
+
+```text
+场景文件 / 编辑器修改
+        ↓
+序列化组件
+        ↓
+AssetRoot → CPU 导入 → 场景作用域 GPU 缓存
+        ↓
+MeshRenderer / 相机与环境派生状态
+        ↓
+自定义渲染阶段 → viewport / egui
+```
+
+共享网格、纹理由 SceneAssetCache 持有，实体 MeshRenderer 使用类型化 GPU Handle。每实体 Transform Buffer 和 ObjectBindGroup 独立。场景切换释放旧缓存作用域，应用级默认纹理、Device 和管线保留。显式资产 Retry 重建当前场景的资产缓存，以重新读取修复后的文件。
+
+## 场景控制器
+
+`src/scene/codec.rs` 使用 Bevy 0.18 DynamicScene 提取实体白名单，负责版本化 RON、实体引用映射、结构与参数校验；不启用默认 Bevy 场景资产加载器。升级到 bevy_world_serialization 尚未实施。
+
+`src/scene/controller.rs` 统一处理 Open、Reload、Save、SaveAs 和 Retry。打开先在临时 World 恢复持久数据、准备候选 GPU 资源，再由排他系统提交。可恢复的 IO/解析/资源错误不会删除活动场景。提交时同步相机控制器、环境 SH，清理选择与属性窗口；旧拾取读回按场景 epoch 丢弃。
+
+UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后更新变换、相机和灯光，Last 中执行渲染。旧 viewport 的 egui 纹理注册延迟到本帧 UI 绘制之后释放，避免切换时引用已释放的纹理。
+
+## 编辑器
+
+`src/editor/gui/mod.rs` 管理 Dock。默认中央 viewport 下方是 UE 式 Content Browser 面板，两侧 Control Panel 和 CSM Preview 独立。面板使用局部深灰主题、懒加载目录树、可见行虚拟化的卡片网格、当前目录搜索和 View 尺寸控制；只展示文件夹与 `.scn.ron`，不展示其他资产或真实缩略图。树与网格共享按目录缓存；导航、展开和显式刷新触发按需读取，双击通过场景请求打开，不自行解析文件或操作 GPU。
+
+属性面板先编辑配置副本，实际变化才写回 ECS。相机控制在 UI 判定 viewport 输入归属之后执行；浏览目录、搜索与树/卡片视图状态、面板高度不进入场景文件。
+
+## 入口与验证
+
+- 默认加载 `assets/scenes/minimal.scn.ron`；`--scene scenes/demo.scn.ron` 可选择演示场景。
+- `examples/generate_scenes.rs` 是场景数据生成工具；运行演示数据生成需要相关模型文件。
+- 普通契约测试位于根 `tests/`、render crate 和浏览面板单元测试，不需要 GPU。
+- 显式 GPU 测试与 `examples/scene_smoke.rs` 验证缓存共享、准备/释放和真实场景生命周期，需要 GPU；不属于默认无 GPU 测试。
+
+功能契约见 [资产与运行时](specs/asset-runtime.md)、[场景持久化](specs/scene-persistence.md)、[场景浏览面板](specs/scene-browser.md)。

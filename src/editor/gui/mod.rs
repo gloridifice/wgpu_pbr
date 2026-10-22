@@ -24,8 +24,8 @@ use lentille_render::{
 
 use components::depth_to_rgba::CsmDepthToRgbaConverter;
 
-use lentille_render::picking::resources::PickRequest;
 use lentille_math::Vec2 as LVec2;
+use lentille_render::picking::resources::PickRequest;
 
 use crate::{
     control::camera::MainCamera,
@@ -48,9 +48,10 @@ impl Plugin for EditorGuiPlugin {
             .init_resource::<RenderTargetEguiTexId>()
             .init_resource::<DockLayout>()
             .init_resource::<EditorThemeConfig>()
+            .init_resource::<components::scene_browser::SceneBrowser>()
             .init_resource::<CsmPreviewRefreshState>()
             .add_systems(RenderPreparedStartup, sys_setup_egui_visual_theme)
-            .add_systems(Update, sys_egui_dock)
+            .add_systems(Update, sys_egui_dock.in_set(crate::editor::EditorUiSet))
             .add_observer(sys_on_resize_scene_render_target);
     }
 }
@@ -81,6 +82,7 @@ fn sys_end_frame_and_draw(
     mut egui_renderer: ResMut<EguiRenderer>,
     rs: Res<RenderState>,
     egui_config: Res<EguiConfig>,
+    mut viewport_textures: ResMut<RenderTargetEguiTexId>,
     window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWindow>>,
 ) {
     let (window, surface_state) = window.into_inner();
@@ -115,6 +117,11 @@ fn sys_end_frame_and_draw(
     );
 
     rs.queue.submit(std::iter::once(encoder.finish()));
+    // Update already emitted shapes referencing the previous viewport texture.
+    // Retire registrations only after those shapes have been drawn this frame.
+    for texture in viewport_textures.1.drain(..) {
+        egui_renderer.renderer.free_texture(&texture);
+    }
 
     surface_texture.present();
 }
@@ -149,6 +156,7 @@ impl Default for EguiConfig {
 pub enum Pane {
     RightPanel,
     Scene,
+    SceneBrowser,
     WorldPanel,
 }
 
@@ -159,10 +167,18 @@ struct DockTabViewer<'a> {
 }
 
 #[derive(Resource, Clone, Default)]
-struct RenderTargetEguiTexId(Option<egui::TextureId>);
+struct RenderTargetEguiTexId(Option<egui::TextureId>, Vec<egui::TextureId>);
+impl RenderTargetEguiTexId {
+    fn replace(&mut self, texture: Option<egui::TextureId>) {
+        if let Some(old) = self.0.take() {
+            self.1.push(old);
+        }
+        self.0 = texture;
+    }
+}
 
 #[derive(Resource)]
-struct DockLayout(DockState<Pane>);
+struct DockLayout(DockState<Pane>, bool);
 
 /// Combined theme: egui native style + egui_dock style, both persisted together.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -200,7 +216,7 @@ impl Default for EditorThemeConfig {
 impl Default for DockLayout {
     fn default() -> Self {
         // Fallback width used before the first frame (actual width unknown).
-        Self(create_dock_state(1920.0))
+        Self(create_dock_state(1920.0, 1080.0), false)
     }
 }
 
@@ -222,6 +238,7 @@ impl TabViewer for DockTabViewer<'_> {
         match tab {
             Pane::RightPanel => "🗺️ CSM Preview".into(),
             Pane::WorldPanel => "📋 Control Panel".into(),
+            Pane::SceneBrowser => "Content Browser".into(),
             Pane::Scene => "🎬 Scene".into(),
         }
     }
@@ -386,6 +403,7 @@ impl TabViewer for DockTabViewer<'_> {
                     }
                 });
             }
+            Pane::SceneBrowser => components::scene_browser::show(ui, world),
             Pane::Scene => {
                 let size = ui.available_size();
                 if let Some(ids) = world.get_resource::<RenderTargetEguiTexId>()
@@ -395,6 +413,9 @@ impl TabViewer for DockTabViewer<'_> {
                         egui::Image::new(SizedTexture::new(*render_target_egui_tex_id, size))
                             .sense(egui::Sense::click()),
                     );
+                    world
+                        .resource_mut::<crate::control::ControlState>()
+                        .viewport_active = main_view.hovered();
                     let mut input = world.resource_mut::<Input>();
                     for (ec, mc) in [
                         (PointerButton::Primary, CursorButton::Left),
@@ -441,13 +462,20 @@ impl TabViewer for DockTabViewer<'_> {
                     }
                 }
 
-                if let Ok(mut target_size) = world
-                    .query_filtered::<&mut RenderTargetSize, With<MainCamera>>()
+                if let Ok((mut target_size, config)) = world
+                    .query_filtered::<(
+                        &mut RenderTargetSize,
+                        &lentille_render::camera::RenderTargetConfig,
+                    ), With<MainCamera>>()
                     .single_mut(world)
                 {
-                    let new_w = size.x as u32;
-                    let new_h = size.y as u32;
-                    if target_size.width != new_w || target_size.height != new_h {
+                    let new_w = (size.x as u32).max(1);
+                    let new_h = (size.y as u32).max(1);
+                    if matches!(
+                        config,
+                        lentille_render::camera::RenderTargetConfig::Viewport
+                    ) && (target_size.width != new_w || target_size.height != new_h)
+                    {
                         target_size.width = new_w;
                         target_size.height = new_h;
                     }
@@ -458,6 +486,9 @@ impl TabViewer for DockTabViewer<'_> {
 }
 
 pub fn sys_egui_dock(world: &mut World) {
+    world
+        .resource_mut::<crate::control::ControlState>()
+        .viewport_active = false;
     {
         let has_csm = world
             .query::<&CascadeShadowMapping>()
@@ -508,6 +539,7 @@ pub fn sys_egui_dock(world: &mut World) {
         // ---- Menu Bar ----
         Panel::top("menu_bar").show_inside(&mut ui, |ui| {
             egui::MenuBar::new().ui(ui, |ui| {
+                ui.menu_button("File", |ui| components::scene_browser::file_menu(ui, world));
                 ui.menu_button("View", |ui| {
                     if ui.button("🔄 Reset Layout").clicked() {
                         reset_layout.set(true);
@@ -637,8 +669,11 @@ pub fn sys_egui_dock(world: &mut World) {
             let dock_style = world.resource::<EditorThemeConfig>().dock_style.clone();
 
             world.resource_scope(|world, mut dock: Mut<DockLayout>| {
-                if reset_layout.take() {
-                    *dock = DockLayout(create_dock_state(content_width));
+                if reset_layout.take() || !dock.1 {
+                    // Keep the original initial side-panel proportions, but size
+                    // the browser against the real height once the window exists.
+                    let width = if dock.1 { content_width } else { 1920.0 };
+                    *dock = DockLayout(create_dock_state(width, ui.available_height()), true);
                 }
                 let mut viewer = DockTabViewer {
                     world,
@@ -650,6 +685,20 @@ pub fn sys_egui_dock(world: &mut World) {
                     .show_inside(ui, &mut viewer);
             });
         });
+        components::scene_browser::dialogs(&ctx, world);
+        if ctx.egui_wants_keyboard_input()
+            || world
+                .resource::<crate::scene::SceneController>()
+                .pending_open
+                .is_some()
+            || world
+                .resource::<crate::scene::SceneController>()
+                .needs_save_path
+        {
+            world
+                .resource_mut::<crate::control::ControlState>()
+                .viewport_active = false;
+        }
     });
 }
 
@@ -784,15 +833,30 @@ fn sys_on_resize_scene_render_target(
                 .texture()
                 .create_view(&wgpu::TextureViewDescriptor::default()),
         };
-        egui_tex_id.0 = Some(egui.renderer.register_native_texture(
+        egui_tex_id.replace(Some(egui.renderer.register_native_texture(
             device,
             &view,
             wgpu::FilterMode::Linear,
-        ));
+        )));
     }
 }
 
-fn create_dock_state(total_width: f32) -> DockState<Pane> {
+pub(crate) fn clear_scene_ui(world: &mut World) {
+    let windows: Vec<_> = world
+        .query_filtered::<Entity, With<components::property_window::EntityPropertyWindow>>()
+        .iter(world)
+        .collect();
+    for e in windows {
+        let _ = world.despawn(e);
+    }
+    world
+        .resource_mut::<components::property_window::EntityToPropertyWindowIdMap>()
+        .map
+        .clear();
+    world.resource_mut::<RenderTargetEguiTexId>().replace(None);
+}
+
+fn create_dock_state(total_width: f32, total_height: f32) -> DockState<Pane> {
     /// Desired pixel widths for side panels.
     const LEFT_PANEL_PX: f32 = 280.0;
     const RIGHT_PANEL_PX: f32 = 320.0;
@@ -814,8 +878,9 @@ fn create_dock_state(total_width: f32) -> DockState<Pane> {
     let mut state = DockState::new(vec![Pane::Scene]);
     let surface = state.main_surface_mut();
 
-    // Split left: left_ratio goes to WorldPanel, remaining (1-left_ratio) stays with Scene.
-    let [_root, _left] = surface.split_left(NodeIndex::root(), left_ratio, vec![Pane::WorldPanel]);
+    // split_* returns the relocated old leaf and the new leaf; only split the
+    // viewport leaf so the browser does not also shorten the side panels.
+    let [scene, _left] = surface.split_left(NodeIndex::root(), left_ratio, vec![Pane::WorldPanel]);
 
     // Remaining width after left split = 1.0 - left_ratio.
     // To allocate right_ratio of the *total* width, we need:
@@ -823,11 +888,16 @@ fn create_dock_state(total_width: f32) -> DockState<Pane> {
     // split_right keeps `ratio` for existing content (Scene), gives `1-ratio` to new (Right).
     // So Scene keeps: 1.0 - right_ratio / (1.0 - left_ratio) of the remaining.
     let scene_share_of_remaining = 1.0 - right_ratio / (1.0 - left_ratio);
-    let [_root2, _right] = surface.split_right(
-        NodeIndex::root(),
-        scene_share_of_remaining,
-        vec![Pane::RightPanel],
-    );
+    let [viewport, _right] =
+        surface.split_right(scene, scene_share_of_remaining, vec![Pane::RightPanel]);
 
+    // Leave enough room for toolbar, footer and a complete default-size card.
+    let height = total_height.max(1.0);
+    let browser_height = (height * 0.35).max(280.0).min(height * 0.60);
+    surface.split_below(
+        viewport,
+        1.0 - browser_height / height,
+        vec![Pane::SceneBrowser],
+    );
     state
 }

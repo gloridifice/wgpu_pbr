@@ -9,6 +9,8 @@ use crate::utils::cube::CubeVerticesBuffer;
 use bevy_app::Plugin;
 use bevy_ecs::prelude::*;
 
+pub mod environment;
+pub use environment::{Environment, prepare_environment};
 pub mod cache;
 pub mod prefiltering;
 pub mod sh_coefficients;
@@ -32,6 +34,7 @@ pub struct Skybox {
 
 #[derive(Resource)]
 pub struct DefaultSkybox {
+    pub sh: ComputedSHUniform,
     pub texture: UploadedImage<DimCube, SampleFloatFilterable>,
 }
 
@@ -46,12 +49,15 @@ impl FromWorld for DefaultSkybox {
             .map(|it| AssetPath::Assets(format!("textures/cubemap/{}.jpg", it)));
 
         let source_bytes = crate::image::cubemap::read_cubemap_bytes(&paths).unwrap();
+        let sh = ComputedSHUniform {
+            array: sh_coefficients::compute_cubemap_sh(&source_bytes).expect("Default cubemap SH"),
+        };
         let fingerprint = cache::fingerprint(&source_bytes, level_count, sample_count, format);
 
         {
             let rs = world.resource::<RenderState>();
             if let Some(texture) = cache::try_load(cache_path, fingerprint, &rs.device, &rs.queue) {
-                return Self { texture };
+                return Self { texture, sh };
             }
         }
 
@@ -92,7 +98,7 @@ impl FromWorld for DefaultSkybox {
             }
         }
 
-        Self { texture }
+        Self { texture, sh }
     }
 }
 

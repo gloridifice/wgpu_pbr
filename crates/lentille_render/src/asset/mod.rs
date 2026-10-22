@@ -8,7 +8,13 @@ use std::{
 use bevy_ecs::resource::Resource;
 use uuid::Uuid;
 
+use bevy_reflect::Reflect;
+
 pub mod load;
+pub mod path;
+pub mod runtime;
+pub use path::{AssetRef, AssetRoot, MeshAsset, SubAsset, TextureAsset};
+pub use runtime::{GpuHandle, MeshSource, PreparationState, SceneAssetCache, sys_prepare_assets};
 
 #[derive(Resource)]
 pub struct UuidManager<T> {
@@ -41,7 +47,7 @@ impl<T> UuidManager<T> {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Reflect)]
 pub enum AssetPath {
     Assets(String),
 }

@@ -1,15 +1,5 @@
-use std::sync::Arc;
-
+use crate::prelude::*;
 use wgpu::util::DeviceExt;
-
-use crate::material::pbr::{PbrMaterial, UploadedPbrMaterial};
-
-use super::{
-    DefaultMaterialSampler, NormalDefaultTexture, WhiteTexture,
-    deferred_rendering::DeferredComputePipeline, prelude::*,
-};
-use bevy_ecs::prelude::*;
-
 pub mod renderer;
 
 #[repr(C)]
@@ -21,19 +11,20 @@ pub struct Vertex {
     pub color: [f32; 4],
     pub tex_coord: [f32; 2],
 }
-
 impl_pod_zeroable!(Vertex);
 
 pub struct Model {
     pub meshes: Vec<Mesh>,
+    pub images: Vec<gltf::image::Data>,
+    pub materials: Vec<PbrMaterial>,
 }
-
+#[derive(Clone)]
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub primitives: Vec<Primitive>,
 }
-
+#[derive(Clone)]
 pub struct Primitive {
     pub indices_start: u32,
     pub indices_num: u32,
@@ -41,84 +32,72 @@ pub struct Primitive {
 }
 
 impl Mesh {
-    pub fn upload(&self, world: &World) -> UploadedMesh {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let main_pipeline = world.resource::<DeferredComputePipeline>();
-        let layout = world.resource::<PbrMaterialBindGroupLayout>();
-        let white_tex = world.resource::<WhiteTexture>();
-        let normal_default = world.resource::<NormalDefaultTexture>();
-        let material_sampler = world.resource::<DefaultMaterialSampler>();
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&self.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
-
-        let primitives = self
-            .primitives
-            .iter()
-            .map(|it| UploadedPrimitive {
-                indices_start: it.indices_start,
-                indices_num: it.indices_num,
-                uploaded_material: {
-                    it.material.as_ref().map(|gltf_mat| {
-                        Arc::new(UploadedPbrMaterial::new(
-                            device,
-                            layout,
-                            &white_tex.0,
-                            &normal_default.0,
-                            &material_sampler.0,
-                            Arc::clone(&main_pipeline.pipeline),
-                            gltf_mat,
-                        ))
-                    })
-                },
-                material: it.material.as_ref().map(|it| Arc::new(it.clone())),
-            })
-            .collect::<Vec<_>>();
-
+    pub fn upload(&self, device: &wgpu::Device) -> UploadedMesh {
         UploadedMesh {
-            vertex_buffer,
-            index_buffer,
-            primitives,
+            vertex_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Mesh vertices"),
+                contents: bytemuck::cast_slice(&self.vertices),
+                usage: BufferUsages::VERTEX,
+            }),
+            index_buffer: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Mesh indices"),
+                contents: bytemuck::cast_slice(&self.indices),
+                usage: BufferUsages::INDEX,
+            }),
+            primitives: self
+                .primitives
+                .iter()
+                .map(|p| UploadedPrimitive {
+                    indices_start: p.indices_start,
+                    indices_num: p.indices_num,
+                })
+                .collect(),
+        }
+    }
+    pub fn plane(size: f32) -> Self {
+        let h = size * 0.5;
+        let vertices = [
+            ([-h, 0., -h], [0., 0.]),
+            ([h, 0., -h], [1., 0.]),
+            ([h, 0., h], [1., 1.]),
+            ([-h, 0., h], [0., 1.]),
+        ]
+        .into_iter()
+        .map(|(position, tex_coord)| Vertex {
+            position,
+            tex_coord,
+            normal: [0., 1., 0.],
+            tangent: [1., 0., 0.],
+            color: [1.; 4],
+        })
+        .collect();
+        Self {
+            vertices,
+            indices: vec![2, 1, 0, 3, 2, 0],
+            primitives: vec![Primitive {
+                indices_start: 0,
+                indices_num: 6,
+                material: None,
+            }],
         }
     }
 }
-
 impl Vertex {
-    #[rustfmt::skip]
-    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![
-        0 => Float32x3, // Position
-        1 => Float32x3, // Normal
-        2 => Float32x3, // Tangent
-        3 => Float32x4, // Color
-        4 => Float32x2, // UV0
-    ];
+    const ATTRIBS: [wgpu::VertexAttribute; 5] = wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x3, 3 => Float32x4, 4 => Float32x2];
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
         wgpu::VertexBufferLayout {
-            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+            array_stride: std::mem::size_of::<Self>() as _,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &Vertex::ATTRIBS,
+            attributes: &Self::ATTRIBS,
         }
     }
 }
-
 pub struct UploadedMesh {
     pub vertex_buffer: Buffer,
     pub index_buffer: Buffer,
     pub primitives: Vec<UploadedPrimitive>,
 }
-
 pub struct UploadedPrimitive {
     pub indices_start: u32,
     pub indices_num: u32,
-    pub uploaded_material: Option<Arc<UploadedPbrMaterial>>,
-    pub material: Option<Arc<PbrMaterial>>,
 }

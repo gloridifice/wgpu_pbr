@@ -31,9 +31,7 @@ use crate::{
     prelude::*,
     stage::RenderContext,
 };
-use pipeline::{
-    PickEntityBindGroup, PickEntityIDBindGroupLayout, PickEntityPipeline, PickTarget,
-};
+use pipeline::{PickEntityBindGroup, PickEntityIDBindGroupLayout, PickEntityPipeline, PickTarget};
 use resources::*;
 
 // ===== Plugin =====
@@ -46,6 +44,7 @@ impl Plugin for PickingPlugin {
             .init_resource::<LastPickResult>()
             .init_resource::<SelectedObjects>()
             .init_resource::<PickReadback>()
+            .init_resource::<PickSceneEpoch>()
             .init_resource::<PickTarget>()
             .add_systems(
                 PreUpdate,
@@ -135,10 +134,12 @@ fn sys_render_picking_pass(
     mut readback: ResMut<PickReadback>,
     mut pick_target: ResMut<PickTarget>,
     mut last_result: ResMut<LastPickResult>,
+    mut epoch: ResMut<PickSceneEpoch>,
     pipeline: Res<PickEntityPipeline>,
     q_pickable: Query<(&MeshRenderer, &PickEntityBindGroup), With<Pickable>>,
     rs: Res<RenderState>,
     mut commands: Commands,
+    assets: Res<crate::asset::SceneAssetCache>,
 ) {
     let request = match pick_request.as_ref() {
         Some(r) => r,
@@ -214,7 +215,7 @@ fn sys_render_picking_pass(
         for (renderer, pick_bind_group) in q_pickable.iter() {
             render_pass.set_bind_group(1, Some(pick_bind_group.bind_group.as_ref()), &[]);
             render_pass.set_bind_group(2, Some(renderer.object_bind_group.as_ref()), &[]);
-            renderer.draw_primitives(&mut render_pass);
+            renderer.draw_primitives(&mut render_pass, &assets);
         }
     }
 
@@ -245,6 +246,7 @@ fn sys_render_picking_pass(
 
     // The copy is submitted after this stage finishes; the readback system maps
     // the buffer on a later frame.
+    epoch.submitted = epoch.current;
     *readback = PickReadback::AwaitingMap;
     last_result.screen_pos = request.screen_pos;
     commands.remove_resource::<PickRequest>();
@@ -258,6 +260,7 @@ fn sys_readback_pick_result(
     mut commands: Commands,
     mut readback: ResMut<PickReadback>,
     pick_target: Res<PickTarget>,
+    epoch: Res<PickSceneEpoch>,
     picking_id_map: Res<PickingIDMap>,
     rs: Res<RenderState>,
     mut last_result: ResMut<LastPickResult>,
@@ -299,6 +302,9 @@ fn sys_readback_pick_result(
                 u32::from_ne_bytes([data[0], data[1], data[2], data[3]])
             };
             staging.unmap();
+            if epoch.submitted != epoch.current {
+                return;
+            }
 
             let entity = if picked_id == 0 {
                 None
@@ -307,10 +313,7 @@ fn sys_readback_pick_result(
             };
 
             let screen_pos = last_result.screen_pos;
-            *last_result = LastPickResult {
-                entity,
-                screen_pos,
-            };
+            *last_result = LastPickResult { entity, screen_pos };
             commands.trigger(PickEvent::new(entity, screen_pos));
         }
         Err(e) => {
@@ -327,19 +330,37 @@ mod test {
     fn pick_pixel_maps_click_into_target_space() {
         let request = Vec2::new(100.0, 50.0);
         // Same size: position passes through, floored to whole pixels.
-        assert_eq!(pick_pixel(Vec2::new(10.7, 20.2), request, (100, 50)), (10, 20));
+        assert_eq!(
+            pick_pixel(Vec2::new(10.7, 20.2), request, (100, 50)),
+            (10, 20)
+        );
         // Target is twice as large (resized since the click).
-        assert_eq!(pick_pixel(Vec2::new(50.0, 25.0), request, (200, 100)), (100, 50));
+        assert_eq!(
+            pick_pixel(Vec2::new(50.0, 25.0), request, (200, 100)),
+            (100, 50)
+        );
     }
 
     #[test]
     fn pick_pixel_clamps_to_target_bounds() {
         let request = Vec2::new(100.0, 50.0);
-        assert_eq!(pick_pixel(Vec2::new(99.0, 49.0), request, (200, 100)), (198, 98));
-        assert_eq!(pick_pixel(Vec2::new(999.0, 999.0), request, (200, 100)), (199, 99));
-        assert_eq!(pick_pixel(Vec2::new(-5.0, -5.0), request, (200, 100)), (0, 0));
+        assert_eq!(
+            pick_pixel(Vec2::new(99.0, 49.0), request, (200, 100)),
+            (198, 98)
+        );
+        assert_eq!(
+            pick_pixel(Vec2::new(999.0, 999.0), request, (200, 100)),
+            (199, 99)
+        );
+        assert_eq!(
+            pick_pixel(Vec2::new(-5.0, -5.0), request, (200, 100)),
+            (0, 0)
+        );
         // Degenerate target size must not produce an out-of-range coordinate.
-        assert_eq!(pick_pixel(Vec2::new(1.0, 1.0), Vec2::new(0.0, 0.0), (0, 0)), (0, 0));
+        assert_eq!(
+            pick_pixel(Vec2::new(1.0, 1.0), Vec2::new(0.0, 0.0), (0, 0)),
+            (0, 0)
+        );
     }
 
     /// The picking shader must compose with its `#import`s and produce valid
@@ -367,15 +388,20 @@ mod test {
 
         // Valid WGSL alone does not guarantee compatibility with the bound
         // CPU buffer. Check the object uniform ABI used by the picking pass.
-        let (_, object_uniform) = naga_module.global_variables.iter().find(|(_, var)| {
-            var.binding.as_ref().is_some_and(|binding| {
-                binding.group == 2 && binding.binding == 0
+        let (_, object_uniform) = naga_module
+            .global_variables
+            .iter()
+            .find(|(_, var)| {
+                var.binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.group == 2 && binding.binding == 0)
             })
-        }).expect("picking must bind the object transform");
+            .expect("picking must bind the object transform");
         let wgpu::naga::TypeInner::Struct { span, .. } =
-            &naga_module.types[object_uniform.ty].inner else {
-                panic!("object transform must be a uniform struct");
-            };
+            &naga_module.types[object_uniform.ty].inner
+        else {
+            panic!("object transform must be a uniform struct");
+        };
         assert_eq!(
             *span as usize,
             std::mem::size_of::<crate::transform::TransformUniform>(),

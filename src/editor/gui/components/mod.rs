@@ -13,6 +13,7 @@ pub mod basics;
 pub mod depth_to_rgba;
 pub mod dock_style_editor;
 pub mod property_window;
+pub mod scene_browser;
 pub mod texture_preview;
 pub mod world_hierarchy;
 
@@ -35,13 +36,71 @@ fn color_rgba(ui: &mut Ui, color: &mut Color) -> egui::Response {
         (color.a() * 255.0) as u8,
     );
     let ret = ui.color_edit_button_srgba(&mut c);
-    *color = Color::new(
-        c.r() as f32 / 255.0,
-        c.g() as f32 / 255.0,
-        c.b() as f32 / 255.0,
-        c.a() as f32 / 255.0,
-    );
+    if ret.changed() {
+        *color = Color::new(
+            c.r() as f32 / 255.0,
+            c.g() as f32 / 255.0,
+            c.b() as f32 / 255.0,
+            c.a() as f32 / 255.0,
+        );
+    }
     ret
+}
+
+fn texture_source_ui(
+    ui: &mut Ui,
+    label: &str,
+    value: &mut lentille_render::material::pbr::TextureOverride,
+) {
+    use lentille_render::{
+        asset::{AssetRef, SubAsset},
+        material::pbr::TextureOverride,
+    };
+    ui.push_id(label, |ui| {
+        let mut mode = match value {
+            TextureOverride::Inherit => 0,
+            TextureOverride::Set(_) => 1,
+            TextureOverride::Clear => 2,
+        };
+        ui.horizontal(|ui| {
+            ui.label(label);
+            egui::ComboBox::from_id_salt("mode")
+                .selected_text(["Inherit", "Set", "Clear"][mode])
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut mode, 0, "Inherit");
+                    ui.selectable_value(&mut mode, 1, "Set");
+                    ui.selectable_value(&mut mode, 2, "Clear");
+                });
+        });
+        match mode {
+            0 => *value = TextureOverride::Inherit,
+            2 => *value = TextureOverride::Clear,
+            _ => {
+                if !matches!(value, TextureOverride::Set(_)) {
+                    *value =
+                        TextureOverride::Set(AssetRef::new("textures/white.png", SubAsset::File));
+                }
+                if let TextureOverride::Set(reference) = value {
+                    let AssetPath::Assets(path) = &mut reference.path;
+                    ui.text_edit_singleline(path);
+                    let mut embedded = matches!(reference.label, SubAsset::Image(_));
+                    if ui
+                        .checkbox(&mut embedded, "Image embedded in model")
+                        .changed()
+                    {
+                        reference.label = if embedded {
+                            SubAsset::Image(0)
+                        } else {
+                            SubAsset::File
+                        };
+                    }
+                    if let SubAsset::Image(index) = &mut reference.label {
+                        ui.add(DragValue::new(index).prefix("Image "));
+                    }
+                }
+            }
+        }
+    });
 }
 
 fn property_grid(ui: &mut Ui, id_source: impl std::hash::Hash, contents: impl FnOnce(&mut Ui)) {
@@ -81,6 +140,7 @@ pub fn transform_ui(ui: &mut Ui, id: Entity, transform: &mut Transform) {
         )
     };
 
+    let old_euler = euler_deg;
     property_grid(ui, format!("trans {}", id.index()), |ui| {
         ui.label("Position");
         vec3_values_ui(ui, &mut transform.position, Vec3::zero());
@@ -95,7 +155,10 @@ pub fn transform_ui(ui: &mut Ui, id: Entity, transform: &mut Transform) {
         ui.end_row();
     });
 
-    transform.rotation = Euler::new(Deg(euler_deg.x), Deg(euler_deg.y), Deg(euler_deg.z)).into();
+    if euler_deg != old_euler {
+        transform.rotation =
+            Euler::new(Deg(euler_deg.x), Deg(euler_deg.y), Deg(euler_deg.z)).into();
+    }
 }
 
 pub fn option_value<T>(
@@ -123,7 +186,8 @@ pub fn option_value<T>(
 
 macro_rules! impl_component_ui {
     ($A: ty, $W: expr, $I: expr, $ui: expr, $nui: ident, $N: ident, $B: block) => {
-        if let Some(mut $N) = $W.get_mut::<$A>($I) {
+        if let Some(mut $N) = $W.get::<$A>($I).cloned() {
+            let original = $N.clone();
             let ty_name = type_name::<$A>();
             basics::Frame::new()
                 .inner_margin(egui::Vec2::new(10., 8.))
@@ -134,6 +198,9 @@ macro_rules! impl_component_ui {
                     );
                     $B
                 });
+            if $N != original {
+                $W.entity_mut($I).insert($N);
+            }
         }
     };
 }
@@ -141,10 +208,58 @@ macro_rules! impl_component_ui {
 /// Renders all editable components for `entity` in a flat property-editor layout.
 /// Designed to be called inside an egui Window / Area (not inside the hierarchy tree).
 pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) {
+    use lentille_render::asset::{AssetRef, MeshSource, PreparationState, SubAsset};
+    impl_component_ui!(MeshSource, world, entity, ui, ui, source, {
+        let mut file = matches!(source, MeshSource::Asset(_));
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut file, false, "Plane");
+            ui.selectable_value(&mut file, true, "Model mesh");
+        });
+        if file != matches!(source, MeshSource::Asset(_)) {
+            source = if file {
+                MeshSource::Asset(AssetRef::new("models/model.glb", SubAsset::Mesh(0)))
+            } else {
+                MeshSource::Plane { size: 2.0 }
+            };
+        }
+        match &mut source {
+            MeshSource::Plane { size } => {
+                ui.add(DragValue::new(size).range(0.001..=10000.0).prefix("Size "));
+            }
+            MeshSource::Asset(reference) => {
+                let AssetPath::Assets(path) = &mut reference.path;
+                ui.text_edit_singleline(path);
+                if let SubAsset::Mesh(index) = &mut reference.label {
+                    ui.add(DragValue::new(index).prefix("Mesh "));
+                }
+            }
+        }
+    });
+    if let Some(state) = world.get::<PreparationState>(entity) {
+        if let Some(error) = &state.error {
+            ui.colored_label(Color32::LIGHT_RED, error);
+        }
+        if ui.button("Rebuild / Retry assets").clicked() {
+            world
+                .resource_mut::<crate::scene::SceneController>()
+                .request(crate::scene::SceneRequest::Retry(entity));
+        }
+    }
+    impl_component_ui!(crate::RotationObject, world, entity, ui, ui, rotation, {
+        ui.add(
+            DragValue::new(&mut rotation.speed)
+                .speed(0.01)
+                .prefix("Radians/sec "),
+        );
+    });
     impl_component_ui!(Camera, world, entity, ui, ui, camera, {
         property_grid(ui, format!("cam {}", entity.index()), |ui| {
             ui.label("FOV");
-            ui.add(DragValue::new(&mut camera.fovy).speed(0.05));
+            ui.add(
+                DragValue::new(&mut camera.fovy)
+                    .speed(0.05)
+                    .range(1.0..=179.0),
+            );
             ui.end_row();
         });
     });
@@ -174,6 +289,12 @@ pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) 
         });
     });
 
+    if world.get::<MeshSource>(entity).is_some()
+        && world.get::<PbrMaterial>(entity).is_none()
+        && ui.button("Add material override").clicked()
+    {
+        world.entity_mut(entity).insert(PbrMaterial::default());
+    }
     impl_component_ui!(PbrMaterial, world, entity, ui, ui, mat, {
         property_grid(ui, format!("PBR {}", entity.index()), |ui| {
             ui.label("Roughness");
@@ -202,8 +323,20 @@ pub fn property_window_ui(ui: &mut egui::Ui, entity: Entity, world: &mut World) 
             });
             ui.end_row();
         });
+        texture_source_ui(ui, "Base color texture", &mut mat.base_color_texture);
+        texture_source_ui(ui, "Normal texture", &mut mat.normal_texture);
+        texture_source_ui(
+            ui,
+            "Metallic / roughness",
+            &mut mat.metallic_roughness_ao_texture,
+        );
+        texture_source_ui(ui, "Emission texture", &mut mat.emission_texture);
     });
 
+    if world.get::<PbrMaterial>(entity).is_some() && ui.button("Remove material override").clicked()
+    {
+        world.entity_mut(entity).remove::<PbrMaterial>();
+    }
     impl_component_ui!(ParallelLight, world, entity, ui, ui, light, {
         property_grid(ui, format!("ParallelLight {}", entity.index()), |ui| {
             ui.label("Intensity");

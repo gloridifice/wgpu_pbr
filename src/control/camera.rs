@@ -14,15 +14,19 @@ pub struct CameraControlPlugin;
 
 impl Plugin for CameraControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_resource::<CameraConfig>()
-            .add_systems(Update, sys_update_camera_control);
+        app.init_resource::<CameraConfig>().add_systems(
+            Update,
+            sys_update_camera_control
+                .after(crate::editor::EditorUiSet)
+                .after(super::sys_input_implement),
+        );
     }
 }
 
 #[derive(Component, Default, Clone, Copy)]
 pub struct MainCamera;
 
-#[derive(Component, Clone, Default)]
+#[derive(Component, Clone, Default, PartialEq)]
 pub struct CameraController {
     pub row: f32,
     pub yaw: f32,
@@ -51,7 +55,7 @@ pub fn sys_update_camera_control(
         &mut CameraController,
     )>,
 ) {
-    if !control_state.is_focused {
+    if !control_state.is_focused || !control_state.viewport_active {
         return;
     }
 
@@ -86,13 +90,14 @@ pub fn sys_update_camera_control(
             }
 
             let factor = Vec2::new(0.6, 0.4);
-            controller.row -= input.cursor_delta.x * factor.x;
-            controller.yaw = (controller.yaw - input.cursor_delta.y * factor.y).clamp(-40.0, 80.0);
-            cam_transform.rotation =
-                Quat::from_angle_y(Deg(controller.row)) * Quat::from_angle_x(Deg(controller.yaw));
+            if input.cursor_delta != lentille_math::Vec2::zero() {
+                controller.row -= input.cursor_delta.x * factor.x;
+                controller.yaw =
+                    (controller.yaw - input.cursor_delta.y * factor.y).clamp(-89.0, 89.0);
+                cam_transform.rotation = Quat::from_angle_y(Deg(controller.row))
+                    * Quat::from_angle_x(Deg(controller.yaw));
+            }
         }
-        Err(e) => {
-            println!("{}", e);
-        }
+        Err(_) => {}
     }
 }

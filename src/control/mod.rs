@@ -13,17 +13,24 @@ impl Plugin for ControlPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_plugins(CameraControlPlugin)
             .init_resource::<ControlState>()
-            .add_systems(Update, sys_input_implement);
+            .add_systems(
+                Update,
+                sys_input_implement.after(crate::editor::EditorUiSet),
+            );
     }
 }
 
 #[derive(Resource)]
 pub struct ControlState {
     pub is_focused: bool,
+    pub viewport_active: bool,
 }
 impl Default for ControlState {
     fn default() -> Self {
-        ControlState { is_focused: true }
+        ControlState {
+            is_focused: false,
+            viewport_active: false,
+        }
     }
 }
 

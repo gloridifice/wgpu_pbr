@@ -2,7 +2,8 @@ use crate::{camera::OPENGL_TO_WGPU_MATRIX, prelude::*};
 use bevy_ecs::prelude::*;
 use cgmath::Matrix4;
 
-#[derive(Component)]
+#[derive(Component, Clone, PartialEq, bevy_reflect::Reflect)]
+#[reflect(Component)]
 pub struct ParallelLight {
     pub intensity: f32,
     pub color: Color,

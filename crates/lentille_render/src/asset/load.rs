@@ -1,108 +1,15 @@
-use std::io::Cursor;
-
-use std::path::Path;
-use std::thread::{Scope, scope};
-use std::time::Instant;
-use std::{fs, io, thread};
-use std::{fs::File, io::Read, sync::Arc};
-
-use anyhow::Result;
-use anyhow::anyhow;
+use crate::{
+    asset::{AssetRef, AssetRoot, SubAsset, TextureAsset},
+    material::pbr::TextureOverride,
+    prelude::*,
+};
+use anyhow::{Context, Result, ensure};
 use bevy_ecs::world::World;
-use bevy_log::{error, info};
-use gltf::image::{Data, Format};
-use image::{ColorType, DynamicImage};
-use png::Decoder;
-use wgpu::{Extent3d, ShaderModule, TextureDescriptor, TextureUsages};
-
-use crate::image::UploadedImage;
-use crate::mesh::{Mesh, Model, Primitive, Vertex};
-use crate::prelude::{Color, Dim2D, PbrMaterial, SampleFloatFilterable, Tex2D, TexView2D};
-use crate::{AlphaMode, RenderState};
 use lentille_wgpu_utils::typed_texture::{TypedTexture, TypedTextureViewDescriptor};
-
-use super::AssetPath;
+use std::{fs, path::Path};
 
 pub trait Loadable: Sized {
     fn load(path: AssetPath, world: &mut World) -> Result<Self>;
-}
-
-#[allow(unused)]
-fn has_alpha(img: &DynamicImage) -> bool {
-    matches!(
-        img.color(),
-        ColorType::La8
-            | ColorType::La16
-            | ColorType::Rgba8
-            | ColorType::Rgba16
-            | ColorType::Rgba32F
-    )
-}
-
-#[allow(unused)]
-fn is_any_pixel_transparent(img: &DynamicImage) -> bool {
-    let rgba = img.to_rgba8();
-    rgba.pixels().any(|p| p[3] < 255)
-}
-
-#[allow(unused)]
-fn is_png_srgb_from_memory(data: &[u8]) -> bool {
-    let cursor = Cursor::new(data);
-    let decoder = Decoder::new(cursor);
-    let Ok(reader) = decoder.read_info() else {
-        return false;
-    };
-
-    return reader.info().srgb.is_some();
-}
-
-macro_rules! match_image_format {
-    (
-        $img:expr,
-        $($color:pat => {
-            $convert:expr,
-            $format:expr
-        }),+ $(,)?
-    ) => {{
-        match $img.color() {
-            $(
-                $color => {
-                    let image = $convert;
-                    let data = image
-                        .pixels()
-                        .flat_map(|it| it.0.map(|it| it.to_be_bytes()))
-                        .flat_map(|c| c)
-                        .collect::<Vec<u8>>();
-                    let (width, height) = image.dimensions();
-                    Data {
-                        pixels: data,
-                        format: $format,
-                        width,
-                        height,
-                    }
-                }
-            )+
-            other => panic!("{:?} is an unsupported texture format!", other),
-        }
-    }};
-}
-
-/// Return (texture, is_transparent)
-fn load_gltf_image_data_from_memory(data: &[u8]) -> Result<gltf::image::Data> {
-    let dynamic_image = image::load_from_memory(data)?;
-    Ok(match_image_format!(&dynamic_image,
-        ColorType::Rgb8 => { dynamic_image.into_rgb8(), Format::R8G8B8 },
-        ColorType::Rgba8 => { dynamic_image.into_rgba8(), Format::R8G8B8A8 },
-        ColorType::Rgb16 => { dynamic_image.into_rgb16(), Format::R16G16B16 },
-        ColorType::Rgba16 => { dynamic_image.into_rgba16(), Format::R16G16B16A16 },
-    ))
-}
-
-fn load_gltf_image_data_from_path(path: impl AsRef<Path>) -> Result<gltf::image::Data> {
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer)?;
-    load_gltf_image_data_from_memory(&buffer)
 }
 
 impl UploadedImage<Dim2D, SampleFloatFilterable> {
@@ -112,47 +19,52 @@ impl UploadedImage<Dim2D, SampleFloatFilterable> {
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Result<Self> {
-        let size = Extent3d {
+        let pixels = match data.format {
+            gltf::image::Format::R8G8B8A8 => data.pixels.clone(),
+            gltf::image::Format::R8G8B8 => data
+                .pixels
+                .chunks_exact(3)
+                .flat_map(|p| [p[0], p[1], p[2], 255])
+                .collect(),
+            gltf::image::Format::R8 => data.pixels.iter().flat_map(|v| [*v, *v, *v, 255]).collect(),
+            gltf::image::Format::R8G8 => data
+                .pixels
+                .chunks_exact(2)
+                .flat_map(|p| [p[0], p[0], p[0], p[1]])
+                .collect(),
+            _ => anyhow::bail!(
+                "Unsupported image format {:?}; use 8-bit textures",
+                data.format
+            ),
+        };
+        ensure!(
+            data.width > 0
+                && data.height > 0
+                && data.width <= device.limits().max_texture_dimension_2d
+                && data.height <= device.limits().max_texture_dimension_2d,
+            "Texture dimensions exceed device limits"
+        );
+        ensure!(
+            pixels.len() == data.width as usize * data.height as usize * 4,
+            "Invalid texture data size"
+        );
+        let size = wgpu::Extent3d {
             width: data.width,
             height: data.height,
             depth_or_array_layers: 1,
         };
-        let mut pixels = &data.pixels;
-        let mut rgba = Vec::with_capacity(data.pixels.len() / 3 * 4);
-        match data.format {
-            Format::R8G8B8 => {
-                for chunk in data.pixels.chunks(3) {
-                    rgba.extend_from_slice(chunk);
-                    rgba.push(255);
-                }
-                pixels = &rgba;
-            }
-            Format::R16G16B16 => {
-                for chunk in data.pixels.chunks(6) {
-                    rgba.extend_from_slice(chunk);
-                    rgba.push(255);
-                    rgba.push(255);
-                }
-                pixels = &rgba;
-            }
-            _ => {
-                drop(rgba);
-            }
-        }
-
-        let texture: Tex2D<SampleFloatFilterable> = TypedTexture::from_descriptor(
+        let texture = TypedTexture::from_descriptor(
             device,
-            &TextureDescriptor {
-                label: None,
+            &wgpu::TextureDescriptor {
+                label: Some("Asset texture"),
                 size,
                 mip_level_count: 1,
+                sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format,
-                usage: TextureUsages::COPY_DST
-                    | TextureUsages::COPY_SRC
-                    | TextureUsages::RENDER_ATTACHMENT
-                    | TextureUsages::TEXTURE_BINDING,
-                sample_count: 1,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING
+                    | wgpu::TextureUsages::COPY_DST
+                    | wgpu::TextureUsages::COPY_SRC,
                 view_formats: &[],
             },
         );
@@ -163,65 +75,62 @@ impl UploadedImage<Dim2D, SampleFloatFilterable> {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            pixels,
+            &pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(format.block_copy_size(None).unwrap_or(4) * data.width),
+                bytes_per_row: Some(data.width * 4),
                 rows_per_image: Some(data.height),
             },
             size,
         );
-
-        let view: TexView2D<SampleFloatFilterable> =
-            texture.create_view(&TypedTextureViewDescriptor::new(None));
-
-        Ok(UploadedImage { texture, view })
+        let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
+        Ok(Self { texture, view })
     }
-
     pub fn load_from_path(
         path: AssetPath,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         format: wgpu::TextureFormat,
     ) -> Result<Self> {
-        let data = load_gltf_image_data_from_path(path.final_path())?;
-        Self::load_from_data(&data, device, queue, format)
+        Self::load_from_data(
+            &load_image(&AssetRoot::default().resolve(&path)?)?,
+            device,
+            queue,
+            format,
+        )
     }
-
     pub fn load_hdri_to_f16(
-        path: AssetPath,
+        path: &Path,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
     ) -> Result<Self> {
-        let path = path.final_path();
-        let mut file = File::open(&path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-
-        let dynamic_image = image::load_from_memory(&buffer)?;
-        let image = dynamic_image.to_rgba32f();
-
+        let image = image::open(path)?.to_rgba32f();
         let (width, height) = image.dimensions();
-        let size = Extent3d {
+        ensure!(
+            width > 0
+                && height > 0
+                && width <= device.limits().max_texture_dimension_2d
+                && height <= device.limits().max_texture_dimension_2d,
+            "Environment dimensions exceed device limits"
+        );
+        let pixels: Vec<u8> = image
+            .pixels()
+            .flat_map(|p| {
+                p.0.into_iter()
+                    .flat_map(|v| half::f16::from_f32(v).to_le_bytes())
+            })
+            .collect();
+        let size = wgpu::Extent3d {
             width,
             height,
             depth_or_array_layers: 1,
         };
-
-        let mut image_data = Vec::with_capacity((width * height) as usize * 4 * 2);
-        for px in image.pixels() {
-            for &channel in px.0.iter() {
-                let h = half::f16::from_f32(channel);
-                image_data.extend_from_slice(&h.to_le_bytes());
-            }
-        }
-
-        let texture: Tex2D<SampleFloatFilterable> = TypedTexture::from_descriptor(
+        let texture = TypedTexture::from_descriptor(
             device,
             &wgpu::TextureDescriptor {
+                label: Some("Environment source"),
                 size,
                 mip_level_count: 1,
-                label: None,
                 sample_count: 1,
                 dimension: wgpu::TextureDimension::D2,
                 format: wgpu::TextureFormat::Rgba16Float,
@@ -238,261 +147,184 @@ impl UploadedImage<Dim2D, SampleFloatFilterable> {
                 origin: wgpu::Origin3d::ZERO,
                 aspect: wgpu::TextureAspect::All,
             },
-            &image_data,
+            &pixels,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(width * 4 * 2),
+                bytes_per_row: Some(width * 8),
                 rows_per_image: Some(height),
             },
             size,
         );
-
-        let view: TexView2D<SampleFloatFilterable> =
-            texture.create_view(&TypedTextureViewDescriptor::new(None));
-
-        Ok(UploadedImage { texture, view })
+        let view = texture.create_view(&TypedTextureViewDescriptor::new(None));
+        Ok(Self { texture, view })
     }
 }
-
-type Loaded = (
-    gltf::Document,
-    Vec<gltf::buffer::Data>,
-    Vec<gltf::image::Data>,
-);
-
-fn load_by_glb<'a>(path: impl AsRef<Path>) -> Result<Loaded> {
-    Ok(gltf::import(&path)?)
+pub fn load_image(path: &Path) -> Result<gltf::image::Data> {
+    let image = image::open(path)
+        .with_context(|| format!("Image {}", path.display()))?
+        .to_rgba8();
+    Ok(gltf::image::Data {
+        width: image.width(),
+        height: image.height(),
+        format: gltf::image::Format::R8G8B8A8,
+        pixels: image.into_raw(),
+    })
 }
 
-fn load_by_gltf<'a>(path: impl AsRef<Path>, scope: &'a Scope<'a, '_>) -> Result<Loaded> {
-    let file = fs::File::open(&path)?;
-    let buf = io::BufReader::new(file);
-    let gltf = gltf::Gltf::from_reader(buf)?;
-
-    let buffer_defs: Vec<_> = gltf.buffers().collect();
-    let parent_dir = std::path::Path::new(path.as_ref())
-        .parent()
-        .unwrap()
-        .to_path_buf();
-
-    let handles: Vec<_> = buffer_defs
-        .into_iter()
-        .filter_map(|buffer| match buffer.source() {
-            gltf::buffer::Source::Bin => {
-                error!("A Bin source here!");
-                None
-            }
-            gltf::buffer::Source::Uri(uri) => {
-                let path = parent_dir.join(uri);
-                Some(thread::spawn(move || -> Vec<u8> {
-                    let mut file = File::open(path).unwrap();
-                    let mut data = Vec::new();
-                    file.read_to_end(&mut data).unwrap();
-                    data
-                }))
-            }
+/// Parse only CPU data. The caller owns the asset root and all GPU preparation.
+pub fn import_model(root: &AssetRoot, source: &AssetPath) -> Result<Model> {
+    let path = root.resolve(source)?;
+    let document = gltf::Gltf::open(&path).with_context(|| format!("Model {}", path.display()))?;
+    // Validate external dependencies before gltf::import follows their URIs.
+    let parent = Path::new(match source {
+        AssetPath::Assets(s) => s,
+    })
+    .parent()
+    .unwrap_or(Path::new(""));
+    for uri in document
+        .buffers()
+        .filter_map(|b| match b.source() {
+            gltf::buffer::Source::Uri(s) => Some(s),
+            _ => None,
         })
-        .collect();
-    let buffers: Vec<_> = handles
-        .into_iter()
-        .map(|h| gltf::buffer::Data(h.join().unwrap()))
-        .collect();
-
-    let image_defs: Vec<_> = gltf.images().collect();
-
-    let handles: Vec<_> = image_defs
-        .into_iter()
-        .filter_map(|img| match img.source() {
-            gltf::image::Source::View { .. } => {
-                error!("A Bin texture here!");
-                None
+        .chain(document.images().filter_map(|i| match i.source() {
+            gltf::image::Source::Uri { uri, .. } => Some(uri),
+            _ => None,
+        }))
+    {
+        if !uri.starts_with("data:") {
+            ensure!(
+                !uri.contains('%') && !uri.contains("://"),
+                "Encoded or remote asset URI is not supported: {uri}"
+            );
+            root.resolve_path(&parent.join(uri))?;
+        }
+    }
+    let (doc, buffers, images) =
+        gltf::import(&path).with_context(|| format!("Import {}", path.display()))?;
+    let tex = |texture: gltf::Texture<'_>| {
+        TextureOverride::Set(AssetRef::<TextureAsset>::new(
+            match source {
+                AssetPath::Assets(s) => s,
+            },
+            SubAsset::Image(texture.source().index()),
+        ))
+    };
+    let material = |mat: gltf::Material<'_>| {
+        let pbr = mat.pbr_metallic_roughness();
+        PbrMaterial {
+            base_color_texture: pbr
+                .base_color_texture()
+                .map(|t| tex(t.texture()))
+                .unwrap_or_default(),
+            normal_texture: mat
+                .normal_texture()
+                .map(|t| tex(t.texture()))
+                .unwrap_or_default(),
+            metallic_roughness_ao_texture: pbr
+                .metallic_roughness_texture()
+                .map(|t| tex(t.texture()))
+                .unwrap_or_default(),
+            emission_texture: mat
+                .emissive_texture()
+                .map(|t| tex(t.texture()))
+                .unwrap_or_default(),
+            color: Some(Color::from_linear_array(pbr.base_color_factor())),
+            roughness: Some(pbr.roughness_factor()),
+            metallic: Some(pbr.metallic_factor()),
+            reflectance: Some(0.),
+            alpha_mode: Some(AlphaMode::from(mat.alpha_mode())),
+        }
+    };
+    let materials = doc.materials().map(&material).collect();
+    let mut meshes = Vec::new();
+    for mesh in doc.meshes() {
+        let mut vertices = Vec::new();
+        let mut indices = Vec::new();
+        let mut primitives = Vec::new();
+        for primitive in mesh.primitives() {
+            ensure!(
+                primitive.mode() == gltf::mesh::Mode::Triangles,
+                "Only triangle meshes are supported"
+            );
+            let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
+            let positions: Vec<_> = reader
+                .read_positions()
+                .context("Mesh has no positions")?
+                .collect();
+            ensure!(!positions.is_empty(), "Mesh is empty");
+            let normals: Vec<_> = reader.read_normals().into_iter().flatten().collect();
+            let tangents: Vec<_> = reader.read_tangents().into_iter().flatten().collect();
+            let uvs: Vec<_> = reader
+                .read_tex_coords(0)
+                .map(|v| v.into_f32().collect())
+                .unwrap_or_default();
+            let colors: Vec<_> = reader
+                .read_colors(0)
+                .map(|v| v.into_rgba_f32().collect())
+                .unwrap_or_default();
+            let base = vertices.len() as u32;
+            let local: Vec<u32> = reader
+                .read_indices()
+                .map(|v| v.into_u32().collect())
+                .unwrap_or_else(|| (0..positions.len() as u32).collect());
+            ensure!(
+                local.len() % 3 == 0 && local.iter().all(|i| (*i as usize) < positions.len()),
+                "Invalid triangle indices"
+            );
+            for (i, position) in positions.into_iter().enumerate() {
+                ensure!(
+                    position.iter().all(|v| v.is_finite()),
+                    "Non-finite vertex position"
+                );
+                vertices.push(Vertex {
+                    position,
+                    normal: *normals.get(i).unwrap_or(&[0., 1., 0.]),
+                    tangent: tangents
+                        .get(i)
+                        .map(|t| [t[0], t[1], t[2]])
+                        .unwrap_or([1., 0., 0.]),
+                    color: *colors.get(i).unwrap_or(&[1.; 4]),
+                    tex_coord: *uvs.get(i).unwrap_or(&[0.; 2]),
+                });
             }
-            gltf::image::Source::Uri { uri, .. } => {
-                let path = parent_dir.join(uri);
-                Some(scope.spawn(move || {
-                    let loaded = load_gltf_image_data_from_path(path).unwrap();
-                    loaded
-                }))
-            }
-        })
-        .collect();
-
-    let images: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
-
-    Ok((gltf.document, buffers, images))
+            primitives.push(Primitive {
+                indices_start: indices.len() as _,
+                indices_num: local.len() as _,
+                material: Some(material(primitive.material())),
+            });
+            indices.extend(local.into_iter().map(|i| i + base));
+        }
+        ensure!(!primitives.is_empty(), "Mesh has no primitives");
+        meshes.push(Mesh {
+            vertices,
+            indices,
+            primitives,
+        });
+    }
+    Ok(Model {
+        meshes,
+        images,
+        materials,
+    })
 }
-
 impl Loadable for Model {
     fn load(path: AssetPath, world: &mut World) -> Result<Self> {
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-        let queue = &rs.queue;
-        let path = path.final_path();
-        let start_instant = Instant::now();
-
-        let (document, buffers, images) = if path.ends_with(".gltf") {
-            scope(|scope| load_by_gltf(&path, scope))?
-        } else if path.ends_with(".glb") {
-            load_by_glb(&path)?
-        } else {
-            return Err(anyhow!("<{}> is not a model file (.gltf or .glb)!", &path));
-        };
-
-        let meshes = document
-            .meshes()
-            .map(|mesh| {
-                let mut vertices = Vec::<Vertex>::new();
-                let mut indices = Vec::<u32>::new();
-                let mut primitives = Vec::<Primitive>::new();
-                for primitive in mesh.primitives() {
-                    let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-
-                    let positions = reader
-                        .read_positions()
-                        .map(|v| {
-                            // v.map(|raw_pos| (rotate_90 * Vector3::from(raw_pos)).into())
-                            v.collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                    let normals = reader
-                        .read_normals()
-                        .map(|v| v.collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    let tangents = reader
-                        .read_normals()
-                        .map(|v| v.collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    let tex_coords = reader
-                        .read_tex_coords(0)
-                        .map(|v| v.into_f32().collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    let colors = reader
-                        .read_colors(0)
-                        .map(|v| v.into_rgba_f32().collect::<Vec<_>>())
-                        .unwrap_or_default();
-                    let mut primitive_indices = reader
-                        .read_indices()
-                        .map(|v| v.into_u32().collect::<Vec<_>>())
-                        .unwrap_or_default();
-
-                    for i in 0..positions.len() {
-                        let v = Vertex {
-                            position: *positions.get(i).unwrap_or(&[0.0; 3]),
-                            normal: *normals.get(i).unwrap_or(&[0.0; 3]),
-                            tangent: *tangents.get(i).unwrap_or(&[0.0; 3]),
-                            color: *colors.get(i).unwrap_or(&[0.0; 4]),
-                            tex_coord: *tex_coords.get(i).unwrap_or(&[0.0; 2]),
-                        };
-                        vertices.push(v);
-                    }
-
-                    let material_instance: PbrMaterial = {
-                        let mat = primitive.material();
-
-                        let pbr = mat.pbr_metallic_roughness();
-
-                        let alpha_mode = AlphaMode::from(mat.alpha_mode());
-                        let base_color_texture = pbr.base_color_texture().map(|info| {
-                            let index = info.texture().index();
-                            let data = &images[index];
-                            Arc::new(
-                                UploadedImage::load_from_data(
-                                    data,
-                                    device,
-                                    queue,
-                                    wgpu::TextureFormat::Rgba8UnormSrgb,
-                                )
-                                .unwrap(),
-                            )
-                        });
-                        let normal_texture = mat.normal_texture().map(|info| {
-                            let index = info.texture().index();
-                            Arc::new(
-                                UploadedImage::load_from_data(
-                                    &images[index],
-                                    device,
-                                    queue,
-                                    wgpu::TextureFormat::Rgba8Unorm,
-                                )
-                                .unwrap(),
-                            )
-                        });
-                        let metallic_roughness_ao_texture =
-                            pbr.metallic_roughness_texture().map(|info| {
-                                let index = info.texture().index();
-                                Arc::new(
-                                    UploadedImage::load_from_data(
-                                        &images[index],
-                                        device,
-                                        queue,
-                                        wgpu::TextureFormat::Rgba8Unorm,
-                                    )
-                                    .unwrap(),
-                                )
-                            });
-                        let emission_texture = mat.emissive_texture().map(|info| {
-                            let index = info.texture().index();
-                            Arc::new(
-                                UploadedImage::load_from_data(
-                                    &images[index],
-                                    device,
-                                    queue,
-                                    wgpu::TextureFormat::Rgba8UnormSrgb,
-                                )
-                                .unwrap(),
-                            )
-                        });
-
-                        PbrMaterial {
-                            base_color_texture,
-                            normal_texture,
-                            color: Some(Color::from_linear_array(pbr.base_color_factor())),
-                            roughness: Some(pbr.roughness_factor()),
-                            metallic: Some(pbr.metallic_factor()),
-                            reflectance: Some(0.0),
-                            alpha_mode: Some(alpha_mode),
-                            metallic_roughness_ao_texture,
-                            emission_texture,
-                        }
-                    };
-
-                    let indices_start = indices.len() as u32;
-                    let indices_num = primitive_indices.len() as u32;
-
-                    indices.append(&mut primitive_indices);
-                    primitives.push(Primitive {
-                        indices_start,
-                        indices_num,
-                        material: Some(material_instance),
-                    });
-                }
-                Mesh {
-                    vertices,
-                    indices,
-                    primitives,
-                }
-            })
-            .collect::<Vec<Mesh>>();
-
-        let duration = start_instant.elapsed();
-        info!(
-            "End Loading <{}>, using {:.3}s",
-            &path,
-            &duration.as_secs_f64()
-        );
-        Ok(Model { meshes })
+        let root = world
+            .get_resource::<AssetRoot>()
+            .cloned()
+            .unwrap_or_default();
+        import_model(&root, &path)
     }
 }
-
 impl Loadable for ShaderModule {
     fn load(path: AssetPath, world: &mut World) -> Result<Self> {
-        let path = path.final_path();
-        let rs = &world.resource::<RenderState>();
-        let device = &rs.device;
-        let wgsl_string = fs::read_to_string(path)?;
-        Ok(device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: None,
-            source: wgpu::ShaderSource::Wgsl(wgsl_string.into()),
-        }))
+        let source = fs::read_to_string(path.final_path())?;
+        Ok(world.resource::<RenderState>().device.create_shader_module(
+            wgpu::ShaderModuleDescriptor {
+                label: None,
+                source: wgpu::ShaderSource::Wgsl(source.into()),
+            },
+        ))
     }
 }

@@ -638,6 +638,7 @@ fn sys_render_mask(
     rs: Res<RenderState>,
     jump_flood_pipeline: Res<OutlineJumpFloodPipeline>,
     composite_pipeline: Res<OutlineCompositePipeline>,
+    assets: Res<lentille_render::asset::SceneAssetCache>,
 ) {
     let InMut(RenderContext {
         camera_id,
@@ -697,7 +698,7 @@ fn sys_render_mask(
         for (entity, renderer) in q_mesh_renderer.iter() {
             if group.entities.contains(&entity) {
                 render_pass.set_bind_group(2, Some(renderer.object_bind_group.as_ref()), &[]);
-                renderer.draw_primitives(&mut render_pass);
+                renderer.draw_primitives(&mut render_pass, &assets);
             }
         }
     }

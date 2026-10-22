@@ -1,4 +1,30 @@
+use bevy_reflect::{Reflect, reflect_remote};
 use std::ops::{Add, Div, Mul, Sub};
+
+#[reflect_remote(cgmath::Vector3<f32>)]
+#[derive(Clone, Debug)]
+pub struct ReflectVec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+}
+
+#[reflect_remote(cgmath::Vector4<f32>)]
+#[derive(Clone, Debug)]
+pub struct ReflectVec4 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
+    pub w: f32,
+}
+
+#[reflect_remote(cgmath::Quaternion<f32>)]
+#[derive(Clone, Debug)]
+pub struct ReflectQuat {
+    pub s: f32,
+    #[reflect(remote = ReflectVec3)]
+    pub v: cgmath::Vector3<f32>,
+}
 
 use cgmath::{Point3, VectorSpace};
 
@@ -13,8 +39,9 @@ pub type Mat4 = cgmath::Matrix4<f32>;
 pub type Mat3 = cgmath::Matrix3<f32>;
 pub type Pnt3 = cgmath::Point3<f32>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
 pub struct Color {
+    #[reflect(remote = ReflectVec4)]
     vec4: Vec4,
 }
 

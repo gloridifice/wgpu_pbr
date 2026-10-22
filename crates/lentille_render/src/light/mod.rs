@@ -14,14 +14,15 @@ pub(crate) struct LightPlugin;
 impl Plugin for LightPlugin {
     fn build(&self, app: &mut bevy_app::App) {
         app.add_observer(event_on_remove_point_light)
-            .add_systems(PostUpdate, sys_update_light_uniform)
             .add_systems(
                 PostUpdate,
                 (
+                    sys_update_light_uniform,
                     sys_update_dynamic_lights,
                     sys_update_dynamic_lights_bind_group,
                 )
-                    .chain(),
+                    .chain()
+                    .after(crate::transform::TransformPostUpdateSet),
             )
             .init_render_resource::<LightUnifromBuffer>()
             .init_render_resource::<DynamicLightBindGroup>()
@@ -145,7 +146,10 @@ pub fn sys_update_dynamic_lights_bind_group(
 
 pub fn sys_update_light_uniform(
     single: Option<
-        Single<(&WorldTransform, &ParallelLight), Or<(Changed<Transform>, Changed<ParallelLight>)>>,
+        Single<
+            (&WorldTransform, &ParallelLight),
+            Or<(Changed<WorldTransform>, Changed<ParallelLight>)>,
+        >,
     >,
     dynamic_lights: Res<DynamicLights>,
     render_light: Res<LightUnifromBuffer>,

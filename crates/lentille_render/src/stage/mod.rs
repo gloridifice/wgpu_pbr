@@ -164,6 +164,9 @@ pub fn sys_render(
     };
 
     for (camera_id, camera_buffer, mut camera_target, csm) in q_camera.iter_mut() {
+        if !csm.initialized {
+            continue;
+        }
         let color_target = camera_target.next();
         let color_attachment = camera_target.get_attachment_color();
         let depth_target = camera_target.depth.clone();

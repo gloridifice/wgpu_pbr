@@ -82,12 +82,20 @@ impl ApplicationHandler for MyApplicationHandler {
             .spawn((WinitWindow(Arc::clone(&window)), PrimaryWindow))
             .id();
 
+        // Observer registration and initialization commands must finish before
+        // the first First/Update schedule consumes render resources.
+        self.app.world_mut().flush();
         self.app.world_mut().trigger(PrimaryWindowCreatedEvent {
             id,
             window: Arc::clone(&window),
         });
+        self.app.world_mut().flush();
 
         self.app.update();
+        if self.app.should_exit().is_some() {
+            event_loop.exit();
+            return;
+        }
 
         window.request_redraw();
     }
@@ -130,6 +138,10 @@ impl ApplicationHandler for MyApplicationHandler {
                     window_event: WindowEvent::RedrawRequested,
                 });
                 self.app.update();
+                if self.app.should_exit().is_some() {
+                    event_loop.exit();
+                    return;
+                }
                 window.request_redraw();
             }
 

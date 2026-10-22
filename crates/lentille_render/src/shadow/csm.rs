@@ -65,6 +65,8 @@ impl_pod_zeroable!(GpuCsmInfoUniform);
 
 #[derive(Component)]
 pub struct CascadeShadowMapping {
+    pub config: CsmConfig,
+    pub initialized: bool,
     pub levels: usize,
     pub pipeline: Arc<RenderPipeline>,
     pub layers: Vec<LayerContext>,
@@ -75,7 +77,7 @@ pub struct CascadeShadowMapping {
 }
 
 impl CascadeShadowMapping {
-    fn new(
+    pub fn new(
         config: &CsmConfig,
         rs: &RenderState,
         shader_source: ShaderSource,
@@ -211,6 +213,8 @@ impl CascadeShadowMapping {
         ));
 
         Self {
+            config: config.clone(),
+            initialized: false,
             levels: config.level_count as usize,
             pipeline,
             shadow_maps,
@@ -222,7 +226,8 @@ impl CascadeShadowMapping {
     }
 }
 
-#[derive(Component)]
+#[derive(Component, Clone, Debug, PartialEq, bevy_reflect::Reflect)]
+#[reflect(Component)]
 pub struct CsmConfig {
     pub level_count: u32,
     pub texture_size: u32,
@@ -244,8 +249,9 @@ pub fn sys_update_csm_buffers(
     mut camera_query: Query<(
         Entity,
         &Camera,
+        Ref<crate::camera::CameraState>,
         Option<&mut CascadeShadowMapping>,
-        &mut CsmConfig,
+        Ref<CsmConfig>,
         Ref<WorldTransform>,
     )>,
 ) {
@@ -253,14 +259,22 @@ pub fn sys_update_csm_buffers(
 
     let light_dir = light_transform.forward();
 
-    for (id, camera, csm, config, world_transform) in camera_query.iter_mut() {
+    for (id, camera, state, csm, config, world_transform) in camera_query.iter_mut() {
         match csm {
-            Some(csm) => {
-                if !world_transform.is_changed() && !light_transform.is_changed() {
+            Some(mut csm)
+                if csm.config.level_count == config.level_count
+                    && csm.config.texture_size == config.texture_size =>
+            {
+                if csm.initialized
+                    && !world_transform.is_changed()
+                    && !light_transform.is_changed()
+                    && !config.is_changed()
+                    && !state.is_changed()
+                {
                     continue;
                 }
 
-                let inv_cam_view_proj = camera.view_proj.invert().unwrap_or(Mat4::identity());
+                let inv_cam_view_proj = state.view_proj.invert().unwrap_or(Mat4::identity());
                 let bounds = calculate_csm_ndc_bounds(
                     csm.levels,
                     camera.znear,
@@ -300,8 +314,10 @@ pub fn sys_update_csm_buffers(
                     },
                     &rs.queue,
                 );
+                csm.config = (*config).clone();
+                csm.initialized = true;
             }
-            None => {
+            _ => {
                 commands.entity(id).insert(CascadeShadowMapping::new(
                     &config,
                     &rs,

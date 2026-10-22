@@ -1,7 +1,8 @@
 use crate::prelude::*;
 use bevy_ecs::prelude::*;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, PartialEq, bevy_reflect::Reflect)]
+#[reflect(Component)]
 #[require(Transform)]
 pub struct PointLight {
     pub color: Color,

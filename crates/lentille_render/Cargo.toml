@@ -8,6 +8,7 @@ edition = "2024"
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_log = { workspace = true }
+bevy_reflect = { workspace = true }
 wgpu = { workspace = true }
 anyhow = { workspace = true }
 # naga_oil = { workspace = true }
@@ -32,3 +33,6 @@ lentille_wgpu_macros = { path = "../lentille_wgpu_macros" }
 [dependencies.gltf]
 version = "1"
 features = ["extras", "names"]
+
+[dev-dependencies]
+tempfile = "3"

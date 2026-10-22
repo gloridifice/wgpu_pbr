@@ -143,8 +143,8 @@ impl FromWorld for DefaultPBRMaterial {
             normal_default_tex,
             &material_sampler.0,
             Arc::clone(&compute_pipeline.pipeline),
-            &PbrMaterial {
-                base_color_texture: Some(missing_tex),
+            &crate::material::pbr::ResolvedMaterial {
+                textures: [Some(missing_tex), None, None, None],
                 ..Default::default()
             },
         );

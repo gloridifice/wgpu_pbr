@@ -2,11 +2,11 @@ use std::cmp::Ordering;
 
 use crate::{
     MainPassObject,
+    asset::SceneAssetCache,
     deferred_rendering::{
         DeferredComputePipeline,
         write_g_buffer_pipeline::{DeferredWriteGBufferPipeline, GBufferTextureBindGroup},
     },
-    material::pbr::PBRMaterialOverride,
     prelude::*,
     shadow::csm::{CascadeShadowMapping, LayerContext},
     stage::RenderContext,
@@ -27,6 +27,7 @@ pub fn sys_render_cascade_shadow_mapping_pass(
     mut ctx: InMut<RenderContext>,
     csm: Query<&CascadeShadowMapping>,
     mesh_renderers: Query<&MeshRenderer, With<CastShadow>>,
+    assets: Res<SceneAssetCache>,
 ) {
     let RenderContext {
         camera_id, encoder, ..
@@ -62,7 +63,7 @@ pub fn sys_render_cascade_shadow_mapping_pass(
         csm_pass.set_pipeline(&csm.pipeline);
         csm_pass.set_bind_group(0, Some(mat_bind_group.as_ref()), &[]);
         for mesh_renderer in mesh_renderers.iter() {
-            mesh_renderer.draw(&mut csm_pass);
+            mesh_renderer.draw(&mut csm_pass, &assets);
         }
     }
 }
@@ -70,11 +71,8 @@ pub fn sys_render_cascade_shadow_mapping_pass(
 pub fn sys_render_write_g_buffer_pass(
     ctx: InMut<RenderContext>,
     main_pipeline: Res<DeferredWriteGBufferPipeline>,
-    default_material: Res<DefaultPBRMaterial>,
-    mesh_renderers: Query<
-        (&MeshRenderer, Option<&PBRMaterialOverride>),
-        (With<Transform>, With<MainPassObject>),
-    >,
+    assets: Res<SceneAssetCache>,
+    mesh_renderers: Query<&MeshRenderer, (With<Transform>, With<MainPassObject>)>,
     q_camera: Query<&GBufferTextureBindGroup>,
 ) {
     let InMut(RenderContext {
@@ -113,8 +111,8 @@ pub fn sys_render_write_g_buffer_pass(
     render_pass.set_pipeline(&main_pipeline.pipeline);
     render_pass.set_bind_group(0, Some(camera_global_bind_group.as_ref()), &[]);
 
-    for (mesh_renderer, override_mat) in mesh_renderers.iter() {
-        mesh_renderer.draw_opaque(&mut render_pass, default_material.0.clone(), override_mat);
+    for mesh_renderer in mesh_renderers.iter() {
+        mesh_renderer.draw_filtered(&mut render_pass, &assets, false);
     }
 }
 
@@ -166,12 +164,9 @@ pub fn sys_render_transparent(
     ctx: InMut<RenderContext>,
     transparent_pipeline: Res<TransparentPipeline>,
     dynamic_lights_bind_group: Res<DynamicLightBindGroup>,
-    default_material: Res<DefaultPBRMaterial>,
-    q_camera: Query<&Camera>,
-    q_objects: Query<
-        (&MeshRenderer, &WorldTransform, Option<&PBRMaterialOverride>),
-        With<MainPassObject>,
-    >,
+    assets: Res<SceneAssetCache>,
+    q_camera: Query<&crate::camera::CameraState>,
+    q_objects: Query<(&MeshRenderer, &WorldTransform), With<MainPassObject>>,
 ) {
     let InMut(RenderContext {
         camera_id,
@@ -214,7 +209,7 @@ pub fn sys_render_transparent(
         timestamp_writes: None,
     });
 
-    for (renderer, _trans, pbr_override) in q_objects.iter().sort_by::<&WorldTransform>(|a, b| {
+    for (renderer, _trans) in q_objects.iter().sort_by::<&WorldTransform>(|a, b| {
         let result_a = camera.view_proj * a.position.with_w(1.0);
         let result_b = camera.view_proj * b.position.with_w(1.0);
         if result_a.z > result_b.z {
@@ -226,6 +221,6 @@ pub fn sys_render_transparent(
         render_pass.set_pipeline(&transparent_pipeline.pipeline);
         render_pass.set_bind_group(0, Some(camera_global_bind_group.as_ref()), &[]);
         render_pass.set_bind_group(3, Some(dynamic_lights_bind_group.bind_group.as_ref()), &[]);
-        renderer.draw_transparent(&mut render_pass, default_material.0.clone(), pbr_override);
+        renderer.draw_filtered(&mut render_pass, &assets, true);
     }
 }

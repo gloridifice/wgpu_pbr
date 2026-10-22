@@ -12,5 +12,6 @@ impl Plugin for ShadowPlugin {
     }
 }
 
-#[derive(Component, Clone, Default)]
+#[derive(Component, Clone, Default, bevy_reflect::Reflect)]
+#[reflect(Component)]
 pub struct CastShadow;

@@ -1,3 +1,4 @@
+use bevy_reflect::Reflect;
 use std::sync::Arc;
 
 use crate::transform::TransformPostUpdateSet;
@@ -51,15 +52,27 @@ impl Plugin for CameraPlugin {
 
 /// Camera component
 /// todo add comments
-#[derive(Component, Clone)]
-#[require(Transform, RenderTargetConfig)]
+#[derive(Component, Clone, Debug, PartialEq, Reflect)]
+#[reflect(Component)]
+#[require(Transform, RenderTargetConfig, CameraState)]
 pub struct Camera {
-    /// Height / Width
-    pub aspect: f32,
     pub fovy: f32,
     pub znear: f32,
     pub zfar: f32,
+}
+
+#[derive(Component, Clone)]
+pub struct CameraState {
+    pub aspect: f32,
     pub view_proj: Matrix4<f32>,
+}
+impl Default for CameraState {
+    fn default() -> Self {
+        Self {
+            aspect: 1.0,
+            view_proj: Matrix4::identity(),
+        }
+    }
 }
 
 /// Store wgpu buffer for gpu of camera's info
@@ -84,15 +97,16 @@ impl_pod_zeroable!(CameraUniform);
 
 /// 这是一个用于延迟产生 RenderTarget 的结构体。
 /// 因为生成相机的时候主窗口可能不存在。
-#[derive(Default, Clone, Debug, Component)]
+#[derive(Default, Clone, Debug, PartialEq, Component, Reflect)]
+#[reflect(Component)]
 pub enum RenderTargetConfig {
     #[default]
+    Viewport,
     PrimaryWindow,
-    Window(Entity),
+    Window(#[entities] Entity),
     Texture {
         width: u32,
         height: u32,
-        format: wgpu::TextureFormat,
     },
 }
 
@@ -138,26 +152,29 @@ impl FromWorld for CameraBuffer {
 }
 
 impl Camera {
-    pub fn build_view_projection_matrix(&self, transform: &WorldTransform) -> Matrix4<f32> {
+    pub fn build_view_projection_matrix(
+        &self,
+        transform: &WorldTransform,
+        aspect: f32,
+    ) -> Matrix4<f32> {
         let view = transform.view_matrix();
-        let proj = perspective(cgmath::Deg(self.fovy), self.aspect, self.znear, self.zfar);
+        let proj = perspective(cgmath::Deg(self.fovy), aspect, self.znear, self.zfar);
         OPENGL_TO_WGPU_MATRIX * proj * view
     }
 
-    pub fn new(aspect: f32) -> Camera {
+    pub fn new(_aspect: f32) -> Camera {
         Self {
-            aspect,
             fovy: 45.0,
             znear: 0.01,
             zfar: 1000.0,
-            view_proj: Matrix4::identity(),
         }
     }
 
     pub fn get_uniform(&self, transform: &WorldTransform, resolution: [f32; 2]) -> CameraUniform {
         let pos = transform.position;
         let dir = transform.forward();
-        let view_proj = self.build_view_projection_matrix(transform);
+        let view_proj =
+            self.build_view_projection_matrix(transform, resolution[0] / resolution[1].max(1.0));
         let inv_view_proj = view_proj.invert().unwrap_or(Mat4::identity());
 
         CameraUniform {
@@ -296,7 +313,12 @@ impl RenderTarget {
 pub fn sys_resize_render_target(
     mut commands: Commands,
     q_render_target: Query<
-        (Entity, &mut Camera, &mut RenderTarget, &RenderTargetSize),
+        (
+            Entity,
+            &mut CameraState,
+            &mut RenderTarget,
+            &RenderTargetSize,
+        ),
         Changed<RenderTargetSize>,
     >,
     mut q_window_surface: Query<&mut SurfaceState>,
@@ -349,20 +371,29 @@ fn sys_create_or_update_camera_buffer(
     q_camera: Query<
         (
             Entity,
-            &mut Camera,
+            &Camera,
+            &mut CameraState,
             &WorldTransform,
             &RenderTargetSize,
             Option<&CameraBuffer>,
         ),
-        (Or<(Changed<Camera>, Changed<WorldTransform>)>,),
+        (
+            Or<(
+                Changed<Camera>,
+                Changed<WorldTransform>,
+                Changed<RenderTargetSize>,
+                Added<CameraState>,
+                Without<CameraBuffer>,
+            )>,
+        ),
     >,
     rs: Res<RenderState>,
 ) {
-    for (id, mut camera, transform, render_target_size, camera_buffer) in q_camera {
+    for (id, camera, mut state, transform, render_target_size, camera_buffer) in q_camera {
+        state.aspect = render_target_size.width as f32 / render_target_size.height.max(1) as f32;
+        state.view_proj = camera.build_view_projection_matrix(transform, state.aspect);
         match camera_buffer {
             Some(camera_buffer) => {
-                camera.view_proj = camera.build_view_projection_matrix(transform);
-
                 camera_buffer.buffer.write(
                     camera.get_uniform(
                         transform,
@@ -375,7 +406,6 @@ fn sys_create_or_update_camera_buffer(
                 );
             }
             None => {
-                camera.view_proj = camera.build_view_projection_matrix(transform);
                 let buffer = CameraBuffer::new(&rs.device);
                 buffer.buffer.write(
                     camera.get_uniform(
@@ -395,7 +425,10 @@ fn sys_create_or_update_camera_buffer(
 
 fn sys_create_render_target(
     mut commands: Commands,
-    q_camera: Query<(Entity, &RenderTargetConfig), Without<RenderTarget>>,
+    q_camera: Query<
+        (Entity, &RenderTargetConfig),
+        Or<(Without<RenderTarget>, Changed<RenderTargetConfig>)>,
+    >,
     q_primary_window: Option<Single<&SurfaceState, With<PrimaryWindow>>>,
     q_window: Query<&SurfaceState, Without<PrimaryWindow>>,
     rs: Res<RenderState>,
@@ -417,12 +450,13 @@ fn sys_create_render_target(
                     surface_state.config.height,
                 )
             }),
-            RenderTargetConfig::Texture {
-                width,
-                height,
-                format,
-            } => Some((
-                RenderTarget::new_texture_target(*width, *height, *format, device),
+            RenderTargetConfig::Viewport => Some((
+                RenderTarget::new_texture_target(1600, 900, crate::SCREEN_FORMAT, device),
+                1600,
+                900,
+            )),
+            RenderTargetConfig::Texture { width, height } => Some((
+                RenderTarget::new_texture_target(*width, *height, crate::SCREEN_FORMAT, device),
                 *width,
                 *height,
             )),
@@ -431,8 +465,7 @@ fn sys_create_render_target(
         if let Some((render_target, width, height)) = make_result {
             commands
                 .entity(id)
-                .insert((render_target, RenderTargetSize { width, height }))
-                .remove::<RenderTargetConfig>();
+                .insert((render_target, RenderTargetSize { width, height }));
             commands.trigger(RenderTargetResizedEvent {
                 render_target_entity: id,
                 new_width: width,

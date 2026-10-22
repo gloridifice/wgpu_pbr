@@ -1,5 +1,6 @@
 use bevy_app::{Plugin, PostUpdate};
 use bevy_ecs::prelude::*;
+use bevy_reflect::Reflect;
 use cgmath::{ElementWise, Matrix3, Matrix4, Rotation, SquareMatrix, Vector3};
 use derive_builder::Builder;
 use lentille_wgpu_utils::impl_pod_zeroable;
@@ -29,22 +30,28 @@ impl Plugin for TransformPlugin {
 }
 
 #[allow(unused)]
-#[derive(Component, Builder, Clone, Debug)]
+#[derive(Component, Builder, Clone, Debug, PartialEq, Reflect)]
+#[reflect(Component)]
 #[require(WorldTransform)]
 pub struct Transform {
     #[builder(default = None)]
+    #[entities]
     pub parent: Option<Entity>,
     #[builder(default = vec![])]
+    #[reflect(ignore)]
     pub children: Vec<Entity>,
     #[builder(default = Vec3::zero())]
+    #[reflect(remote = ReflectVec3)]
     pub position: Vec3,
     #[builder(default = Quat::identity())]
+    #[reflect(remote = ReflectQuat)]
     pub rotation: Quat,
     #[builder(default = Vec3::one())]
+    #[reflect(remote = ReflectVec3)]
     pub scale: Vec3,
 }
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Debug, PartialEq)]
 pub struct WorldTransform {
     pub position: Vec3,
     pub rotation: Quat,
@@ -73,48 +80,76 @@ impl Default for WorldTransform {
 pub fn sys_update_world_transform(
     mut q_transform: Query<(Entity, &Transform, &mut WorldTransform)>,
 ) {
-    let vec = q_transform
+    let local = q_transform
         .iter()
-        .map(|(id, trans, _)| {
-            let world_transform = cal_world_transform(trans, &q_transform);
-            (id, world_transform)
-        })
-        .collect::<Vec<_>>();
-    vec.into_iter().for_each(|(id, world_transform)| {
+        .map(|(id, trans, _)| (id, trans.clone()))
+        .collect();
+    let Ok(worlds) = compute_world_transforms(&local) else {
+        return;
+    };
+    worlds.into_iter().for_each(|(id, world_transform)| {
         let (_, _, mut to_modified) = q_transform.get_mut(id).unwrap();
-        *to_modified = world_transform;
+        if *to_modified != world_transform {
+            *to_modified = world_transform;
+        }
     });
 }
 
 fn sys_update_transform_buffers(world: &mut World) {
     world.resource_scope(|world, render_state: Mut<RenderState>| {
         let mut query =
-            world.query_filtered::<(&WorldTransform, &MeshRenderer), Changed<WorldTransform>>();
+            world.query_filtered::<(&WorldTransform, &MeshRenderer), Or<(Changed<WorldTransform>, Added<MeshRenderer>)>>();
         for (world_trans, mesh_renderer) in query.iter(world) {
             mesh_renderer.update_transform_buffer(&render_state.queue, world_trans.get_uniform());
         }
     });
 }
 
-pub fn cal_world_transform(
-    transform: &Transform,
-    query: &Query<(Entity, &Transform, &mut WorldTransform)>,
-) -> WorldTransform {
-    if let Some(parent_id) = transform.parent {
-        if let Ok((_, p_trans, _)) = query.get(parent_id) {
-            let parent_world_trans = cal_world_transform(p_trans, query);
-            return WorldTransform {
-                position: transform.position + parent_world_trans.position,
-                rotation: parent_world_trans.rotation * transform.rotation,
-                scale: parent_world_trans.scale.mul_element_wise(transform.scale),
+/// Resolve each parent before its children. Used by both candidate preparation
+/// and frame updates, with no recursion or stale previous-frame parent values.
+pub fn compute_world_transforms(
+    local: &std::collections::HashMap<Entity, Transform>,
+) -> anyhow::Result<std::collections::HashMap<Entity, WorldTransform>> {
+    use std::collections::{HashMap, HashSet};
+    let mut resolved: HashMap<Entity, WorldTransform> = HashMap::new();
+    for &entity in local.keys() {
+        let mut chain = Vec::new();
+        let mut seen = HashSet::new();
+        let mut cursor = Some(entity);
+        while let Some(id) = cursor {
+            if resolved.contains_key(&id) {
+                break;
+            }
+            anyhow::ensure!(seen.insert(id), "Transform parent cycle");
+            let transform = local
+                .get(&id)
+                .ok_or_else(|| anyhow::anyhow!("Missing parent transform"))?;
+            chain.push(id);
+            cursor = transform.parent;
+        }
+        for id in chain.into_iter().rev() {
+            let transform = &local[&id];
+            let world = if let Some(parent) = transform.parent {
+                let parent = &resolved[&parent];
+                WorldTransform {
+                    position: parent.position
+                        + parent
+                            .rotation
+                            .rotate_vector(parent.scale.mul_element_wise(transform.position)),
+                    rotation: parent.rotation * transform.rotation,
+                    scale: parent.scale.mul_element_wise(transform.scale),
+                }
+            } else {
+                WorldTransform {
+                    position: transform.position,
+                    rotation: transform.rotation,
+                    scale: transform.scale,
+                }
             };
+            resolved.insert(id, world);
         }
     }
-    WorldTransform {
-        position: transform.position,
-        rotation: transform.rotation,
-        scale: transform.scale,
-    }
+    Ok(resolved)
 }
 
 impl Default for Transform {
@@ -224,11 +259,12 @@ pub fn sys_update_children(mut q_transform: Query<(Entity, &mut Transform)>) {
         .filter_map(|(id, trans)| trans.parent.map(|parent| (id, parent)))
         .collect::<Vec<_>>();
 
+    for (_, mut transform) in q_transform.iter_mut() {
+        transform.bypass_change_detection().children.clear();
+    }
     for (child, parent) in child_parent.into_iter() {
         if let Ok((_, mut trans)) = q_transform.get_mut(parent) {
-            if !trans.children.contains(&child) {
-                trans.children.push(child);
-            }
+            trans.bypass_change_detection().children.push(child);
         }
     }
 }

@@ -98,6 +98,8 @@ impl Plugin for RenderPlugin {
             BlitPlugin,
             GizmoPlugin,
         ))
+        .init_resource::<asset::AssetRoot>()
+        .init_resource::<asset::SceneAssetCache>()
         .init_resource::<ShaderLoader>()
         .init_resource::<RenderState>();
 
@@ -124,7 +126,7 @@ impl Plugin for RenderPlugin {
             .add_systems(Update, sys_create_surface)
             .add_systems(
                 PostUpdate,
-                material::pbr::sys_update_override_pbr_material_bind_group,
+                asset::sys_prepare_assets.before(transform::TransformPostUpdateSet),
             )
             .add_render_system(sys_render_cascade_shadow_mapping_pass, PreStage)
             .add_render_system(sys_render_write_g_buffer_pass, OpaqueStage)
@@ -147,10 +149,11 @@ pub struct PostProcessStage;
 #[derive(RenderStage)]
 pub struct PickStage;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, bevy_reflect::Reflect)]
+#[reflect(Component)]
 pub struct MainPassObject;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, bevy_reflect::Reflect)]
 pub enum AlphaMode {
     Opaque,
     Blend,
@@ -169,6 +172,9 @@ pub enum FrameSets {
     PostDraw,
     Present,
 }
+
+#[derive(Resource)]
+pub struct RenderReady;
 
 #[derive(Resource)]
 pub struct RenderState {
@@ -297,6 +303,7 @@ fn sys_init_window(_event: On<PrimaryWindowCreatedEvent>, mut commands: Commands
         for res in graph {
             res(world);
         }
+        world.insert_resource(RenderReady);
         world.run_schedule(RenderPreparedStartup);
     });
 }

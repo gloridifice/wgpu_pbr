@@ -18,7 +18,8 @@ use lentille_math::Vec2;
 // ===== Components =====
 
 /// Marker component: this entity (and its subtree) participates in ray-picking.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, bevy_reflect::Reflect)]
+#[reflect(Component)]
 pub struct Pickable;
 
 /// Auto-assigned unique identifier for GPU-CPU entity mapping.
@@ -108,6 +109,13 @@ impl PickReadback {
     pub fn is_idle(&self) -> bool {
         matches!(self, PickReadback::Idle)
     }
+}
+
+/// Lets an in-flight GPU readback finish without applying a previous scene's result.
+#[derive(Resource, Default)]
+pub struct PickSceneEpoch {
+    pub current: u64,
+    pub submitted: u64,
 }
 
 /// The result of the most recent pick, updated each time a `PickRequest` is

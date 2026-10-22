@@ -8,7 +8,14 @@ use lentille_render::{RenderState, SurfaceState};
 
 use crate::editor::gui::EditorGuiPlugin;
 
+pub(crate) fn clear_scene_ui(world: &mut bevy_ecs::world::World) {
+    gui::clear_scene_ui(world);
+}
+
 mod gui;
+
+#[derive(bevy_ecs::schedule::SystemSet, Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) struct EditorUiSet;
 
 pub struct EditorPlugin;
 

@@ -33,11 +33,17 @@ bevy_ecs = { version = "0.18", features = ["default", "debug"] }
 bevy_app = "0.18"
 bevy_log = "0.18"
 bevy_reflect = "0.18"
+bevy_scene = "0.18"
 
 [dependencies]
 bevy_app = { workspace = true }
 bevy_ecs = { workspace = true }
 bevy_log = { workspace = true }
+bevy_reflect = { workspace = true }
+bevy_scene = { workspace = true }
+anyhow = { workspace = true }
+ron_scene = { package = "ron", version = "0.12" }
+tempfile = "3"
 wgpu = { workspace = true }
 winit = { workspace = true }
 rand = { workspace = true }
@@ -69,3 +75,7 @@ tracing-subscriber = "0.3.23"
 tracing-chrome = "0.7.2"
 tracing-log = "0.2.0"
 wgpu-subscriber = "0.1.0"
+
+[dev-dependencies]
+serde_json = "1"
+image = "0.25"
