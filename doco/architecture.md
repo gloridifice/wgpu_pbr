@@ -32,7 +32,7 @@ MeshRenderer / 相机与环境派生状态
 
 ## 渲染颜色链路
 
-不透明物体使用 G-buffer + 全屏延迟光照，透明 primitive 使用前向绘制。每相机拥有线性 Rgba16Float 的 HDR ping-pong A/B 和独立 SDR display；帧内显式交换读写目标，Stage 执行闭包传递最新索引，仍按 Stage 独立提交 GPU 命令。透明准备先复制并交换，使透明读取本帧不透明背景而非历史帧。
+不透明物体使用 G-buffer + 全屏延迟光照，透明 primitive 使用前向绘制。每相机拥有线性 Rgba16Float 的 HDR ping-pong A/B 和独立 SDR display；帧内显式交换读写目标；每相机的 Stage 在同一延迟执行闭包中共享 encoder 和上下文，入口刷新背景绑定，全部阶段结束后一次提交。显式阶段条件跳过无请求的拾取和无描边的遮罩阶段；egui 保留独立提交。透明准备先复制并交换，使透明读取本帧不透明背景而非历史帧。
 
 主链路为 CSM → G-buffer/光照 → 透明背景准备 → 透明 → ToneMapping → 描边合成 → Gizmo。ToneMapping 使用运行时全局曝光补偿和 Reinhard，写 Bgra8UnormSrgb，由硬件编码；编辑器叠加不受曝光影响。当前 `DeferredComputePipeline` 名称仍沿用旧命名，实际是全屏 raster RenderPipeline。
 
@@ -46,6 +46,8 @@ Viewport 的对外纹理与 display 共享，不再从 HDR 做纹理复制。egu
 
 候选全部就绪后由排他系统提交。可恢复的 IO/解析/资源错误或取消不会删除活动场景、改变当前路径或保存基线。提交时同步相机控制器、环境 SH，清理选择与属性窗口；旧拾取读回按场景 epoch 丢弃。确认和加载期间通过控制器只读状态保护属性、CSM、相机及行为写入，暂停活动资产/环境准备；仍可选择、浏览目录和 resize。Save/Retry 仍同步，渲染初始化与最终 O(实体数) 提交仍可产生耗时尖峰。
 
+dirty 判定缓存持久快照：按白名单组件 change ticks 和 SceneOwned 实体/组件集合检测失效，无变化时不反射提取或编码 RON。实际变化仍与保存基线比较，Save 和成功切换重置缓存，不依赖 UI 独占写入口。
+
 UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后更新变换、相机和灯光，Last 中执行渲染。旧 viewport 的 egui 纹理注册延迟到本帧 UI 绘制之后释放，避免切换时引用已释放的纹理。
 
 ## 编辑器
@@ -53,6 +55,12 @@ UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后
 `src/editor/gui/mod.rs` 管理 Dock。默认中央 viewport 下方是 UE 式 Content Browser 面板，两侧 Control Panel 和 CSM Preview 独立。面板使用局部深灰主题、懒加载目录树、可见行虚拟化的卡片网格、当前目录搜索和 View 尺寸控制；只展示文件夹与 `.scn.ron`，不展示其他资产或真实缩略图。树与网格共享按目录缓存；导航、展开和显式刷新触发按需读取，双击通过场景请求打开，不自行解析文件或操作 GPU。
 
 属性面板先编辑配置副本，实际变化才写回 ECS。相机控制在 UI 判定 viewport 输入归属之后执行：右键按住飞行、F 聚焦选中子树、Alt + 左键围绕焦点旋转；导航期间捕获光标，释放、失焦或只读时退出。输入层累计原始鼠标位移并记录按钮按住状态，聚焦通过 SceneAssetCache 的只读 CPU 网格访问计算世界包围范围。详见 [视口相机导航](specs/viewport-navigation.md)。浏览目录、搜索与树/卡片视图状态、面板高度不进入场景文件。
+
+## CPU 性能观测
+
+Tracy 由默认关闭的 `profile-tracy` 开启：core 持有客户端并提供编译期可消除的 scope、线程命名和帧标记，根插件在渲染初始化之前启动客户端，通过现有 LogPlugin 安装 Tracy layer。已配置的全局 subscriber 不重复初始化；Tracy 构建与旧 `-t` 互斥。`profile-tracy-deps` 追加 wgpu/egui 等依赖的 CPU scopes，`profiling` 构建配置继承 release 并保留符号。
+
+自定义 winit runner 每次 app.update 仅打一次帧标记；实际延迟渲染 Stage、encoder finish、submit、surface acquire/present、egui 和场景加载/提交分别观测。不改变调度、提交或同步语义，不采 GPU timestamp。操作和过滤规则见 [Tracy CPU 抓帧](specs/profiling.md)。
 
 ## 入口与验证
 

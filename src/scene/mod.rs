@@ -9,6 +9,7 @@ pub mod browser;
 pub mod codec;
 pub mod controller;
 pub mod loading;
+mod snapshot_cache;
 pub use controller::{SceneController, SceneRequest};
 pub use loading::SceneLoadSettings;
 

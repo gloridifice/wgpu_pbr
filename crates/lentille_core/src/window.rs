@@ -68,6 +68,16 @@ pub struct MyApplicationHandler {
     app: App,
 }
 
+impl MyApplicationHandler {
+    fn update_frame(&mut self) {
+        {
+            crate::profile_scope!("FrameCPU");
+            self.app.update();
+        }
+        crate::profiling::frame_mark();
+    }
+}
+
 impl ApplicationHandler for MyApplicationHandler {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         let window = Arc::new(
@@ -91,7 +101,7 @@ impl ApplicationHandler for MyApplicationHandler {
         });
         self.app.world_mut().flush();
 
-        self.app.update();
+        self.update_frame();
         if self.app.should_exit().is_some() {
             event_loop.exit();
             return;
@@ -137,7 +147,7 @@ impl ApplicationHandler for MyApplicationHandler {
                     window_id,
                     window_event: WindowEvent::RedrawRequested,
                 });
-                self.app.update();
+                self.update_frame();
                 if self.app.should_exit().is_some() {
                     event_loop.exit();
                     return;

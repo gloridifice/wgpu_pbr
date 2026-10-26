@@ -67,6 +67,7 @@ impl Plugin for OutlinePlugin {
                 after::<OpaqueStage>(),
                 before::<PostProcessStage>(),
             ])
+            .set_render_stage_condition::<WriteMaskStage>(outline_mask_needed)
             .add_render_system(sys_render_mask, WriteMaskStage)
             .add_render_system(sys_jump_flood_and_render_outline, PostProcessStage)
             .init_render_resource_with_config::<OutlineMaskPipeline>([
@@ -628,6 +629,13 @@ fn sync_camera_outline_layers(
     }
 }
 
+fn outline_mask_needed(world: &World, camera: Entity) -> bool {
+    !world.resource::<OutlineGroupMap>().map.is_empty()
+        // Run once after deselection to retire the old per-camera layers.
+        || world.get::<CameraOutlineMaskBuffer>(camera)
+            .is_some_and(|buffer| !buffer.layers.is_empty())
+}
+
 fn sys_render_mask(
     ctx: InMut<RenderContext>,
     outline_group_map: Res<OutlineGroupMap>,
@@ -732,6 +740,9 @@ fn sys_jump_flood_and_render_outline(
         return;
     };
 
+    if outline_group_map.map.is_empty() {
+        return;
+    }
     let steps = jump_flood_steps(camera_outline.size.width, camera_outline.size.height);
     for type_id in outline_group_map.map.keys() {
         let Some(layer) = camera_outline.layers.get(type_id) else {

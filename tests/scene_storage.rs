@@ -336,11 +336,8 @@ fn saving_replaces_complete_file_and_invalid_save_preserves_old_bytes() {
     assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
 }
 
-#[test]
-fn scene_controller_protects_edits_and_preserves_state_on_io_failure() {
-    use wgpu_pbr::scene::controller::{
-        SceneController, SceneRequest, UnsavedDecision, sys_scene_requests,
-    };
+fn saved_controller_fixture() -> (World, tempfile::TempDir) {
+    use wgpu_pbr::scene::controller::{SceneController, SceneRequest, sys_scene_requests};
     let codec = SceneCodec::new();
     let mut world = fixture(&codec);
     let dir = tempfile::tempdir().unwrap();
@@ -358,6 +355,75 @@ fn scene_controller_protects_edits_and_preserves_state_on_io_failure() {
         .request(SceneRequest::SaveAs("current.scn.ron".into()));
     sys_scene_requests(&mut world);
     assert!(world.resource::<SceneController>().error.is_none());
+    (world, dir)
+}
+
+#[test]
+fn scene_dirty_tracks_edits_reverts_and_structural_changes_without_ui() {
+    use wgpu_pbr::scene::controller::{SceneController, SceneRequest, sys_scene_requests};
+    let (mut world, _dir) = saved_controller_fixture();
+    let child = world
+        .query_filtered::<Entity, With<PbrMaterial>>()
+        .single(&world)
+        .unwrap();
+    let check = |world: &mut World, dirty: bool| {
+        sys_scene_requests(world);
+        let state = world.resource::<SceneController>();
+        assert!(state.error.is_none(), "{:?}", state.error);
+        assert_eq!(state.dirty, dirty);
+    };
+    check(&mut world, false);
+    check(&mut world, false);
+
+    // Runtime components and non-owned entities never belong to the baseline.
+    world.entity_mut(child).insert(WorldTransform::default());
+    let foreign = world.spawn(Name::new("Runtime entity")).id();
+    check(&mut world, false);
+    world.get_mut::<WorldTransform>(child).unwrap().position.x += 1.0;
+    *world.get_mut::<Name>(foreign).unwrap() = Name::new("Runtime rename");
+    check(&mut world, false);
+
+    // Direct World writes (with no app.update in between) and undo-to-baseline.
+    world.get_mut::<PbrMaterial>(child).unwrap().roughness = Some(0.75);
+    check(&mut world, true);
+    world.get_mut::<PbrMaterial>(child).unwrap().roughness = Some(0.25);
+    check(&mut world, false);
+    let parent = world.get::<Transform>(child).unwrap().parent;
+    world.get_mut::<Transform>(child).unwrap().parent = None;
+    check(&mut world, true);
+    world.get_mut::<Transform>(child).unwrap().parent = parent;
+    check(&mut world, false);
+
+    let material = world.entity_mut(child).take::<PbrMaterial>().unwrap();
+    check(&mut world, true);
+    world.entity_mut(child).insert(material);
+    check(&mut world, false);
+    world.entity_mut(child).remove::<SceneOwned>();
+    check(&mut world, true);
+    world.entity_mut(child).insert(SceneOwned);
+    check(&mut world, false);
+
+    // Even an owned entity with no persistent components changes the scene.
+    let empty = world.spawn(SceneOwned).id();
+    check(&mut world, true);
+    world.despawn(empty);
+    check(&mut world, false);
+    world.despawn(child);
+    check(&mut world, true);
+    world
+        .resource_mut::<SceneController>()
+        .request(SceneRequest::Open("missing.scn.ron".into()));
+    sys_scene_requests(&mut world);
+    assert!(world.resource::<SceneController>().pending_open.is_some());
+    assert!(world.resource::<SceneController>().loading.is_none());
+}
+
+#[test]
+fn scene_controller_protects_edits_and_preserves_state_on_io_failure() {
+    use wgpu_pbr::scene::controller::{
+        SceneController, SceneRequest, UnsavedDecision, sys_scene_requests,
+    };
+    let (mut world, dir) = saved_controller_fixture();
     let saved = fs::read(dir.path().join("current.scn.ron")).unwrap();
     let entity = world
         .query_filtered::<Entity, With<PbrMaterial>>()

@@ -173,5 +173,12 @@ pub fn blit(
         render_pass.draw(0..3, 0..1);
     }
 
-    queue.submit(std::iter::once(encoder.finish()));
+    let command_buffer = {
+        lentille_core::profile_scope!("EncoderFinish");
+        encoder.finish()
+    };
+    {
+        lentille_core::profile_scope!("QueueSubmit");
+        queue.submit(std::iter::once(command_buffer));
+    }
 }

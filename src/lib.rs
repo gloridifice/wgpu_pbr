@@ -50,25 +50,34 @@ fn sys_on_pick_event(
 pub struct WgpuPbrPlugin;
 impl Plugin for WgpuPbrPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            LogPlugin::default(),
-            RenderPlugin,
-            InputPlugin,
-            TimePlugin,
-            WindowPlugin,
-        ))
-        .add_plugins((
-            ControlPlugin,
-            EditorPlugin,
-            OutlinePlugin,
-            PickingPlugin,
-            scene::ScenePlugin,
-        ))
-        .add_systems(
-            Update,
-            (sys_update_rotation.run_if(scene::scene_editable), sys_gizmo),
-        )
-        .add_observer(sys_on_pick_event);
+        lentille_core::profiling::init(app);
+        lentille_core::profiling::name_thread("main");
+        // Legacy -t (and embedding applications) may already own the subscriber.
+        if !tracing::dispatcher::has_been_set() {
+            let log_plugin = LogPlugin::default();
+            #[cfg(feature = "profile-tracy")]
+            let log_plugin = LogPlugin {
+                // Bevy's default `wgpu=error` also matches our `wgpu_pbr` target.
+                filter: format!("{},wgpu_pbr=info", log_plugin.filter),
+                // tracing-tracy reuses formatted fields; ANSI pollutes zone names.
+                fmt_layer: |_| Some(Box::new(tracing_subscriber::fmt::layer().with_ansi(false))),
+                ..log_plugin
+            };
+            app.add_plugins(log_plugin);
+        }
+        app.add_plugins((RenderPlugin, InputPlugin, TimePlugin, WindowPlugin))
+            .add_plugins((
+                ControlPlugin,
+                EditorPlugin,
+                OutlinePlugin,
+                PickingPlugin,
+                scene::ScenePlugin,
+            ))
+            .add_systems(
+                Update,
+                (sys_update_rotation.run_if(scene::scene_editable), sys_gizmo),
+            )
+            .add_observer(sys_on_pick_event);
     }
 }
 #[derive(Debug, Clone, PartialEq, Component, bevy_reflect::Reflect)]

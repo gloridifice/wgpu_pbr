@@ -20,7 +20,11 @@ CSM → G-buffer / 延迟光照 → 透明背景准备 → 透明 → ToneMappin
 
 透明背景准备复制 current 到 alternate 并交换，使透明阶段采样本帧不透明背景、写入另一张颜色纹理。透明 pass 使用 Load 保留未覆盖像素；同一 pass 不可同时采样与写入同一颜色纹理。普通全屏 HDR 后处理可直接写 alternate 再交换，不要求复制背景。
 
-每个 Stage 的上下文在前一 Stage 执行后创建，HDR 索引跨阶段传递。当前相机全局颜色采样绑定在阶段入口指向 alternate；若一个阶段内实现多个全屏操作，操作自身需绑定其实际输入，不能假设已有全局绑定随 swap 自动改变。各 Stage 保持独立 command encoder 和顺序 queue submit，不在 CPU 上等待 GPU。
+每相机的全部 Stage 共享一个 RenderContext 和 command encoder，HDR 索引保留在上下文中；当前相机全局颜色采样绑定在每个阶段入口刷新为 alternate。若一个阶段内实现多个全屏操作，操作自身需绑定其实际输入，不能假设已有全局绑定随 swap 自动改变。每相机完成全部可运行阶段后一次 finish/queue submit，不在 CPU 上等待 GPU；egui 和直接窗口 blit 仍单独提交。单相机普通编辑器稳定帧为场景、egui 两次提交，不包括加载批次或额外窗口输出。
+
+Stage 默认执行，可通过 AppExt::set_render_stage_condition 注册只读的每相机条件；条件作用于该 Stage 的全部系统。没有系统或条件为假时跳过阶段；相机没有任何可运行阶段时不创建 encoder、不提交。PickStage 只在该相机有 PickRequest 且读回空闲时运行，拷贝随相机批次提交后，PreUpdate 在后续帧 map/poll。描边遮罩只在有组或需要释放旧相机层时运行，无描边组时合成函数不创建空 pass。阶段 debug group 保留在共用 encoder 中。
+
+Stage 边界不再表示 GPU 提交边界。阶段间需要有序更新同一 buffer 时应编码 copy 或使用不同的 buffer 区域；不能靠多次 queue.write_buffer 加 Stage 顺序表达 GPU 中途更新，因为这些写入在下一次 submit 的命令前执行。
 
 拾取在不透明之后、透明之前；描边遮罩在不透明之后、描边合成之前。这些独立分支不构成完整的线性排序。
 

@@ -36,10 +36,14 @@ Save 更新当前文件；Save As 使用 assets 根内既有目录，新增文�
 
 使用持久快照与保存基线比较实际修改；仅查看属性、更新 GPU、派生矩阵或编辑器布局不标脏。行为系统实际改变的局部 Transform 会保存，不提供独立 Play World。
 
+控制器缓存当前持久快照。每次检查白名单组件 change ticks，以及 SceneOwned 实体与持久组件的完整成员集合；没有变化则复用快照，不执行反射提取/RON 编码。成员集合变化覆盖组件删除、移除 SceneOwned 和实体销毁，包括不含持久组件的 SceneOwned 实体。直接 World 写入与系统写入均可失效缓存，不限于编辑器事件；绕过 Bevy change detection 的写入需由写入方显式标记变化。组件虽标记 changed 但值相同时，仍通过快照比较保持 clean；恢复原值也恢复 clean。
+
+每次检查建立独立 tick 边界，长期停用超过 change tick 的有效年龄时强制刷新。保存显式生成并校验完整快照；保存和成功场景提交重置缓存。检查失败不推进缓存边界，后续重试；保存失败、加载失败和取消仍保留原保存基线和修改保护。
+
 打开其他内容时，未保存场景必须选择 Save and Open / Discard and Open / Cancel。保存失败或取消路径对话框不继续打开。错误在 UI 中可见。确认等待及加载期间，属性编辑、CSM 参数、相机移动和会改变持久数据的旋转行为暂停；禁止其他 Open/Reload/Save/Retry，内部 Save and Open 保存除外。仍可选择、浏览目录、改变布局和 viewport 尺寸。取消或失败不清 dirty 或保存基线；提交前按最新 viewport 尺寸准备候选相机。
 
 ## 复现工具
 
 `cargo run --example generate_scenes` 生成最小场景与演示场景；演示场景依赖仓库模型，最小场景只使用程序化平面和应用默认环境。
 
-`cargo run --example scene_smoke` 使用真实 GPU/窗口和场景控制器检查异步跨帧准备、加载中持久快照不变和 resize、GPU 取消与随后打开、未保存保护、磁盘保存重载及 CPU/GPU 候选失败时旧场景保留。该工具不替代原生鼠标/键盘交互验收。
+`cargo run --example scene_smoke` 使用真实 GPU/窗口和场景控制器检查异步跨帧准备、加载中持久快照不变和 resize、GPU 取消与随后打开、未保存保护、磁盘保存重载及 CPU/GPU 候选失败时旧场景保留；并通过真实拾取读回、选择后 display 像素变化和取消选择后像素恢复验证合并提交与描边条件。该工具不替代原生鼠标/键盘交互验收。

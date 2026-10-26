@@ -3,7 +3,7 @@ use bevy_ecs::query::With;
 use bevy_ecs::world::FromWorld;
 use egui::Context;
 use egui_wgpu::wgpu::{CommandEncoder, Device, Queue, StoreOp, TextureFormat, TextureView};
-use egui_wgpu::{wgpu, Renderer, ScreenDescriptor};
+use egui_wgpu::{Renderer, ScreenDescriptor, wgpu};
 use egui_winit::State;
 use lentille_core::window::{PrimaryWindow, WinitWindow};
 use lentille_render::{RenderState, SCREEN_FORMAT};
@@ -100,21 +100,33 @@ impl EguiRenderer {
 
         self.set_pixel_per_point(screen_descriptor.pixels_per_point);
 
-        let full_output = self.state.egui_ctx().end_pass();
-
-        self.state
-            .handle_platform_output(window, full_output.platform_output);
-
-        let tris = self
-            .state
-            .egui_ctx()
-            .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point());
-        for (id, image_delta) in &full_output.textures_delta.set {
-            self.renderer
-                .update_texture(device, queue, *id, image_delta);
+        let full_output = {
+            lentille_core::profile_scope!("EguiEndPass");
+            self.state.egui_ctx().end_pass()
+        };
+        {
+            lentille_core::profile_scope!("EguiPlatformOutput");
+            self.state
+                .handle_platform_output(window, full_output.platform_output);
         }
-        self.renderer
-            .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
+        let tris = {
+            lentille_core::profile_scope!("EguiTessellate");
+            self.state
+                .egui_ctx()
+                .tessellate(full_output.shapes, self.state.egui_ctx().pixels_per_point())
+        };
+        {
+            lentille_core::profile_scope!("EguiTextureUpload");
+            for (id, image_delta) in &full_output.textures_delta.set {
+                self.renderer
+                    .update_texture(device, queue, *id, image_delta);
+            }
+        }
+        {
+            lentille_core::profile_scope!("EguiBufferUpdate");
+            self.renderer
+                .update_buffers(device, queue, encoder, &tris, &screen_descriptor);
+        }
         let rpass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             multiview_mask: None,
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -132,8 +144,11 @@ impl EguiRenderer {
             occlusion_query_set: None,
         });
 
-        self.renderer
-            .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
+        {
+            lentille_core::profile_scope!("EguiEncode");
+            self.renderer
+                .render(&mut rpass.forget_lifetime(), &tris, &screen_descriptor);
+        }
         for x in &full_output.textures_delta.free {
             self.renderer.free_texture(x)
         }

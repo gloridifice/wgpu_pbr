@@ -3,7 +3,11 @@ name = "lentille_core"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+profile-tracy = ["dep:tracy-client"]
+
 [dependencies]
+tracy-client = { workspace = true, optional = true }
 winit = { workspace = true }
 wgpu = { workspace = true }
 bevy_app = { workspace = true }

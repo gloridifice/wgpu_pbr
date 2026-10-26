@@ -3,6 +3,9 @@ name = "lentille_render"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+profile-tracy = ["lentille_core/profile-tracy"]
+
 [dependencies]
 # Bevy
 bevy_app = { workspace = true }

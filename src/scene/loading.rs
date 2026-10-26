@@ -191,6 +191,7 @@ impl Default for SceneLoader {
         std::thread::Builder::new()
             .name("scene-loader".into())
             .spawn(move || {
+                lentille_core::profiling::name_thread("scene-loader");
                 loop {
                     let job = {
                         let mut slot = input.slot.lock().unwrap();
@@ -202,9 +203,11 @@ impl Default for SceneLoader {
                         };
                         job
                     };
-                    let result =
+                    let result = {
+                        lentille_core::profile_scope!("SceneCpuLoad", job = job.id);
                         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.load()))
-                            .unwrap_or_else(|_| Err(anyhow::anyhow!("Scene CPU loader panicked")));
+                            .unwrap_or_else(|_| Err(anyhow::anyhow!("Scene CPU loader panicked")))
+                    };
                     let mut slot = output.lock().unwrap();
                     if !job.cancel.load(Ordering::Acquire) {
                         *slot = Some(WorkerResult { id: job.id, result });
@@ -299,6 +302,7 @@ impl SceneLoader {
         world: &mut World,
         controller: &mut SceneController,
     ) -> Result<Option<(PreparedScene, PathBuf)>> {
+        lentille_core::profile_scope!("SceneUploadPoll");
         if let Some(flag) = &self.in_flight {
             let rs = world.resource::<RenderState>();
             rs.device

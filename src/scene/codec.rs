@@ -80,6 +80,16 @@ impl SceneCodec {
         }
         Self { registry, allowed }
     }
+    pub(super) fn persistent_component_ids(
+        &self,
+        world: &World,
+    ) -> Vec<bevy_ecs::component::ComponentId> {
+        self.allowed
+            .iter()
+            .filter_map(|id| world.components().get_id(*id))
+            .collect()
+    }
+
     pub fn capture(
         &self,
         world: &World,

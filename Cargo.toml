@@ -12,7 +12,24 @@ members = [
     "crates/lentille_math",
 ]
 
+[features]
+default = []
+profile-tracy = [
+    "bevy_app/trace",
+    "bevy_ecs/trace",
+    "bevy_log/tracing-tracy",
+    "lentille_core/profile-tracy",
+    "lentille_render/profile-tracy",
+]
+profile-tracy-deps = ["profile-tracy", "dep:profiling", "profiling/profile-with-tracy"]
+
+[profile.profiling]
+inherits = "release"
+debug = 2
+strip = false
+
 [workspace.dependencies]
+tracy-client = { version = "=0.18.4", features = ["ondemand", "only-localhost"] }
 rand = "0.8.5"
 half = "2.6.0"
 bytemuck = { version = "1.19.0", features = ["derive"] }
@@ -75,6 +92,7 @@ tracing-subscriber = "0.3.23"
 tracing-chrome = "0.7.2"
 tracing-log = "0.2.0"
 wgpu-subscriber = "0.1.0"
+profiling = { version = "1.0.18", default-features = false, optional = true }
 
 [dev-dependencies]
 half = { workspace = true }

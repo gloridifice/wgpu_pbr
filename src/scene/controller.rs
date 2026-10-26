@@ -59,8 +59,14 @@ pub struct SceneController {
     pub refresh: u64,
     pub loading: Option<SceneLoadProgress>,
     pub(super) saved_baseline: String,
+    pub(super) snapshot_cache: super::snapshot_cache::SnapshotCache,
 }
 impl SceneController {
+    fn refresh_dirty(&mut self, world: &mut World, codec: &SceneCodec) -> Result<()> {
+        self.dirty = self.snapshot_cache.current(world, codec)? != self.saved_baseline;
+        Ok(())
+    }
+
     pub fn busy(&self) -> bool {
         self.request.is_some()
             || self.pending_open.is_some()
@@ -106,6 +112,7 @@ impl SceneController {
 }
 
 pub fn snapshot(world: &mut World, codec: &SceneCodec) -> Result<String> {
+    lentille_core::profile_scope!("SceneSnapshotBuild");
     let ids: Vec<_> = world
         .query_filtered::<Entity, With<SceneOwned>>()
         .iter(world)
@@ -134,9 +141,8 @@ pub fn sys_scene_requests(world: &mut World) {
             return;
         }
         if controller.path.is_some() {
-            match snapshot(world, &codec) {
-                Ok(value) => controller.dirty = value != controller.saved_baseline,
-                Err(error) => controller.error = Some(format!("{error:#}")),
+            if let Err(error) = controller.refresh_dirty(world, &codec) {
+                controller.error = Some(format!("{error:#}"));
             }
         }
         // Drain late CPU results and finish polling a cancelled GPU batch while idle.
@@ -182,6 +188,7 @@ pub fn sys_scene_requests(world: &mut World) {
                     save_atomic(world.resource::<AssetRoot>(), &path, &text)?;
                     controller.path = Some(path);
                     controller.saved_baseline = text;
+                    controller.snapshot_cache = Default::default();
                     controller.dirty = false;
                     controller.refresh += 1;
                     controller.status = "Scene saved".into();
@@ -252,6 +259,7 @@ fn poll_loading(world: &mut World, controller: &mut SceneController, codec: &Sce
                 Ok(baseline) => {
                     controller.path = Some(path);
                     controller.saved_baseline = baseline;
+                    controller.snapshot_cache = Default::default();
                     controller.dirty = false;
                     controller.error = None;
                     controller.status = "Scene ready".into();
@@ -347,6 +355,7 @@ pub(super) fn prepare_camera(world: &mut World, candidate: &mut World) -> Result
 }
 
 fn commit_scene(world: &mut World, codec: &SceneCodec, scene: PreparedScene) -> Result<String> {
+    lentille_core::profile_scope!("SceneCommit");
     let PreparedScene {
         world: mut candidate,
         cache,

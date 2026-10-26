@@ -8,21 +8,16 @@ fn main() {
 
     let args = env::args().collect::<Vec<_>>();
 
-    let _gurad: Option<i32> = if args.get(1).is_some_and(|it| it == "-t") {
+    let legacy_trace = args.iter().any(|arg| arg == "-t");
+    if cfg!(feature = "profile-tracy") && legacy_trace {
+        eprintln!("-t cannot be combined with profile-tracy; connect Tracy instead");
+        std::process::exit(2);
+    }
+
+    if legacy_trace {
         let path = Path::new("./build/hello_1.json");
         wgpu_subscriber::initialize_default_subscriber(Some(path));
-        // let (chrome_layer, guard) = tracing_chrome::ChromeLayerBuilder::new().build();
-        // tracing_subscriber::registry()
-        //     .with(chrome_layer)
-        //     .with(tracing_subscriber::fmt::layer())
-        //     .with(EnvFilter::new(
-        //         "info,bevy_ecs=trace,wgpu=trace,wgpu_core=trace,wgpu_hal=trace",
-        //     ))
-        //     .init();
-        None
-    } else {
-        None
-    };
+    }
 
     let mut app = App::new();
     app.add_plugins(WgpuPbrPlugin);

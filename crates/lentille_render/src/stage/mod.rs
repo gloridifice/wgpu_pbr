@@ -69,8 +69,9 @@ impl<T: 'static + RenderStage> From<T> for RenderStageConfig<T> {
     }
 }
 
-/// One camera/stage invocation. HDR state is carried to the next stage;
-/// display-space passes explicitly use `display_target` after tone mapping.
+/// One camera's command batch. Stages share the encoder and HDR state;
+/// the background binding is refreshed at each stage boundary.
+/// Display-space passes explicitly use `display_target` after tone mapping.
 pub struct RenderContext {
     pub camera_id: Entity,
     pub encoder: wgpu::CommandEncoder,
@@ -87,6 +88,7 @@ type FrameSystemId = SystemId<InMut<'static, RenderContext>>;
 /// 一系列 [`RenderStage`] 由 [`RenderStageManager`] 管理。
 pub struct RenderStageInstance {
     pub name: &'static str,
+    pub condition: Option<fn(&World, Entity) -> bool>,
     /// 帧系统图
     pub systems: TypeIdGraph<FrameSystemId>,
 }
@@ -118,6 +120,7 @@ impl RenderStageInstance {
     pub fn new<Label: 'static>() -> RenderStageInstance {
         RenderStageInstance {
             name: type_name::<Label>(),
+            condition: None,
             systems: Default::default(),
         }
     }
@@ -160,14 +163,19 @@ pub fn sys_render(
 
     let mut stages = Vec::new();
     render_stage_manager.stages.bfs_mut(|stage| {
-        stages.push((stage.name, stage.systems.clone()));
+        stages.push((
+            stage.name,
+            stage.condition,
+            stage.systems.clone().into_iter_bfs().collect::<Vec<_>>(),
+        ));
     });
+    let stages = Arc::new(stages);
 
     for (camera_id, camera_buffer, camera_target, csm) in &q_camera {
         if !csm.initialized {
             continue;
         }
-        let mut hdr = camera_target.hdr.clone();
+        let hdr = camera_target.hdr.clone();
         let display_target = camera_target.display_color();
         let depth_target = camera_target.depth.clone();
         let skybox_texture = skybox
@@ -176,6 +184,7 @@ pub fn sys_render(
             .and_then(|it| it.texture.as_ref())
             .unwrap_or(&default_skybox.texture);
         let camera_bind_groups = hdr.images.each_ref().map(|image| {
+            lentille_core::profile_scope!("CameraBindGroup");
             Arc::new(
                 CameraBindGroupBuilder {
                     camera_uniform: &camera_buffer.buffer,
@@ -193,36 +202,55 @@ pub fn sys_render(
                 .build(&rs.device, &layout),
             )
         });
-        let stages = stages.clone();
+        let stages = Arc::clone(&stages);
         let gizmo_primitives = Arc::clone(&gizmo_primitives);
 
-        // Construct each context only after the previous stage has executed.
-        // Keep per-stage submission, but never lose a pass's ping-pong swap.
         commands.queue(move |world: &mut World| {
-            for (name, systems) in stages {
-                let encoder = world
-                    .resource::<RenderState>()
-                    .device
-                    .create_command_encoder(&CommandEncoderDescriptor { label: Some(name) });
-                let mut ctx = RenderContext {
+            lentille_core::profile_scope!("RenderCamera", camera = camera_id.to_bits());
+            // Lazily create a batch: a camera with no runnable stages submits nothing.
+            let mut context: Option<RenderContext> = None;
+            for (name, condition, systems) in stages.iter() {
+                if systems.is_empty()
+                    || condition.is_some_and(|condition| !condition(world, camera_id))
+                {
+                    continue;
+                }
+                lentille_core::profile_scope!("RenderStage", stage = *name);
+                let ctx = context.get_or_insert_with(|| RenderContext {
                     camera_id,
-                    encoder,
+                    encoder: world
+                        .resource::<RenderState>()
+                        .device
+                        .create_command_encoder(&CommandEncoderDescriptor {
+                            label: Some("Camera frame"),
+                        }),
                     camera_global_bind_group: Arc::clone(
                         &camera_bind_groups[hdr.alternate_index()],
                     ),
-                    hdr,
+                    hdr: hdr.clone(),
                     display_target: Arc::clone(&display_target),
                     depth_target: depth_target.clone(),
                     gizmo_primitives: Arc::clone(&gizmo_primitives),
-                };
-                for system in systems.into_iter_bfs() {
-                    world.run_system_with(system, &mut ctx).unwrap();
+                });
+                // A previous stage may have swapped HDR inputs and outputs.
+                ctx.camera_global_bind_group =
+                    Arc::clone(&camera_bind_groups[ctx.hdr.alternate_index()]);
+                ctx.encoder.push_debug_group(name);
+                for &system in systems {
+                    world.run_system_with(system, &mut *ctx).unwrap();
                 }
+                ctx.encoder.pop_debug_group();
+            }
+            if let Some(ctx) = context {
+                let command_buffer = {
+                    lentille_core::profile_scope!("EncoderFinish");
+                    ctx.encoder.finish()
+                };
+                lentille_core::profile_scope!("QueueSubmit");
                 world
                     .resource::<RenderState>()
                     .queue
-                    .submit([ctx.encoder.finish()]);
-                hdr = ctx.hdr;
+                    .submit([command_buffer]);
             }
         });
     }
@@ -244,7 +272,11 @@ pub fn sys_present_render_targets(
         let Ok(surface) = q_surface_state.get(*entity) else {
             continue;
         };
-        let frame = match surface.surface.get_current_texture() {
+        let surface_texture = {
+            lentille_core::profile_scope!("SurfaceAcquire");
+            surface.surface.get_current_texture()
+        };
+        let frame = match surface_texture {
             wgpu::CurrentSurfaceTexture::Success(frame)
             | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
             status => {
@@ -264,6 +296,9 @@ pub fn sys_present_render_targets(
             &target.display_color().view,
             &frame.texture.create_view(&Default::default()),
         );
-        frame.present();
+        {
+            lentille_core::profile_scope!("SurfacePresent");
+            frame.present();
+        }
     }
 }

@@ -14,6 +14,12 @@ pub trait AppExt {
         configs: impl Into<Vec<InsertConfig>>,
     ) -> &mut Self;
 
+    /// Skip this stage's systems when its owner has no work for the camera.
+    fn set_render_stage_condition<Stage: 'static>(
+        &mut self,
+        condition: fn(&World, Entity) -> bool,
+    ) -> &mut Self;
+
     fn add_render_system<T, M, S>(
         &mut self,
         system: S,
@@ -83,6 +89,18 @@ impl AppExt for bevy_app::App {
         render_stage_manager
             .stages
             .configure_node::<Stage>(configs.into());
+        self
+    }
+
+    fn set_render_stage_condition<Stage: 'static>(
+        &mut self,
+        condition: fn(&World, Entity) -> bool,
+    ) -> &mut Self {
+        let mut manager = self
+            .world_mut()
+            .get_resource_or_init::<RenderStageManager>();
+        manager.try_init_stage::<Stage>();
+        manager.stages.get_mut::<Stage>().unwrap().condition = Some(condition);
         self
     }
 

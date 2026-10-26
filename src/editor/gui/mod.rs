@@ -98,7 +98,11 @@ fn sys_end_frame_and_draw(
         pixels_per_point: window.0.scale_factor() as f32 * egui_config.egui_scale_factor,
     };
 
-    let surface_texture = match surface_state.surface.get_current_texture() {
+    let acquired = {
+        lentille_core::profile_scope!("SurfaceAcquire");
+        surface_state.surface.get_current_texture()
+    };
+    let surface_texture = match acquired {
         wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
         status => {
             bevy_log::error!("Failed to acquire surface texture: {:?}", status);
@@ -116,14 +120,24 @@ fn sys_end_frame_and_draw(
         screen_descriptor,
     );
 
-    rs.queue.submit(std::iter::once(encoder.finish()));
+    let command_buffer = {
+        lentille_core::profile_scope!("EncoderFinish");
+        encoder.finish()
+    };
+    {
+        lentille_core::profile_scope!("QueueSubmit");
+        rs.queue.submit(std::iter::once(command_buffer));
+    }
     // Update already emitted shapes referencing the previous viewport texture.
     // Retire registrations only after those shapes have been drawn this frame.
     for texture in viewport_textures.1.drain(..) {
         egui_renderer.renderer.free_texture(&texture);
     }
 
-    surface_texture.present();
+    {
+        lentille_core::profile_scope!("SurfacePresent");
+        surface_texture.present();
+    }
 }
 
 fn sys_handle_input(
@@ -421,8 +435,8 @@ impl TabViewer for DockTabViewer<'_> {
                     );
                     world
                         .resource_mut::<crate::control::ControlState>()
-                        .viewport_active = main_view.contains_pointer()
-                        && !ui.ctx().egui_wants_keyboard_input();
+                        .viewport_active =
+                        main_view.contains_pointer() && !ui.ctx().egui_wants_keyboard_input();
                     let mut input = world.resource_mut::<Input>();
                     input.cursor_position = main_view
                         .hover_pos()

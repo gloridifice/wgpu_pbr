@@ -59,6 +59,7 @@ impl Plugin for PickingPlugin {
                 after::<OpaqueStage>(),
                 before::<TransparentStage>(),
             ])
+            .set_render_stage_condition::<PickStage>(picking_requested)
             .add_render_system(sys_render_picking_pass, PickStage)
             .init_render_resource::<PickEntityIDBindGroupLayout>()
             .init_render_resource_with_config::<PickEntityPipeline>([
@@ -67,6 +68,13 @@ impl Plugin for PickingPlugin {
                 after::<PickEntityIDBindGroupLayout>(),
             ]);
     }
+}
+
+fn picking_requested(world: &World, camera: Entity) -> bool {
+    world
+        .get_resource::<PickRequest>()
+        .is_some_and(|request| request.camera_entity == camera)
+        && world.resource::<PickReadback>().is_idle()
 }
 
 // ===== Helpers =====
@@ -244,8 +252,8 @@ fn sys_render_picking_pass(
         },
     );
 
-    // The copy is submitted after this stage finishes; the readback system maps
-    // the buffer on a later frame.
+    // The copy is submitted with this camera's batch after all its stages;
+    // the readback system maps the buffer on a later frame.
     epoch.submitted = epoch.current;
     *readback = PickReadback::AwaitingMap;
     last_result.screen_pos = request.screen_pos;

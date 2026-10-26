@@ -5,6 +5,7 @@ use bevy_ecs::prelude::*;
 use lentille_render::{
     FrameSets,
     asset::{AssetRef, AssetRoot, MeshSource, SceneAssetCache, SubAsset},
+    picking::resources::{LastPickResult, PickEvent, PickReadback, PickRequest, SelectedObjects},
     prelude::*,
     skybox::{Environment, Skybox},
 };
@@ -29,6 +30,9 @@ struct Smoke {
     loading_frames: usize,
     protected_snapshot: Option<String>,
     resized_while_loading: bool,
+    picked: Option<Entity>,
+    camera: Option<Entity>,
+    unselected_pixels: Vec<u8>,
 }
 fn main() {
     color_backtrace::install();
@@ -50,11 +54,28 @@ fn main() {
             loading_frames: 0,
             protected_snapshot: None,
             resized_while_loading: false,
+            picked: None,
+            camera: None,
+            unselected_pixels: Vec::new(),
         })
         .add_systems(Last, check.after(FrameSets::Present));
     let result = app.run();
     assert!(matches!(result, AppExit::Success));
 }
+fn display_pixels(world: &World, camera: Entity) -> Vec<u8> {
+    let rs = world.resource::<RenderState>();
+    let image = world
+        .get::<lentille_render::camera::RenderTarget>(camera)
+        .unwrap()
+        .display_color();
+    lentille_wgpu_utils::texture_readback::read_texture_to_cpu(
+        &rs.device,
+        &rs.queue,
+        image.texture.texture(),
+    )
+    .data
+}
+
 fn check(world: &mut World) {
     let mut smoke = world.remove_resource::<Smoke>().unwrap();
     smoke.frames += 1;
@@ -311,8 +332,89 @@ fn check(world: &mut World) {
                     .unwrap()
                     .contains("device limits")
             );
+            // Freeze fixture animation before comparing selected/unselected output.
+            for mut rotation in world
+                .query::<&mut wgpu_pbr::RotationObject>()
+                .iter_mut(world)
+            {
+                rotation.speed = 0.0;
+            }
+        }
+        13 => {
+            let camera = world
+                .query::<&SceneMetadata>()
+                .single(world)
+                .unwrap()
+                .active_camera;
+            let (entity, position) = world
+                .query::<(Entity, &Name, &WorldTransform)>()
+                .iter(world)
+                .find(|(_, name, transform)| {
+                    name.as_str() == "Material sample" && transform.position.x.abs() < 0.1
+                })
+                .map(|(e, _, t)| (e, t.position))
+                .unwrap();
+            let camera_state = world
+                .get::<lentille_render::camera::CameraState>(camera)
+                .unwrap();
+            let clip = camera_state.view_proj * position.extend(1.0);
+            assert!(clip.w > 0.0);
+            let ndc = clip.truncate() / clip.w;
+            assert!(ndc.x.abs() < 1.0 && ndc.y.abs() < 1.0);
+            let size = world
+                .get::<lentille_render::camera::RenderTargetSize>(camera)
+                .unwrap();
+            let target_size = lentille_math::Vec2::new(size.width as f32, size.height as f32);
+            let screen_pos = lentille_math::Vec2::new(
+                (ndc.x + 1.0) * 0.5 * target_size.x,
+                (1.0 - ndc.y) * 0.5 * target_size.y,
+            );
+            smoke.unselected_pixels = display_pixels(world, camera);
+            smoke.picked = Some(entity);
+            smoke.camera = Some(camera);
+            world.insert_resource(PickRequest {
+                camera_entity: camera,
+                target_size,
+                screen_pos,
+            });
+        }
+        14 => {
+            if world.contains_resource::<PickRequest>()
+                || !world.resource::<PickReadback>().is_idle()
+            {
+                world.insert_resource(smoke);
+                return;
+            }
+            assert_eq!(
+                world.resource::<LastPickResult>().entity,
+                smoke.picked,
+                "batched pick must return the requested visible entity"
+            );
+            assert!(
+                world
+                    .resource::<SelectedObjects>()
+                    .is_selected(smoke.picked.unwrap())
+            );
+        }
+        15 => { /* Allow outline group synchronization after the pick observer. */ }
+        16 => {
+            assert_ne!(
+                display_pixels(world, smoke.camera.unwrap()),
+                smoke.unselected_pixels,
+                "selection must render a visible outline"
+            );
+            world.trigger(PickEvent::new(None, lentille_math::Vec2::new(0.0, 0.0)));
+        }
+        17 => { /* Allow deselection to retire outline layers. */ }
+        18 => {
+            assert!(world.resource::<SelectedObjects>().entities.is_empty());
+            assert_eq!(
+                display_pixels(world, smoke.camera.unwrap()),
+                smoke.unselected_pixels,
+                "deselection must restore the unselected display"
+            );
             println!(
-                "SCENE_SMOKE_OK: async frames {}, frozen edits, resize during loading, GPU cancellation, next load, CPU/GPU failed candidate rollback, save/reload and CSM",
+                "SCENE_SMOKE_OK: async frames {}, frozen edits, resize, cancellation, rollback, save/reload, CSM, batched picking and outline select/deselect",
                 smoke.loading_frames
             );
             world.write_message(AppExit::Success);
