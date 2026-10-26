@@ -81,7 +81,7 @@ fn fs_main(
     var diffuse_color = vec3f(0.0);
     var specular_color = vec3f(0.0);
 
-    let world2camera = -camera.direction;
+    let world2camera = normalize(camera.position - world_pos);
 
     // + Parallel Lighting
     let parallel_light_result = pbr_functions::calculate_light_separately(
@@ -92,8 +92,9 @@ fn fs_main(
         world2camera,
         f0,
     );
-    diffuse_color += parallel_light_result.diffuse;
-    specular_color += parallel_light_result.specular;
+    let shadow_factor = shadow::shadow(world_pos, in.clip_position.z);
+    diffuse_color += parallel_light_result.diffuse * shadow_factor;
+    specular_color += parallel_light_result.specular * shadow_factor;
 
     // + Point Lighting
     // let point_lights_num = light.lights_nums.x;
@@ -121,21 +122,13 @@ fn fs_main(
     let ibl_result = ibl_functions::evaluate_ibl_separately(
         surface.normal,
         world2camera,
-        base_color,
+        base_color * (1.0 - metallic),
         f0,
         surface.material.perceptual_roughness
     );
 
     diffuse_color += ibl_result.diffuse;
     specular_color += ibl_result.specular;
-
-    /// -- Shadowing --
-    // @builtin(position) 在片段阶段为 framebuffer 坐标，z 即写入深度的 NDC z。
-    let z_ndc = in.clip_position.z;
-    let shadow = shadow::shadow(world_pos, z_ndc);
-    let shadow_factor = mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow);
-    diffuse_color *= shadow_factor;
-    specular_color *= shadow_factor;
 
     /// Blending
     let normal_ndc = normalize((camera.view_proj * vec4<f32>(normal, 1.0)).xyz);

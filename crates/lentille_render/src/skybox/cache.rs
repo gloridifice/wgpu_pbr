@@ -8,7 +8,8 @@ use wgpu::{Extent3d, Origin3d, TexelCopyBufferLayout, TexelCopyTextureInfoBase, 
 use crate::prelude::*;
 
 const MAGIC: &[u8; 4] = b"LPFC";
-const VERSION: u32 = 1;
+// v2 invalidates convolution produced by the old GGX sampling basis/polar angle.
+const VERSION: u32 = 2;
 
 fn format_tag(format: TextureFormat) -> u32 {
     match format {

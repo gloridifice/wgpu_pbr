@@ -58,6 +58,7 @@ UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后
 
 - 默认加载 `assets/scenes/minimal.scn.ron`；`--scene scenes/demo.scn.ron` 可选择演示场景。
 - `examples/generate_scenes.rs` 是场景数据生成工具；运行演示数据生成需要相关模型文件。
+- `assets/scenes/white_furnace.scn.ron` 是恒定白环境下的 18 球 PBR/IBL 诊断场景；`examples/generate_white_furnace.rs` 独立重建其全部资产，不依赖外部模型。`examples/white_furnace_probe.rs` 通过真实渲染回读 HDR 做显式 GPU 回归；`examples/generate_dfg_lut.rs` 重建标准 GGX A/B LUT。着色约定、参数和读图限制见 [白炉诊断](specs/white-furnace.md)。
 - 普通契约测试位于根 `tests/`、render crate 和浏览面板单元测试，不需要 GPU。
 - 显式 GPU 测试与 `examples/scene_smoke.rs` 验证缓存共享、分块准备/释放、异步场景切换、取消、加载中快照保护及 resize，需要 GPU；不属于默认无 GPU 测试。`lentille_render::tonemapping` 的显式 GPU 像素验证覆盖 HDR 高亮、曝光/sRGB、阶段间交换、连续帧背景、相机隔离和不同呈现格式。
 

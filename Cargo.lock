@@ -5768,6 +5768,7 @@ dependencies = [
  "egui-winit",
  "egui_dock",
  "egui_ltreeview",
+ "half",
  "image",
  "lentille_core",
  "lentille_math",

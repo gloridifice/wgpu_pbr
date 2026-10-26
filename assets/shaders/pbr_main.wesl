@@ -53,7 +53,7 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     let f0: vec3<f32> = vec3<f32>(0.16 * pow2(surface.material.reflectance) * (1.0 - metallic))
          + base_color * metallic;
 
-    let world2camera = -camera.direction;
+    let world2camera = normalize(camera.position - world_pos);
     // + Parallel Lighting
     surface_color += pbr_functions::calculate_light(
         light.color.xyz,
@@ -63,6 +63,9 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
         world2camera,
         f0,
     );
+
+    // CSM belongs to the directional light, not point lights or IBL.
+    surface_color *= shadow::shadow(world_pos, z_ndc);
 
     // + Point Lighting
     let point_lights_num = light.lights_nums.x;
@@ -88,17 +91,13 @@ fn fs_main(in: FullscreenV2F) -> @location(0) vec4<f32> {
     /// + Image based Lighting
     let ibl = ibl_functions::evaluate_ibl(
         surface.normal,
-        surface.normal,
-        base_color,
+        world2camera,
+        base_color * (1.0 - metallic),
         f0,
         surface.material.perceptual_roughness
     );
 
     surface_color += ibl;
-
-    /// -- Shadowing --
-    let shadow_v = shadow::shadow(world_pos, z_ndc);
-    surface_color *= mix(vec3<f32>(0.5), vec3<f32>(1.0), shadow_v);
 
     return vec4<f32>(surface_color, 1.0);
 }
