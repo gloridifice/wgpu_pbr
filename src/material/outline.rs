@@ -725,7 +725,7 @@ fn sys_jump_flood_and_render_outline(
     let InMut(RenderContext {
         camera_id,
         encoder,
-        color_target,
+        display_target,
         ..
     }) = ctx;
     let Ok(camera_outline) = q_camera_outline.get(*camera_id) else {
@@ -773,7 +773,7 @@ fn sys_jump_flood_and_render_outline(
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Outline Composite Pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &color_target.view,
+            view: &display_target.view,
             resolve_target: None,
             depth_slice: None,
             ops: wgpu::Operations {

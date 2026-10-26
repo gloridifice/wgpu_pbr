@@ -1,51 +1,55 @@
 # AGENTS.md
 
-## 构建与运行
+## Documentation and Code Conflicts
+
+When documentation conflicts with the existing code, follow the code's implementation and conventions, and list all conflicts found in the final response.
+
+## Build and Run
 
 ```powershell
-cargo run                     # 启动实时 PBR 渲染器（需要 GPU）
+cargo run                     # Start the real-time PBR renderer (requires a GPU)
 cargo build
-cargo test --workspace --lib --tests # 默认单元/集成测试，不需要 GPU
-cargo test -p lentille_render --lib # 仅运行渲染 crate 的默认测试
-cargo run -- --scene scenes/demo.scn.ron # 打开指定场景（assets 根相对路径）
-cargo run --example scene_smoke # 真实窗口/GPU 场景生命周期验证
+cargo test --workspace --lib --tests # Default unit/integration tests; no GPU required
+cargo test -p lentille_render --lib # Run only the render crate's default tests
+cargo run -- --scene scenes/demo.scn.ron # Open a specific scene (path relative to the assets root)
+cargo run --example scene_smoke # Validate the scene lifecycle with a real window and GPU
 ```
 
-没有 CI、lint/format/clippy 配置，也没有 pre-commit 钩子。
+There is no CI, lint/format/clippy configuration, or pre-commit hook.
 
-## 架构
+## Architecture
 
-- **`wgpu_pbr`（根 crate）**：二进制 + 库。入口 `src/main.rs` 通过 bevy_app 组装 `WgpuPbrPlugin`。
-- **`lentille_core`**：窗口（`winit`）、输入和时间抽象。
-- **`lentille_math`**：重新导出 `cgmath` + 自定义 `Color` 类型。
-- **`lentille_render`**：引擎主体 — 渲染图、管线、着色器、材质、光照、天空盒、阴影映射、透明通道、延迟渲染。
-- **`lentille_wgpu_utils`**：薄层 wgpu 辅助工具（绑定组布局、纹理描述符、采样器描述符、全屏管线胶水代码）。
+- **`wgpu_pbr` (root crate)**: Binary and library. The entry point, `src/main.rs`, assembles `WgpuPbrPlugin` through bevy_app.
+- **`lentille_core`**: Window (`winit`), input, and time abstractions.
+- **`lentille_math`**: Re-exports `cgmath` and provides a custom `Color` type.
+- **`lentille_render`**: The engine's core: render graph, pipelines, shaders, materials, lighting, skyboxes, shadow mapping, transparency passes, and deferred rendering.
+- **`lentille_wgpu_utils`**: Thin wgpu utilities (bind group layouts, texture descriptors, sampler descriptors, and fullscreen pipeline glue code).
 
-项目使用 **bevy_ecs + bevy_app**（非完整 Bevy 引擎）。渲染执行通过自定义调度标签驱动（`RenderPreparedStartup`、`FrameSets`、`PreStage`、`OpaqueStage`、`TransparentStage`）。
+The project uses **bevy_ecs + bevy_app**, not the full Bevy engine. Rendering is driven by custom scheduling labels (`RenderPreparedStartup`, `FrameSets`, `PreStage`, `OpaqueStage`, and `TransparentStage`).
 
-## 版本说明
+## Version Notes
 
-根 crate 和五个工作区 crate 全部使用 `edition = "2024"`。当前依赖 Bevy 0.18 与 wgpu 29；编译工具链需要同时满足这些依赖的 MSRV。
+The root crate and all five workspace crates use `edition = "2024"`. Current dependencies include Bevy 0.18 and wgpu 29; the compiler toolchain must satisfy the MSRV requirements of both.
 
-## 着色器系统（WESL）
+## Shader System (WESL)
 
-着色器位于 `assets/shaders/`。`ShaderLoader` 使用 WESL 0.4 编译 `package::...` 模块，返回 `ShaderSource::Wgsl`，不再使用 naga_oil 的启动扫描/组合流程。
+Shaders reside in `assets/shaders/`. `ShaderLoader` uses WESL 0.4 to compile `package::...` modules and returns `ShaderSource::Wgsl`. The previous naga_oil startup scanning/composition workflow is no longer used.
 
-编译后的 WGSL 和依赖时间戳缓存在 `.cache/shaders/`。可设置 `WGPU_PBR_NO_SHADER_CACHE` 禁用缓存。添加着色器或导入时遵循当前 WESL 包路径；资源辅助函数 `AssetPath::new_shader_wgsl` 名称保留，但实际追加 `.wesl` 后缀。
+Compiled WGSL and dependency timestamps are cached in `.cache/shaders/`. Set `WGPU_PBR_NO_SHADER_CACHE` to disable caching. Follow the current WESL package paths when adding shaders or imports. The asset helper retains the name `AssetPath::new_shader_wgsl`, but actually appends the `.wesl` extension.
 
-## 场景与资源
+## Scenes and Assets
 
-默认加载 `assets/scenes/minimal.scn.ron`，仅使用程序化平面和应用默认环境。`demo.scn.ron` 引用仓库中的模型/纹理；额外外部资产仍需自行提供。
+By default, the application loads `assets/scenes/minimal.scn.ron`, which uses only a procedural plane and the application's default environment. `demo.scn.ron` references models/textures in the repository; any additional external assets must be supplied separately.
 
-序列化组件保存参数和 assets 根相对资源引用；运行时组件保存 GPU 索引、Buffer、绑定与派生结果。模型 CPU 导入与 GPU 上传分离，网格/纹理按场景作用域缓存，每实体变换 Buffer 独立。
+Serialized components store parameters and asset references relative to the assets root; runtime components store GPU indices, buffers, bindings, and derived results. CPU model import is separate from GPU upload. Meshes/textures are cached per scene scope, and each entity has its own transform buffer.
 
-场景使用 Bevy 0.18 DynamicScene 的版本化 RON 封装，不是 BSN。相关实现位于 `src/scene/`，规范见 `doco/specs/`。Viewport 下方 Content Browser 使用 UE 式目录树与卡片网格，只浏览文件夹和 `.scn.ron`；支持当前目录搜索、刷新和卡片大小调整，双击通过场景控制器打开，不生成真实缩略图。
+Scenes use a versioned RON wrapper around Bevy 0.18 DynamicScene, not BSN. The implementation is in `src/scene/`, and specifications are in `doco/specs/`. The Content Browser below the Viewport uses a UE-style directory tree and card grid, displaying only folders and `.scn.ron` files. It supports searching the current directory, refreshing, and adjusting card size. Double-clicking opens a scene through the scene controller; no actual thumbnails are generated.
 
-## 测试
+## Tests
 
-默认纯 Rust 测试位于 `lentille_render`、根 `tests/` 和浏览面板模块。GPU 缓存测试默认忽略，可显式运行：`cargo test -p lentille_render --lib gpu_assets -- --ignored --test-threads=1`。
+Default pure-Rust tests are located in `lentille_render`, the root `tests/` directory, and the browser panel module. GPU cache tests are ignored by default and can be run explicitly with `cargo test -p lentille_render --lib gpu_assets -- --ignored --test-threads=1`.
 
-当前 `cargo test --workspace` 还会运行旧宏文档示例；`lentille_wgpu_utils/src/bind_group_macro.rs` 的三个未补全示例不能作为可编译 doctest，通过默认单元/集成测试不代表这三个示例已通过。
+Currently, `cargo test --workspace` also runs legacy macro documentation examples. The three incomplete examples in `lentille_wgpu_utils/src/bind_group_macro.rs` are not compilable doctests; passing the default unit/integration tests does not mean those three examples pass.
 
 <!-- DOCO:START -->
 <!-- doco:entry template=v2 -->

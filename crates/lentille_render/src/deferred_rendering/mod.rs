@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    SCREEN_FORMAT,
+    SCENE_COLOR_FORMAT,
     bindings::{
         camera_binding::CameraBindGroupLayout, light_binding::DynamicLightBindGroupLayout,
         material_binding::PbrMaterialBindGroupLayout,
@@ -76,7 +76,7 @@ impl FromWorld for DeferredComputePipeline {
                 &full_screen_shader.module,
                 &shader,
                 &[Some(lentille_wgpu_utils::color_target_replace_write_all(
-                    SCREEN_FORMAT,
+                    SCENE_COLOR_FORMAT,
                 ))],
             ));
 

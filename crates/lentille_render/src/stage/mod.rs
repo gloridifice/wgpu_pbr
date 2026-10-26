@@ -7,7 +7,8 @@ use crate::{
     FrameSets, SurfaceState,
     base_assets::{DFGTexture, NoFilterClampSampler, SkyboxSampler},
     bindings::camera_binding::{CameraBindGroupBuilder, CameraBindGroupLayout},
-    camera::{CameraBuffer, ColorImage, DepthImage, RenderTarget, TargetType},
+    blit::{BlitPipeline, BlitShader, WindowBlitPipelines},
+    camera::{CameraBuffer, ColorImage, DepthImage, HdrColorTargets, RenderTarget, TargetType},
     gizmo::{GIZMO_BUFFER, GizmoPrimitive},
     graph::{InsertConfig, TypeIdGraph},
     light::LightUnifromBuffer,
@@ -26,7 +27,7 @@ impl Plugin for StagePlugin {
         app.init_resource::<RenderStageManager>()
             .add_render_system_in_frame_set(
                 FrameSets::Draw,
-                (sys_render, sys_copy_to_real_target).chain(),
+                (sys_render, sys_present_render_targets).chain(),
             );
     }
 }
@@ -68,15 +69,14 @@ impl<T: 'static + RenderStage> From<T> for RenderStageConfig<T> {
     }
 }
 
-/// 包含了当前帧渲染上下文的资源，每帧都会重新创建。
-/// 其只有在 Prepare 阶段之后存在，并在 Present 阶段删除。
-///
-/// 所以只能在这两个阶段之间的阶段使用，见 [`crate::RenderSets`].
+/// One camera/stage invocation. HDR state is carried to the next stage;
+/// display-space passes explicitly use `display_target` after tone mapping.
 pub struct RenderContext {
     pub camera_id: Entity,
     pub encoder: wgpu::CommandEncoder,
     pub camera_global_bind_group: Arc<BindGroup>,
-    pub color_target: Arc<ColorImage>,
+    pub hdr: HdrColorTargets,
+    pub display_target: Arc<ColorImage>,
     pub depth_target: Option<Arc<DepthImage>>,
     pub gizmo_primitives: Arc<Vec<GizmoPrimitive>>,
 }
@@ -136,12 +136,7 @@ impl RenderStageInstance {
 pub fn sys_render(
     mut commands: Commands,
     mut render_stage_manager: ResMut<RenderStageManager>,
-    mut q_camera: Query<(
-        Entity,
-        &CameraBuffer,
-        &mut RenderTarget,
-        &CascadeShadowMapping,
-    )>,
+    q_camera: Query<(Entity, &CameraBuffer, &RenderTarget, &CascadeShadowMapping)>,
     rs: Res<RenderState>,
 
     light: Res<LightUnifromBuffer>,
@@ -163,107 +158,112 @@ pub fn sys_render(
         }
     };
 
-    for (camera_id, camera_buffer, mut camera_target, csm) in q_camera.iter_mut() {
+    let mut stages = Vec::new();
+    render_stage_manager.stages.bfs_mut(|stage| {
+        stages.push((stage.name, stage.systems.clone()));
+    });
+
+    for (camera_id, camera_buffer, camera_target, csm) in &q_camera {
         if !csm.initialized {
             continue;
         }
-        let color_target = camera_target.next();
-        let color_attachment = camera_target.get_attachment_color();
+        let mut hdr = camera_target.hdr.clone();
+        let display_target = camera_target.display_color();
         let depth_target = camera_target.depth.clone();
+        let skybox_texture = skybox
+            .single()
+            .ok()
+            .and_then(|it| it.texture.as_ref())
+            .unwrap_or(&default_skybox.texture);
+        let camera_bind_groups = hdr.images.each_ref().map(|image| {
+            Arc::new(
+                CameraBindGroupBuilder {
+                    camera_uniform: &camera_buffer.buffer,
+                    light_uniform: &light.buffer,
+                    csm_texture: &csm.full_view,
+                    csm_sampler: &csm.sampler,
+                    dfg: &dfg.texture.view,
+                    skybox_texture: &skybox_texture.view,
+                    skybox_sampler: &skybox_sampler.0,
+                    skybox_sh_uniform: &skybox_sh.buffer,
+                    color_target: &image.view,
+                    color_target_sampler: &no_filter_sampler.0,
+                    csm_info: &csm.csm_info_buffer,
+                }
+                .build(&rs.device, &layout),
+            )
+        });
+        let stages = stages.clone();
+        let gizmo_primitives = Arc::clone(&gizmo_primitives);
 
-        render_stage_manager.stages.bfs_mut(|stage| {
-            let encoder = rs.device.create_command_encoder(&CommandEncoderDescriptor {
-                label: Some(stage.name),
-            });
-
-            let camera_global_bind_group = {
-                let skybox_texture = skybox
-                    .single()
-                    .ok()
-                    .and_then(|it| it.texture.as_ref())
-                    .unwrap_or(&default_skybox.texture);
-
-                let device = &rs.device;
-
-                Arc::new(
-                    CameraBindGroupBuilder {
-                        camera_uniform: &camera_buffer.buffer,
-                        light_uniform: &light.buffer,
-                        csm_texture: &csm.full_view,
-                        csm_sampler: &csm.sampler,
-                        dfg: &dfg.texture.view,
-                        skybox_texture: &skybox_texture.view,
-                        skybox_sampler: &skybox_sampler.0,
-                        skybox_sh_uniform: &skybox_sh.buffer,
-                        color_target: &color_attachment.view,
-                        color_target_sampler: &no_filter_sampler.0,
-                        csm_info: &csm.csm_info_buffer,
-                    }
-                    .build(device, &layout),
-                )
-            };
-
-            let render_context = RenderContext {
-                camera_id,
-                encoder,
-                color_target: Arc::clone(&color_target),
-                camera_global_bind_group,
-                depth_target: depth_target.clone(),
-                gizmo_primitives: Arc::clone(&gizmo_primitives),
-            };
-
-            let systems = stage.systems.clone();
-            commands.queue(move |world: &mut World| {
-                let mut ctx = render_context;
+        // Construct each context only after the previous stage has executed.
+        // Keep per-stage submission, but never lose a pass's ping-pong swap.
+        commands.queue(move |world: &mut World| {
+            for (name, systems) in stages {
+                let encoder = world
+                    .resource::<RenderState>()
+                    .device
+                    .create_command_encoder(&CommandEncoderDescriptor { label: Some(name) });
+                let mut ctx = RenderContext {
+                    camera_id,
+                    encoder,
+                    camera_global_bind_group: Arc::clone(
+                        &camera_bind_groups[hdr.alternate_index()],
+                    ),
+                    hdr,
+                    display_target: Arc::clone(&display_target),
+                    depth_target: depth_target.clone(),
+                    gizmo_primitives: Arc::clone(&gizmo_primitives),
+                };
                 for system in systems.into_iter_bfs() {
                     world.run_system_with(system, &mut ctx).unwrap();
                 }
                 world
                     .resource::<RenderState>()
                     .queue
-                    .submit(std::iter::once(ctx.encoder.finish()));
-            });
+                    .submit([ctx.encoder.finish()]);
+                hdr = ctx.hdr;
+            }
         });
     }
 }
 
-pub fn sys_copy_to_real_target(
+pub fn sys_present_render_targets(
     rs: Res<RenderState>,
     q_render_target: Query<&RenderTarget>,
     q_surface_state: Query<&SurfaceState>,
+    shader: Res<BlitShader>,
+    sampler: Res<SkyboxSampler>,
+    mut pipelines: ResMut<WindowBlitPipelines>,
 ) {
     for target in q_render_target {
-        let current_color = target.get_current_color();
-        let size = current_color.texture.size();
-        let mut surface_texture_storage: Option<wgpu::SurfaceTexture> = None;
-        let texture: &wgpu::Texture = match &target.target_type {
-            TargetType::WindowAndSurface(entity) => {
-                let surface_state = q_surface_state.get(*entity).unwrap();
-                match surface_state.surface.get_current_texture() {
-                    wgpu::CurrentSurfaceTexture::Success(st)
-                    | wgpu::CurrentSurfaceTexture::Suboptimal(st) => {
-                        surface_texture_storage = Some(st);
-                        // Safe: surface_texture_storage outlives this reference via let binding
-                        &surface_texture_storage.as_ref().unwrap().texture
-                    }
-                    status => {
-                        bevy_log::warn!("Failed to get current surface texture: {:?}", status);
-                        continue;
-                    }
-                }
-            }
-            TargetType::Texture(uploaded_image) => uploaded_image.texture.texture(),
+        // Texture targets already share the SDR display image; no copy required.
+        let TargetType::WindowAndSurface(entity) = &target.target_type else {
+            continue;
         };
-
-        if size == texture.size() {
-            let mut encoder = rs.device.create_command_encoder(&Default::default());
-            lentille_wgpu_utils::copy_texture2d_to_texture2d_no_mip(
-                &mut encoder,
-                current_color.texture.texture(),
-                texture,
-                size,
-            );
-            rs.queue.submit(std::iter::once(encoder.finish()));
-        }
+        let Ok(surface) = q_surface_state.get(*entity) else {
+            continue;
+        };
+        let frame = match surface.surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            status => {
+                bevy_log::warn!("Failed to get current surface texture: {status:?}");
+                continue;
+            }
+        };
+        let pipeline = pipelines
+            .0
+            .entry(surface.config.format)
+            .or_insert_with(|| BlitPipeline::new(&rs.device, &shader.0, surface.config.format));
+        crate::blit::blit(
+            &rs.device,
+            &rs.queue,
+            pipeline,
+            &sampler.0,
+            &target.display_color().view,
+            &frame.texture.create_view(&Default::default()),
+        );
+        frame.present();
     }
 }

@@ -100,6 +100,13 @@ impl SceneAssetCache {
             .flatten()
             .map(Arc::as_ref)
     }
+    /// CPU geometry retained by this scene, for editor bounds and inspection.
+    pub fn mesh_data(&self, handle: GpuHandle<UploadedMesh>) -> Option<&Mesh> {
+        (handle.scope == self.scope)
+            .then(|| self.mesh_data.get(handle.index))
+            .flatten()
+            .map(Arc::as_ref)
+    }
     pub fn counts(&self) -> (usize, usize, usize) {
         (self.models.len(), self.meshes.len(), self.textures.len())
     }

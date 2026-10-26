@@ -1,15 +1,15 @@
+//! Standalone renderer: HDR scene -> SDR display -> surface-format-aware presentation.
 use bevy_app::prelude::*;
 use bevy_ecs::prelude::*;
 use bevy_log::LogPlugin;
 use lentille_core::{
     input::InputPlugin,
     time::TimePlugin,
-    window::{PrimaryWindow, WindowPlugin, WinitWindow, WinitWindowResizeEvent},
+    window::{WindowPlugin, WinitWindowResizeEvent},
 };
 use lentille_render::{
-    RenderPlugin, RenderState, SurfaceState,
-    camera::{Camera, RenderTarget, RenderTargetSize},
-    prelude::{AppExt, copy_texture2d_to_texture2d_no_mip},
+    RenderPlugin,
+    camera::{Camera, RenderTargetSize},
 };
 
 fn main() {
@@ -22,10 +22,6 @@ fn main() {
             TimePlugin,
             WindowPlugin,
         ))
-        .add_render_system_in_frame_set(
-            lentille_render::FrameSets::Present,
-            sys_end_frame_and_present,
-        )
         .add_systems(Startup, spawn_camera)
         .add_observer(sys_on_window_resize)
         .run();
@@ -35,10 +31,7 @@ fn spawn_camera(mut commands: Commands) {
     use lentille_render::{camera::RenderTargetConfig, prelude::*, shadow::csm::CsmConfig};
     commands.spawn((
         Camera::new(1.0),
-        RenderTargetConfig::Texture {
-            width: 1280,
-            height: 720,
-        },
+        RenderTargetConfig::PrimaryWindow,
         Transform::from_position(Vec3::new(0.0, 3.0, 8.0)),
         CsmConfig {
             level_count: 4,
@@ -55,46 +48,7 @@ fn sys_on_window_resize(
     event: On<WinitWindowResizeEvent>,
     q_camera: Single<&mut RenderTargetSize, With<Camera>>,
 ) {
-    let mut target_size = q_camera.into_inner();
-    let size = event.physical_size;
-    target_size.width = size.width;
-    target_size.height = size.height;
-}
-
-fn sys_end_frame_and_present(
-    rs: Res<RenderState>,
-    window: Single<(&WinitWindow, &SurfaceState), With<PrimaryWindow>>,
-    q_camera: Single<&RenderTarget, With<Camera>>,
-) {
-    let (_window, surface_state) = window.into_inner();
-    let render_target = q_camera.into_inner();
-
-    let current_texture = match surface_state.surface.get_current_texture() {
-        wgpu::CurrentSurfaceTexture::Success(surface_texture)
-        | wgpu::CurrentSurfaceTexture::Suboptimal(surface_texture) => surface_texture,
-        _ => {
-            return;
-        }
-    };
-
-    if render_target.get_current_color().texture.size() != current_texture.texture.size() {
-        return;
-    }
-
-    let mut encoder = rs
-        .device
-        .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Present"),
-        });
-
-    copy_texture2d_to_texture2d_no_mip(
-        &mut encoder,
-        &render_target.get_current_color().texture,
-        &current_texture.texture,
-        current_texture.texture.size(),
-    );
-
-    rs.queue.submit(std::iter::once(encoder.finish()));
-
-    current_texture.present();
+    let mut size = q_camera.into_inner();
+    size.width = event.physical_size.width.max(1);
+    size.height = event.physical_size.height.max(1);
 }

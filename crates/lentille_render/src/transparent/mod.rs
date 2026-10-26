@@ -3,7 +3,7 @@ use bevy_ecs::prelude::*;
 use std::sync::Arc;
 
 use crate::{
-    SCREEN_FORMAT,
+    SCENE_COLOR_FORMAT,
     bindings::{camera_binding::CameraBindGroupLayout, light_binding::DynamicLightBindGroupLayout},
     prelude::*,
 };
@@ -81,7 +81,7 @@ impl FromWorld for TransparentPipeline {
                 entry_point: Some("fs_main"),
                 compilation_options: Default::default(),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: SCREEN_FORMAT,
+                    format: SCENE_COLOR_FORMAT,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: ColorWrites::ALL,
                 })],

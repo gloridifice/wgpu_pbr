@@ -22,7 +22,7 @@ fn prefiltered_dfg_lut(perceptual_roughness: f32, nDotV: f32) -> vec2<f32> {
 
 fn evaluate_ibl_spectular(reflect: vec3<f32>, perceptual_roughness: f32) -> vec3<f32>{
     let level = 5.0 * perceptual_roughness;
-    return clamp(textureSampleLevel(env_cubemap, env_cubemap_sampler, reflect, level).xyz, vec3f(0.0), vec3f(2.0));
+    return max(textureSampleLevel(env_cubemap, env_cubemap_sampler, reflect, level).xyz, vec3f(0.0));
 }
 
 

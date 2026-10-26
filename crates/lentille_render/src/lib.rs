@@ -32,6 +32,7 @@ use crate::{
     shadow::ShadowPlugin,
     skybox::SkyBoxPlugin,
     stage::{RenderStage, StagePlugin},
+    tonemapping::ToneMappingPlugin,
     transform::TransformPlugin,
     transparent::TransparentPlugin,
 };
@@ -58,26 +59,21 @@ pub mod shadow;
 pub mod skybox;
 pub mod stage;
 pub mod systems;
+pub mod tonemapping;
 pub mod transform;
 
 pub static DEVICE_FEATURES: LazyLock<Arc<Vec<Features>>> =
     LazyLock::new(|| Arc::new(vec![Features::TIMESTAMP_QUERY]));
 
 pub mod app_ext;
-/// 想要一个物体以 Transparent 的管线渲染，需要至少有以下 Component:
-/// - `TransparentPassObject`
-/// - `WorldTransform`
-/// - `MeshRenderer`
-///
-/// 同时物体不能持有 `MainPassObject`
+/// MainPassObject meshes use the transparent pipeline for AlphaMode::Blend primitives.
 pub mod transparent;
 pub mod utils;
 
-// TODO 检查这个 format 的正确性
-// #[cfg(target_os = "windows")]
-pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
-// #[cfg(not(target_os = "windows"))]
-// pub static SCREEN_FORMAT: TextureFormat = TextureFormat::Rgba8UnormSrgb;
+/// Linear HDR scene colors, independent of the window format.
+pub const SCENE_COLOR_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
+/// SDR viewport and display-space overlays. Window presentation converts as needed.
+pub const SCREEN_FORMAT: TextureFormat = TextureFormat::Bgra8UnormSrgb;
 
 pub struct RenderPlugin;
 
@@ -97,6 +93,7 @@ impl Plugin for RenderPlugin {
             DeferredRenderingPlugin,
             BlitPlugin,
             GizmoPlugin,
+            ToneMappingPlugin,
         ))
         .init_resource::<asset::AssetRoot>()
         .init_resource::<asset::SceneAssetCache>()
@@ -121,8 +118,10 @@ impl Plugin for RenderPlugin {
         app.add_observer(sys_init_window);
 
         app.configure_render_stage::<OpaqueStage>([after::<PreStage>()])
-            .configure_render_stage::<TransparentStage>([after::<OpaqueStage>()])
-            .configure_render_stage::<PostProcessStage>([after::<TransparentStage>()])
+            .configure_render_stage::<PrepareTransparentStage>([after::<OpaqueStage>()])
+            .configure_render_stage::<TransparentStage>([after::<PrepareTransparentStage>()])
+            .configure_render_stage::<ToneMappingStage>([after::<TransparentStage>()])
+            .configure_render_stage::<PostProcessStage>([after::<ToneMappingStage>()])
             .add_systems(Update, sys_create_surface)
             .add_systems(
                 PostUpdate,
@@ -136,6 +135,7 @@ impl Plugin for RenderPlugin {
                 sys_render_main_pass,
                 OpaqueStage.after(sys_render_write_g_buffer_pass),
             )
+            .add_render_system(sys_prepare_transparent_color, PrepareTransparentStage)
             .add_render_system(sys_render_transparent, TransparentStage);
     }
 }
@@ -145,7 +145,11 @@ pub struct PreStage;
 #[derive(RenderStage)]
 pub struct OpaqueStage;
 #[derive(RenderStage)]
+pub struct PrepareTransparentStage;
+#[derive(RenderStage)]
 pub struct TransparentStage;
+#[derive(RenderStage)]
+pub struct ToneMappingStage;
 #[derive(RenderStage)]
 pub struct PostProcessStage;
 #[derive(RenderStage)]

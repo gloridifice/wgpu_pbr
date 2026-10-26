@@ -110,16 +110,50 @@ pub enum RenderTargetConfig {
     },
 }
 
-/// RenderTarget 采用 PingPong 的方式，
-/// 在所有渲染阶段完成后会拷贝到 view 中
+/// Linear scene colors. Clone for a camera frame; carry the index across stages.
+/// A pass writes `alternate()` then calls `swap()` when that result is ready.
+#[derive(Clone)]
+pub struct HdrColorTargets {
+    pub(crate) images: [Arc<ColorImage>; 2],
+    current: usize,
+}
+
+impl HdrColorTargets {
+    pub fn current(&self) -> &Arc<ColorImage> {
+        &self.images[self.current]
+    }
+
+    pub fn alternate(&self) -> &Arc<ColorImage> {
+        &self.images[self.alternate_index()]
+    }
+
+    pub(crate) fn alternate_index(&self) -> usize {
+        1 - self.current
+    }
+
+    pub fn swap(&mut self) {
+        self.current = self.alternate_index();
+    }
+
+    /// Preserve uncovered pixels before a partial-screen pass such as transparency.
+    pub fn copy_and_swap(&mut self, encoder: &mut wgpu::CommandEncoder) {
+        lentille_wgpu_utils::copy_texture2d_to_texture2d_no_mip(
+            encoder,
+            self.current().texture.texture(),
+            self.alternate().texture.texture(),
+            self.current().texture.size(),
+        );
+        self.swap();
+    }
+}
+
+/// HDR ping-pong is frame-local; the stable SDR display is the consumer boundary.
 #[derive(Component)]
 #[require(RenderTargetSize)]
 pub struct RenderTarget {
     pub target_type: TargetType,
-    /// true = a, false = b
-    is_current_color_a: bool,
-    color_a: Arc<ColorImage>,
-    color_b: Arc<ColorImage>,
+    pub(crate) hdr: HdrColorTargets,
+    display: Arc<ColorImage>,
     pub depth: Option<Arc<DepthImage>>,
 }
 
@@ -211,47 +245,41 @@ impl Default for RenderTargetSize {
 }
 
 impl RenderTarget {
-    pub fn next(&mut self) -> Arc<ColorImage> {
-        self.is_current_color_a = !self.is_current_color_a;
-        Arc::clone(if self.is_current_color_a {
-            &self.color_a
-        } else {
-            &self.color_b
-        })
+    pub fn display_color(&self) -> Arc<ColorImage> {
+        Arc::clone(&self.display)
     }
 
-    pub fn get_current_color(&self) -> Arc<ColorImage> {
-        Arc::clone(if self.is_current_color_a {
-            &self.color_a
-        } else {
-            &self.color_b
-        })
+    /// Base attachments: two HDR colors, SDR output, depth, packed G-buffer.
+    /// Excludes optional picking/outline allocations.
+    pub fn estimated_attachment_bytes(width: u32, height: u32) -> u64 {
+        u64::from(width.max(1))
+            .saturating_mul(u64::from(height.max(1)))
+            .saturating_mul(8 * 2 + 4 + 4 + 16)
     }
 
-    pub fn get_attachment_color(&self) -> Arc<ColorImage> {
-        Arc::clone(if self.is_current_color_a {
-            &self.color_b
-        } else {
-            &self.color_a
-        })
-    }
-
-    /// Return `(color_a, color_b, depth)`
+    /// Return `(hdr, display, depth)`.
     fn create_images(
         width: u32,
         height: u32,
         format: wgpu::TextureFormat,
         has_depth: bool,
         device: &wgpu::Device,
-    ) -> (Arc<ColorImage>, Arc<ColorImage>, Option<Arc<DepthImage>>) {
+    ) -> (HdrColorTargets, Arc<ColorImage>, Option<Arc<DepthImage>>) {
         let width = width.max(1);
         let height = height.max(1);
 
-        let color_a = Arc::new(create_color_render_target_image(
-            width, height, device, format,
-        ));
-
-        let color_b = Arc::new(create_color_render_target_image(
+        let hdr = HdrColorTargets {
+            images: std::array::from_fn(|_| {
+                Arc::new(create_color_render_target_image(
+                    width,
+                    height,
+                    device,
+                    crate::SCENE_COLOR_FORMAT,
+                ))
+            }),
+            current: 0,
+        };
+        let display = Arc::new(create_color_render_target_image(
             width, height, device, format,
         ));
 
@@ -261,7 +289,7 @@ impl RenderTarget {
             None
         };
 
-        (color_a, color_b, depth)
+        (hdr, display, depth)
     }
 
     pub fn from_window(
@@ -269,18 +297,15 @@ impl RenderTarget {
         surface_state: &SurfaceState,
         device: &wgpu::Device,
     ) -> Self {
-        let size = surface_state.size;
-        let width = size.width;
-        let height = size.height;
-        let format = surface_state.config.format;
-
-        let (color_a, color_b, depth) = Self::create_images(width, height, format, true, device);
+        let width = surface_state.config.width;
+        let height = surface_state.config.height;
+        let (hdr, display, depth) =
+            Self::create_images(width, height, crate::SCREEN_FORMAT, true, device);
 
         Self {
             target_type: TargetType::WindowAndSurface(window_entity),
-            is_current_color_a: false,
-            color_a,
-            color_b,
+            hdr,
+            display,
             depth,
         }
     }
@@ -291,17 +316,17 @@ impl RenderTarget {
         format: wgpu::TextureFormat,
         device: &wgpu::Device,
     ) -> Self {
-        let color = Arc::new(create_color_render_target_image(
-            width, height, device, format,
-        ));
-
-        let (color_a, color_b, depth) = Self::create_images(width, height, format, true, device);
+        assert_eq!(
+            format,
+            crate::SCREEN_FORMAT,
+            "Scene display targets must use SCREEN_FORMAT"
+        );
+        let (hdr, display, depth) = Self::create_images(width, height, format, true, device);
 
         Self {
-            target_type: TargetType::Texture(color),
-            is_current_color_a: false,
-            color_a,
-            color_b,
+            target_type: TargetType::Texture(Arc::clone(&display)),
+            hdr,
+            display,
             depth,
         }
     }
@@ -337,24 +362,23 @@ pub fn sys_resize_render_target(
                         surface_state.config.width = width;
                         surface_state.config.height = height;
                         surface_state.configure(&rs.device);
-                        surface_state.config.format
+                        crate::SCREEN_FORMAT
                     })
             }
             TargetType::Texture(uploaded_image) => Some(uploaded_image.texture.format()),
         };
 
         if let Some(format) = format {
-            (target.color_a, target.color_b, target.depth) = RenderTarget::create_images(
+            (target.hdr, target.display, target.depth) = RenderTarget::create_images(
                 width,
                 height,
                 format,
                 target.depth.is_some(),
                 &rs.device,
             );
+            let display = target.display_color();
             if let TargetType::Texture(ref mut uploaded_image) = target.target_type {
-                *uploaded_image = Arc::new(create_color_render_target_image(
-                    width, height, &rs.device, format,
-                ));
+                *uploaded_image = display;
             }
         }
 
@@ -429,16 +453,17 @@ fn sys_create_render_target(
         (Entity, &RenderTargetConfig),
         Or<(Without<RenderTarget>, Changed<RenderTargetConfig>)>,
     >,
-    q_primary_window: Option<Single<&SurfaceState, With<PrimaryWindow>>>,
+    q_primary_window: Option<Single<(Entity, &SurfaceState), With<PrimaryWindow>>>,
     q_window: Query<&SurfaceState, Without<PrimaryWindow>>,
     rs: Res<RenderState>,
 ) {
     let device = &rs.device;
     for (id, config) in q_camera {
         let make_result: Option<(RenderTarget, u32, u32)> = match config {
-            RenderTargetConfig::PrimaryWindow => q_primary_window.as_ref().map(|surface_state| {
+            RenderTargetConfig::PrimaryWindow => q_primary_window.as_ref().map(|window| {
+                let (window_id, surface_state) = **window;
                 (
-                    RenderTarget::from_window(id, &surface_state, device),
+                    RenderTarget::from_window(window_id, surface_state, device),
                     surface_state.config.width,
                     surface_state.config.height,
                 )

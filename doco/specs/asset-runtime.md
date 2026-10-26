@@ -4,7 +4,7 @@
 
 持久组件记录用户配置和资产来源；派生组件记录运行结果。完成准备不得删除来源组件。GPU 对象、GPU Handle、WorldTransform、children 索引、准备错误及选择状态不序列化。
 
-MeshSource 支持资产 mesh 子资源和 `Plane { size }` 配方。PbrMaterial 保存覆盖参数和纹理来源；Camera 保存投影参数，RenderTargetConfig 保留目标策略；其矩阵、Buffer、纹理和当前 viewport 尺寸由运行时生成。
+MeshSource 支持资产 mesh 子资源和 `Plane { size }` 配方。PbrMaterial 保存覆盖参数和纹理来源；Camera 保存投影参数，RenderTargetConfig 保留目标策略；其矩阵、Buffer、纹理和当前 viewport 尺寸由运行时生成。渲染目标区分 HDR ping-pong 场景颜色与 SDR display 输出，曝光补偿属于应用级运行时配置，均不扩展持久场景格式；颜色边界见 [渲染颜色与显示输出](render-color.md)。
 
 ## 资源身份
 

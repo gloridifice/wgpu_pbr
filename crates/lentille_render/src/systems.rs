@@ -126,7 +126,7 @@ pub fn sys_render_main_pass(
     let InMut(RenderContext {
         camera_id,
         encoder,
-        color_target,
+        hdr,
         camera_global_bind_group,
         ..
     }) = ctx;
@@ -139,7 +139,7 @@ pub fn sys_render_main_pass(
         label: Some("Main Pass"),
         multiview_mask: None,
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &color_target.view,
+            view: &hdr.current().view,
             resolve_target: None,
             depth_slice: None,
             ops: wgpu::Operations {
@@ -160,6 +160,11 @@ pub fn sys_render_main_pass(
     render_pass.draw(0..3, 0..1);
 }
 
+pub fn sys_prepare_transparent_color(ctx: InMut<RenderContext>) {
+    let InMut(RenderContext { hdr, encoder, .. }) = ctx;
+    hdr.copy_and_swap(encoder);
+}
+
 pub fn sys_render_transparent(
     ctx: InMut<RenderContext>,
     transparent_pipeline: Res<TransparentPipeline>,
@@ -171,7 +176,7 @@ pub fn sys_render_transparent(
     let InMut(RenderContext {
         camera_id,
         encoder,
-        color_target,
+        hdr,
         camera_global_bind_group,
         depth_target,
         ..
@@ -189,7 +194,7 @@ pub fn sys_render_transparent(
         label: Some("Main Pass"),
         multiview_mask: None,
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &color_target.view,
+            view: &hdr.current().view,
             resolve_target: None,
             depth_slice: None,
             ops: wgpu::Operations {

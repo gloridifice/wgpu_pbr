@@ -242,10 +242,10 @@ pub fn sys_render_gizmo_pass(
     let InMut(RenderContext {
         camera_id,
         encoder,
-        color_target,
-        camera_global_bind_group: _,
+        display_target,
         depth_target,
         gizmo_primitives,
+        ..
     }) = ctx;
 
     let camera_buffer = match q_camera_buffer.get(*camera_id) {
@@ -295,7 +295,7 @@ pub fn sys_render_gizmo_pass(
     let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Gizmo Pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &color_target.view,
+            view: &display_target.view,
             resolve_target: None,
             depth_slice: None,
             ops: wgpu::Operations {

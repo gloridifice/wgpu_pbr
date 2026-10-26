@@ -10,7 +10,7 @@ use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use egui_ltreeview::Action;
 use egui_wgpu::ScreenDescriptor;
 use lentille_core::{
-    input::{CursorButton, Input},
+    input::Input,
     time::Time,
     window::{PrimaryWindow, WinitWindow, WinitWindowEvent},
 };
@@ -421,24 +421,20 @@ impl TabViewer for DockTabViewer<'_> {
                     );
                     world
                         .resource_mut::<crate::control::ControlState>()
-                        .viewport_active = main_view.hovered();
+                        .viewport_active = main_view.contains_pointer()
+                        && !ui.ctx().egui_wants_keyboard_input();
                     let mut input = world.resource_mut::<Input>();
-                    for (ec, mc) in [
-                        (PointerButton::Primary, CursorButton::Left),
-                        (PointerButton::Secondary, CursorButton::Right),
-                        (PointerButton::Middle, CursorButton::Middle),
-                    ] {
-                        if main_view.clicked_by(ec) {
-                            input.down_cursor_buttons.insert(mc);
-                        }
-                    }
                     input.cursor_position = main_view
                         .hover_pos()
                         .map(|it| Vec2::new(it.x, it.y))
                         .unwrap_or(Vec2::zero());
 
                     // ---- Ray picking on left-click ----
-                    if main_view.clicked_by(PointerButton::Primary) {
+                    if main_view.clicked_by(PointerButton::Primary)
+                        && !ui.input(|i| i.modifiers.alt || i.pointer.secondary_down())
+                        && world.resource::<crate::control::ControlState>().mode
+                            == crate::control::NavigationMode::Idle
+                    {
                         if let Some(cursor_pos) = main_view.hover_pos() {
                             // Pointer positions are global egui coordinates; picking
                             // needs coordinates relative to the scene image.

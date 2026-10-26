@@ -4,11 +4,14 @@ use std::collections::HashSet;
 use bevy_app::{Plugin, PostUpdate, PreUpdate};
 use bevy_ecs::prelude::*;
 use winit::{
-    event::{DeviceEvent, KeyEvent, WindowEvent},
+    event::{DeviceEvent, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
 };
 
 use crate::window::{WinitDeviceEvent, WinitWindowEvent};
+
+#[cfg(test)]
+mod tests;
 
 pub struct InputPlugin;
 
@@ -34,6 +37,11 @@ pub struct Input {
     pub down_cursor_buttons: HashSet<CursorButton>,
     /// Ignore cursor locking. From device input.
     pub cursor_delta: Vec2,
+    pub hold_cursor_buttons: HashSet<CursorButton>,
+    pub wheel_delta: f32,
+    pub window_focused: bool,
+    /// Physical window coordinates, independent of the editor viewport.
+    pub window_cursor_position: Vec2,
 }
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
@@ -60,6 +68,10 @@ impl Input {
             cursor_offset: Vec2::zero(),
             down_cursor_buttons: HashSet::with_capacity(8),
             cursor_delta: Vec2::zero(),
+            hold_cursor_buttons: HashSet::new(),
+            wheel_delta: 0.0,
+            window_focused: false,
+            window_cursor_position: Vec2::zero(),
         }
     }
 
@@ -84,6 +96,47 @@ impl Input {
 
     fn sys_on_window_input(event: On<WinitWindowEvent>, mut input: ResMut<Input>) {
         let event = &event.window_event;
+        match event {
+            WindowEvent::Focused(focused) => {
+                input.window_focused = *focused;
+                if !focused {
+                    input.hold_keys.clear();
+                    input.down_keys.clear();
+                    input.up_keys.clear();
+                    input.hold_cursor_buttons.clear();
+                    input.down_cursor_buttons.clear();
+                    input.cursor_delta = Vec2::zero();
+                    input.wheel_delta = 0.0;
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                input.window_cursor_position = Vec2::new(position.x as f32, position.y as f32);
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                let button = match button {
+                    MouseButton::Left => Some(CursorButton::Left),
+                    MouseButton::Right => Some(CursorButton::Right),
+                    MouseButton::Middle => Some(CursorButton::Middle),
+                    _ => None,
+                };
+                if let Some(button) = button {
+                    if state.is_pressed() {
+                        if input.hold_cursor_buttons.insert(button) {
+                            input.down_cursor_buttons.insert(button);
+                        }
+                    } else {
+                        input.hold_cursor_buttons.remove(&button);
+                    }
+                }
+            }
+            WindowEvent::MouseWheel { delta, .. } => {
+                input.wheel_delta += match delta {
+                    MouseScrollDelta::LineDelta(_, y) => *y,
+                    MouseScrollDelta::PixelDelta(p) => p.y as f32 / 120.0,
+                };
+            }
+            _ => {}
+        }
         if let WindowEvent::KeyboardInput {
             event:
                 KeyEvent {
@@ -109,8 +162,10 @@ impl Input {
     }
 
     fn sys_on_device_input(event: On<WinitDeviceEvent>, mut input: ResMut<Input>) {
-        if let DeviceEvent::MouseMotion { ref delta } = event.device_event {
-            input.cursor_delta = Vec2::new(delta.0 as f32, delta.1 as f32);
+        if input.window_focused {
+            if let DeviceEvent::MouseMotion { ref delta } = event.device_event {
+                input.cursor_delta += Vec2::new(delta.0 as f32, delta.1 as f32);
+            }
         }
     }
 
@@ -124,5 +179,6 @@ impl Input {
         input.up_keys.clear();
         input.down_cursor_buttons.clear();
         input.cursor_delta = Vec2::zero();
+        input.wheel_delta = 0.0;
     }
 }

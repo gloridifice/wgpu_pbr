@@ -1,5 +1,6 @@
 use bevy_app::Plugin;
-use bevy_ecs::{resource::Resource, world::World};
+use bevy_ecs::resource::Resource;
+use std::collections::HashMap;
 use wgpu::{
     CommandEncoderDescriptor, FragmentState, PipelineLayoutDescriptor, RenderPassColorAttachment,
     RenderPipelineDescriptor, TextureView, VertexState,
@@ -11,9 +12,13 @@ pub(crate) struct BlitPlugin;
 
 impl Plugin for BlitPlugin {
     fn build(&self, app: &mut bevy_app::App) {
-        app.init_render_resource::<BlitShader>();
+        app.init_render_resource::<BlitShader>()
+            .init_resource::<WindowBlitPipelines>();
     }
 }
+
+#[derive(Resource, Default)]
+pub struct WindowBlitPipelines(pub(crate) HashMap<TextureFormat, BlitPipeline>);
 
 #[derive(Resource)]
 pub struct BlitShader(pub Arc<ShaderModule>);
@@ -35,24 +40,36 @@ impl FromWorld for BlitShader {
                 label: Some("Blit Shader"),
                 source: wgpu::ShaderSource::Wgsl(
                     r#"
+                struct VertexOutput {
+                    @builtin(position) position: vec4f,
+                    @location(0) uv: vec2f,
+                }
                 @vertex
-                fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {
+                fn vs_main(@builtin(vertex_index) idx: u32) -> VertexOutput {
                     var pos = array<vec2<f32>, 3>(
                         vec2<f32>(-1.0, -3.0),
                         vec2<f32>( 3.0,  1.0),
                         vec2<f32>(-1.0,  1.0)
                     );
-                    return vec4<f32>(pos[idx], 0.0, 1.0);
+                    return VertexOutput(vec4f(pos[idx], 0.0, 1.0), pos[idx] * vec2f(0.5, -0.5) + vec2f(0.5));
                 }
 
                 @group(0) @binding(0) var myTex: texture_2d<f32>;
                 @group(0) @binding(1) var mySampler: sampler;
 
                 @fragment
-                fn fs_main(@builtin(position) frag_coord: vec4<f32>) -> @location(0) vec4<f32> {
-                    let dims = vec2<f32>(textureDimensions(myTex, 0));
-                    let uv = frag_coord.xy / dims;
-                    return textureSample(myTex, mySampler, uv);
+                fn fs_main(in: VertexOutput) -> @location(0) vec4f {
+                    return textureSample(myTex, mySampler, in.uv);
+                }
+
+                // Non-sRGB swapchains need explicit encoding; sRGB targets do it in hardware.
+                @fragment
+                fn fs_unorm(in: VertexOutput) -> @location(0) vec4f {
+                    let color = textureSample(myTex, mySampler, in.uv);
+                    let rgb = max(color.rgb, vec3f(0.0));
+                    let encoded = select(1.055 * pow(rgb, vec3f(1.0 / 2.4)) - 0.055,
+                        12.92 * rgb, rgb <= vec3f(0.0031308));
+                    return vec4f(encoded, color.a);
                 }
             "#
                     .into(),
@@ -64,11 +81,11 @@ impl FromWorld for BlitShader {
 }
 
 impl BlitPipeline {
-    pub fn new(world: &mut World, surface_format: wgpu::TextureFormat) -> Self {
-        let shader = world.resource::<BlitShader>();
-        let rs = world.resource::<RenderState>();
-        let device = &rs.device;
-
+    pub fn new(
+        device: &wgpu::Device,
+        shader: &ShaderModule,
+        surface_format: wgpu::TextureFormat,
+    ) -> Self {
         let bgl = device.create_bind_group_layout(&bg_layout_descriptor! {
             ["Blit"]
             0: ShaderStages::FRAGMENT => BGLEntry::Tex2D(false, TextureSampleType::Float { filterable: true });
@@ -81,18 +98,22 @@ impl BlitPipeline {
             ..Default::default()
         });
 
-        let pipeline = Arc::new(rs.device.create_render_pipeline(&RenderPipelineDescriptor {
+        let pipeline = Arc::new(device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Blit Pipeline"),
             layout: Some(&pipeline_layout),
             vertex: VertexState {
-                module: &shader.0,
+                module: shader,
                 entry_point: Some("vs_main"),
                 compilation_options: Default::default(),
                 buffers: &[],
             },
             fragment: Some(FragmentState {
-                module: &shader.0,
-                entry_point: Some("fs_main"),
+                module: shader,
+                entry_point: Some(if surface_format.is_srgb() {
+                    "fs_main"
+                } else {
+                    "fs_unorm"
+                }),
                 compilation_options: Default::default(),
                 targets: &[Some(surface_format.into())],
             }),

@@ -551,9 +551,18 @@ fn candidate_camera_bytes(candidate: &mut World, world: &mut World) -> u64 {
             .map(|s| (s.width, s.height))
             .unwrap_or((1280, 720)),
     };
-    u64::from(width)
-        .saturating_mul(u64::from(height))
-        .saturating_mul(64)
+    camera_target_bytes(width, height, config)
+}
+
+fn camera_target_bytes(width: u32, height: u32, config: &CsmConfig) -> u64 {
+    // Preserve the existing per-pixel auxiliary/headroom allowance; base attachments
+    // now include two HDR targets and the single shared SDR viewport image.
+    lentille_render::camera::RenderTarget::estimated_attachment_bytes(width, height)
+        .saturating_add(
+            u64::from(width)
+                .saturating_mul(u64::from(height))
+                .saturating_mul(32),
+        )
         .saturating_add(
             u64::from(config.texture_size)
                 .pow(2)
@@ -561,6 +570,7 @@ fn candidate_camera_bytes(candidate: &mut World, world: &mut World) -> u64 {
                 .saturating_mul(4),
         )
 }
+
 fn active_bytes(world: &mut World) -> u64 {
     let assets = world
         .get_resource::<SceneAssetCache>()
@@ -569,10 +579,7 @@ fn active_bytes(world: &mut World) -> u64 {
     let targets = world
         .query::<(&RenderTargetSize, &CsmConfig)>()
         .iter(world)
-        .map(|(s, c)| {
-            u64::from(s.width) * u64::from(s.height) * 64
-                + u64::from(c.texture_size).pow(2) * u64::from(c.level_count) * 4
-        })
+        .map(|(s, c)| camera_target_bytes(s.width, s.height, c))
         .sum::<u64>();
     let environments = world
         .query::<&Environment>()
