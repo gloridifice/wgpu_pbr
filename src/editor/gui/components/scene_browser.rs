@@ -9,6 +9,7 @@ use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
+use yummy_egui::{PanelButton, ParameterSlider, action_row, h2};
 
 mod widgets;
 
@@ -198,9 +199,10 @@ pub fn show(ui: &mut egui::Ui, world: &mut World) {
                         egui::containers::menu::MenuButton::new("View")
                             .config(menu)
                             .ui(ui, |ui| {
+                                ui.set_min_width(180.0);
                                 ui.label("Card size");
                                 ui.add(
-                                    egui::Slider::new(&mut browser.card_size, 64.0..=144.0)
+                                    ParameterSlider::new(&mut browser.card_size, 64.0..=144.0)
                                         .suffix(" px"),
                                 );
                                 ui.checkbox(&mut browser.sources_visible, "Show Sources");
@@ -505,21 +507,25 @@ pub fn dialogs(ctx: &egui::Context, world: &mut World) {
         let mut controller = world.resource_mut::<SceneController>();
         if controller.pending_open.is_some() && !controller.save_then_open {
             egui::Modal::new(egui::Id::new("scene_unsaved")).show(ctx, |ui| {
-                ui.heading("Unsaved Scene");
+                h2(ui, "Unsaved Scene");
                 ui.label("Save changes before opening another scene?");
-                ui.horizontal(|ui| {
-                    if ui.button("Save and Open").clicked() {
-                        controller.resolve_unsaved(crate::scene::controller::UnsavedDecision::Save);
-                    }
-                    if ui.button("Discard and Open").clicked() {
-                        controller
-                            .resolve_unsaved(crate::scene::controller::UnsavedDecision::Discard);
-                    }
-                    if ui.button("Cancel").clicked() {
-                        controller
-                            .resolve_unsaved(crate::scene::controller::UnsavedDecision::Cancel);
-                    }
-                });
+                let [save, discard, cancel] = action_row(
+                    ui,
+                    [
+                        PanelButton::new("Save and Open"),
+                        PanelButton::new("Discard and Open"),
+                        PanelButton::new("Cancel"),
+                    ],
+                );
+                if save.clicked() {
+                    controller.resolve_unsaved(crate::scene::controller::UnsavedDecision::Save);
+                }
+                if discard.clicked() {
+                    controller.resolve_unsaved(crate::scene::controller::UnsavedDecision::Discard);
+                }
+                if cancel.clicked() {
+                    controller.resolve_unsaved(crate::scene::controller::UnsavedDecision::Cancel);
+                }
             });
         }
         if controller.needs_save_path || browser.open_dialog {
@@ -528,11 +534,14 @@ pub fn dialogs(ctx: &egui::Context, world: &mut World) {
             }
             let opening = browser.open_dialog;
             egui::Modal::new(egui::Id::new("scene_path")).show(ctx, |ui| {
-                ui.heading(if opening {
-                    "Open Scene"
-                } else {
-                    "Save Scene As"
-                });
+                h2(
+                    ui,
+                    if opening {
+                        "Open Scene"
+                    } else {
+                        "Save Scene As"
+                    },
+                );
                 ui.horizontal(|ui| {
                     ui.label("assets/");
                     ui.text_edit_singleline(&mut browser.path_input);
@@ -540,49 +549,54 @@ pub fn dialogs(ctx: &egui::Context, world: &mut World) {
                 if let Some(error) = &controller.error {
                     ui.colored_label(egui::Color32::LIGHT_RED, error);
                 }
-                ui.horizontal(|ui| {
-                    if ui.button(if opening { "Open" } else { "Save" }).clicked() {
-                        let mut path = PathBuf::from(browser.path_input.trim());
-                        if !is_scene_file(&path) && path.extension().is_none() {
-                            path.set_extension("scn.ron");
-                        }
-                        if opening {
-                            controller.request(SceneRequest::Open(path));
-                            browser.open_dialog = false;
-                        } else {
-                            match world_path(&root, &path) {
-                                Ok(true) => browser.overwrite = Some(path),
-                                Ok(false) => {
-                                    controller.request = Some(SceneRequest::SaveAs(path));
-                                    controller.needs_save_path = false;
-                                }
-                                Err(error) => controller.error = Some(format!("{error:#}")),
-                            }
-                        }
+                let [confirm, cancel] = action_row(
+                    ui,
+                    [
+                        PanelButton::new(if opening { "Open" } else { "Save" }),
+                        PanelButton::new("Cancel"),
+                    ],
+                );
+                if confirm.clicked() {
+                    let mut path = PathBuf::from(browser.path_input.trim());
+                    if !is_scene_file(&path) && path.extension().is_none() {
+                        path.set_extension("scn.ron");
                     }
-                    if ui.button("Cancel").clicked() {
-                        controller.needs_save_path = false;
-                        controller.save_then_open = false;
-                        controller.pending_open = None;
+                    if opening {
+                        controller.request(SceneRequest::Open(path));
                         browser.open_dialog = false;
+                    } else {
+                        match world_path(&root, &path) {
+                            Ok(true) => browser.overwrite = Some(path),
+                            Ok(false) => {
+                                controller.request = Some(SceneRequest::SaveAs(path));
+                                controller.needs_save_path = false;
+                            }
+                            Err(error) => controller.error = Some(format!("{error:#}")),
+                        }
                     }
-                });
+                }
+                if cancel.clicked() {
+                    controller.needs_save_path = false;
+                    controller.save_then_open = false;
+                    controller.pending_open = None;
+                    browser.open_dialog = false;
+                }
             });
         }
         if let Some(path) = browser.overwrite.clone() {
             egui::Modal::new(egui::Id::new("scene_overwrite")).show(ctx, |ui| {
-                ui.heading("Replace Scene?");
+                h2(ui, "Replace Scene?");
                 ui.label(path.display().to_string());
-                ui.horizontal(|ui| {
-                    if ui.button("Replace").clicked() {
-                        controller.request = Some(SceneRequest::SaveAs(path));
-                        controller.needs_save_path = false;
-                        browser.overwrite = None;
-                    }
-                    if ui.button("Cancel").clicked() {
-                        browser.overwrite = None;
-                    }
-                });
+                let [replace, cancel] =
+                    action_row(ui, [PanelButton::new("Replace"), PanelButton::new("Cancel")]);
+                if replace.clicked() {
+                    controller.request = Some(SceneRequest::SaveAs(path));
+                    controller.needs_save_path = false;
+                    browser.overwrite = None;
+                }
+                if cancel.clicked() {
+                    browser.overwrite = None;
+                }
             });
         }
     });

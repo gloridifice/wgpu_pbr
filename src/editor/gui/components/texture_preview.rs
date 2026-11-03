@@ -1,4 +1,5 @@
 use egui::{Color32, Vec2, load::SizedTexture};
+use yummy_egui::IconButton;
 
 /// Cached state for previewing a wgpu texture in egui.
 ///
@@ -116,7 +117,13 @@ impl TexturePreview {
                     ui.horizontal(|ui| {
                         ui.label("Layer:");
                         if ui
-                            .add_enabled(self.cached_layer > 0, egui::Button::new("◀"))
+                            .add(
+                                IconButton::new("◀")
+                                    .size(22.0)
+                                    .icon_size(12.0)
+                                    .enabled(self.cached_layer > 0)
+                                    .label("Previous layer"),
+                            )
                             .clicked()
                         {
                             self.cached_layer = self.cached_layer.saturating_sub(1);
@@ -128,9 +135,12 @@ impl TexturePreview {
                             total_layers.saturating_sub(1)
                         ));
                         if ui
-                            .add_enabled(
-                                self.cached_layer + 1 < total_layers,
-                                egui::Button::new("▶"),
+                            .add(
+                                IconButton::new("▶")
+                                    .size(22.0)
+                                    .icon_size(12.0)
+                                    .enabled(self.cached_layer + 1 < total_layers)
+                                    .label("Next layer"),
                             )
                             .clicked()
                         {

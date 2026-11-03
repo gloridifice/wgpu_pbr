@@ -3,8 +3,8 @@ use std::fs::{self};
 use bevy_app::{First, Plugin, Update};
 use bevy_ecs::prelude::*;
 use egui::{
-    CentralPanel, Color32, Panel, PointerButton, ScrollArea, Visuals,
-    epaint::text::InsertFontFamily, load::SizedTexture,
+    CentralPanel, Color32, Panel, PointerButton, ScrollArea, epaint::text::InsertFontFamily,
+    load::SizedTexture,
 };
 use egui_dock::{DockArea, DockState, NodeIndex, TabViewer};
 use egui_ltreeview::Action;
@@ -20,6 +20,9 @@ use lentille_render::{
     camera::{RenderTarget, RenderTargetResizedEvent, RenderTargetSize, TargetType},
     prelude::*,
     shadow::csm::{CascadeShadowMapping, CsmConfig},
+};
+use yummy_egui::{
+    PanelButton, ParameterList, ParameterSlider, Theme, action_row, h2, style_editor_window,
 };
 
 use components::depth_to_rgba::CsmDepthToRgbaConverter;
@@ -194,35 +197,18 @@ impl RenderTargetEguiTexId {
 #[derive(Resource)]
 struct DockLayout(DockState<Pane>, bool);
 
-/// Combined theme: egui native style + egui_dock style, both persisted together.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct EditorTheme {
-    egui_style: egui::Style,
-    dock_style: egui_dock::Style,
-}
-
-/// Holds the editor theme, visibility, and baseline snapshots for reset.
+/// Holds the active yummy_egui dock style and style editor window visibility.
 #[derive(Resource)]
 struct EditorThemeConfig {
-    pub egui_style: egui::Style,
     pub dock_style: egui_dock::Style,
     pub visible: bool,
-    pub initialized: bool,
-    pub egui_baseline_style: egui::Style,
-    pub dock_baseline_style: egui_dock::Style,
-    pub dock_default_style: egui_dock::Style,
 }
 
 impl Default for EditorThemeConfig {
     fn default() -> Self {
         Self {
-            egui_style: egui::Style::default(),
-            dock_style: egui_dock::Style::default(),
+            dock_style: Theme::default().dock_style().clone(),
             visible: false,
-            initialized: false,
-            egui_baseline_style: egui::Style::default(),
-            dock_baseline_style: egui_dock::Style::default(),
-            dock_default_style: egui_dock::Style::default(),
         }
     }
 }
@@ -279,9 +265,18 @@ impl TabViewer for DockTabViewer<'_> {
                             if let Ok(mut config) = config_query.single_mut(world) {
                                 let mut factor = config.linear_log_factor;
                                 ui.add_enabled_ui(editable, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.label("Linear/Log Factor:");
-                                        ui.add(egui::Slider::new(&mut factor, 0.0..=1.0).text(""));
+                                    ParameterList::new("csm_settings").show(ui, |rows| {
+                                        rows.row(
+                                            "linear_log_factor",
+                                            "Linear/Log Factor",
+                                            "Blend between linear and logarithmic cascade splits",
+                                            |ui| {
+                                                ui.add(
+                                                    ParameterSlider::new(&mut factor, 0.0..=1.0)
+                                                        .max_decimals(2),
+                                                );
+                                            },
+                                        );
                                     });
                                 });
                                 if editable && factor != config.linear_log_factor {
@@ -306,19 +301,24 @@ impl TabViewer for DockTabViewer<'_> {
                                 if let Some(mut state) =
                                     world.get_resource_mut::<CsmPreviewRefreshState>()
                                 {
-                                    ui.horizontal(|ui| {
-                                        if ui.button("🔄 Refresh Once").clicked() {
-                                            state.refresh_once = true;
-                                        }
-                                        let label = if state.continuous {
-                                            "🔁 Continuous: ON"
-                                        } else {
-                                            "🔁 Continuous: OFF"
-                                        };
-                                        if ui.button(label).clicked() {
-                                            state.continuous = !state.continuous;
-                                        }
-                                    });
+                                    let label = if state.continuous {
+                                        "🔁 Continuous: ON"
+                                    } else {
+                                        "🔁 Continuous: OFF"
+                                    };
+                                    let [refresh, continuous] = action_row(
+                                        ui,
+                                        [
+                                            PanelButton::new("🔄 Refresh Once"),
+                                            PanelButton::new(label),
+                                        ],
+                                    );
+                                    if refresh.clicked() {
+                                        state.refresh_once = true;
+                                    }
+                                    if continuous.clicked() {
+                                        state.continuous = !state.continuous;
+                                    }
                                 }
                             });
                     }
@@ -371,18 +371,23 @@ impl TabViewer for DockTabViewer<'_> {
                         .default_open(true)
                         .show(ui, |ui| {
                             if let Some(time) = world.get_resource::<Time>() {
-                                ui.horizontal(|ui| {
-                                    ui.label("FPS:");
-                                    ui.colored_label(
-                                        egui::Color32::LIGHT_GREEN,
-                                        format!("{:.1}", time.fps),
-                                    );
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Frame:");
-                                    ui.colored_label(
-                                        egui::Color32::LIGHT_GREEN,
-                                        format!("{:.2} ms", time.frame_time_ms),
+                                ParameterList::new("performance").show(ui, |rows| {
+                                    rows.row("fps", "FPS", "Frames per second", |ui| {
+                                        ui.colored_label(
+                                            egui::Color32::LIGHT_GREEN,
+                                            format!("{:.1}", time.fps),
+                                        );
+                                    });
+                                    rows.row(
+                                        "frame",
+                                        "Frame",
+                                        "Frame time in milliseconds",
+                                        |ui| {
+                                            ui.colored_label(
+                                                egui::Color32::LIGHT_GREEN,
+                                                format!("{:.2} ms", time.frame_time_ms),
+                                            );
+                                        },
                                     );
                                 });
                             } else {
@@ -413,8 +418,11 @@ impl TabViewer for DockTabViewer<'_> {
                                     if let Some(pos) =
                                         egui_renderer.context().input(|i| i.pointer.latest_pos())
                                     {
-                                        TryCreateEntityPropertyWindowCmd { pos: pos, entity }
-                                            .apply(world);
+                                        TryCreateEntityPropertyWindowCmd {
+                                            pos: pos + egui::vec2(32.0, 0.0),
+                                            entity,
+                                        }
+                                        .apply(world);
                                     }
                                 }
                             }
@@ -561,7 +569,7 @@ pub fn sys_egui_dock(world: &mut World) {
                         reset_layout.set(true);
                         ui.close();
                     }
-                    if ui.button("🎨 Dock Style").clicked() {
+                    if ui.button("🎨 Style Editor").clicked() {
                         toggle_style_window.set(true);
                         ui.close();
                     }
@@ -588,78 +596,13 @@ pub fn sys_egui_dock(world: &mut World) {
             });
         });
 
-        // ---- Editor Theme Config (init + toggle + editor window) ----
+        // ---- Editor Theme Config (toggle + yummy_egui style editor window) ----
         {
             let mut cfg = world.resource_mut::<EditorThemeConfig>();
-
-            // Lazy-init on the first frame: try loading saved theme, fall back to defaults.
-            if !cfg.initialized {
-                let current_style = ctx.global_style().as_ref().clone();
-                cfg.egui_baseline_style = current_style.clone();
-
-                let dock_theme = egui_dock::Style::from_egui(&current_style);
-                cfg.dock_baseline_style = dock_theme.clone();
-                cfg.dock_default_style = egui_dock::Style::default();
-
-                // Try loading saved theme; if missing/invalid, use current live defaults.
-                if let Some(saved) = load_editor_theme() {
-                    cfg.egui_style = saved.egui_style;
-                    cfg.dock_style = saved.dock_style;
-                } else {
-                    cfg.egui_style = current_style;
-                    cfg.dock_style = {
-                        let mut s = dock_theme;
-                        s.tab_bar.height = 28.0;
-                        s
-                    };
-                }
-                cfg.initialized = true;
-            }
-
-            // Apply the egui style to the context every frame for live preview.
-            ctx.set_global_style(cfg.egui_style.clone());
-
-            // Toggle visibility via menu signal.
             if toggle_style_window.take() {
                 cfg.visible = !cfg.visible;
             }
-
-            // Render the style editor window.
-            // We copy state out to avoid overlapping borrows between .open() and .show().
-            if cfg.visible {
-                let egui_baseline = cfg.egui_baseline_style.clone();
-                let dock_baseline = cfg.dock_baseline_style.clone();
-                let dock_default = cfg.dock_default_style.clone();
-                let mut egui_style = cfg.egui_style.clone();
-                let mut dock_style = cfg.dock_style.clone();
-                let mut win_visible = cfg.visible;
-                let mut save_requested = false;
-
-                egui::Window::new("🎨 Editor Theme")
-                    .open(&mut win_visible)
-                    .default_width(420.0)
-                    .default_height(700.0)
-                    .show(&ctx, |ui| {
-                        save_requested = components::dock_style_editor::show(
-                            ui,
-                            &mut egui_style,
-                            &egui_baseline,
-                            &mut dock_style,
-                            &dock_baseline,
-                            &dock_default,
-                        );
-                    });
-
-                if save_requested {
-                    save_editor_theme(&EditorTheme {
-                        egui_style: egui_style.clone(),
-                        dock_style: dock_style.clone(),
-                    });
-                }
-                cfg.egui_style = egui_style;
-                cfg.dock_style = dock_style;
-                cfg.visible = win_visible;
-            }
+            style_editor_window(&ctx, &mut cfg.visible);
         }
 
         // ---- About Window ----
@@ -670,7 +613,7 @@ pub fn sys_egui_dock(world: &mut World) {
                 .collapsible(false)
                 .resizable(false)
                 .show(&ctx, |ui| {
-                    ui.label("wgpu_pbr — Real-time PBR Renderer");
+                    h2(ui, "wgpu_pbr — Real-time PBR Renderer");
                     ui.separator();
                     ui.label("A deferred rendering engine with PBR materials,");
                     ui.label("IBL lighting, CSM shadows, and an egui-based editor.");
@@ -773,12 +716,8 @@ fn convert_csm_depth_to_rgba(world: &mut World) {
 }
 
 fn sys_setup_egui_visual_theme(egui: ResMut<EguiRenderer>) {
-    let visual = Visuals::dark();
     let ctx = egui.context();
-
-    //visual.widgets.noninteractive.bg_stroke.width = 0.0;
-
-    ctx.set_visuals(visual);
+    Theme::default().apply(ctx);
 
     let font_data =
         fs::read(AssetPath::Assets("fonts/MiSans-Normal.ttf".to_string()).final_path()).unwrap();
@@ -790,38 +729,6 @@ fn sys_setup_egui_visual_theme(egui: ResMut<EguiRenderer>) {
             priority: egui::epaint::text::FontPriority::Highest,
         }],
     ));
-}
-
-fn save_editor_theme(theme: &EditorTheme) {
-    let path = AssetPath::Assets("egui_themes/default.ron".to_string()).final_path();
-    if let Some(parent) = std::path::Path::new(&path).parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    match ron::ser::to_string_pretty(theme, ron::ser::PrettyConfig::default()) {
-        Ok(s) => {
-            if let Err(e) = fs::write(&path, s) {
-                bevy_log::error!("Failed to write editor theme to {}: {}", path, e);
-            } else {
-                bevy_log::info!("Editor theme saved to {}", path);
-            }
-        }
-        Err(e) => bevy_log::error!("Failed to serialize editor theme: {}", e),
-    }
-}
-
-fn load_editor_theme() -> Option<EditorTheme> {
-    let path = AssetPath::Assets("egui_themes/default.ron".to_string()).final_path();
-    let data = fs::read_to_string(&path).ok()?;
-    match ron::from_str(&data) {
-        Ok(theme) => {
-            bevy_log::info!("Editor theme loaded from {}", path);
-            Some(theme)
-        }
-        Err(e) => {
-            bevy_log::warn!("Failed to deserialize editor theme from {}: {}", path, e);
-            None
-        }
-    }
 }
 
 fn sys_on_resize_scene_render_target(

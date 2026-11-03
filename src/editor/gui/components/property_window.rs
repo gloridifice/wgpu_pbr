@@ -1,6 +1,7 @@
 use bevy_app::{Plugin, Update};
 use bevy_ecs::prelude::*;
 use egui::{InnerResponse, Pos2, accesskit::Uuid, ahash::HashMap};
+use yummy_egui::{IconButton, h3};
 
 use crate::{editor::gui::components::property_window_ui, egui_renderer::EguiRenderer};
 
@@ -49,6 +50,7 @@ pub struct EntityToPropertyWindowIdMap {
 pub struct EntityPropertyWindow {
     pub pinned: bool,
     pub open: bool,
+    pub just_opened: bool,
     pub entity: Option<Entity>,
     pub egui_id: egui::Id,
     pub init_pos: Pos2,
@@ -62,6 +64,7 @@ impl Default for EntityPropertyWindow {
         Self {
             pinned: false,
             open: true,
+            just_opened: true,
             entity: None,
             egui_id: egui::Id::new(Uuid::new_v4()),
             init_pos: Default::default(),
@@ -97,14 +100,15 @@ fn sys_show(world: &mut World) {
     for (id, pinnable_window) in openned {
         let (response, mut new_state) = pinnable_window.show(&ctx, world);
 
-        // Unpin when click blank area
-        if !new_state.pinned && ctx.input(|it| it.pointer.any_click()) {
+        // Unpin when click blank area (skip the click that just opened this window)
+        if !new_state.just_opened && !new_state.pinned && ctx.input(|it| it.pointer.any_click()) {
             if let Some(InnerResponse { response, .. }) = response {
                 if !response.contains_pointer() {
                     new_state.close();
                 }
             }
         }
+        new_state.just_opened = false;
 
         world.entity_mut(id).insert(new_state);
     }
@@ -122,6 +126,7 @@ impl EntityPropertyWindow {
             entity: Some(entity),
             egui_id,
             init_pos,
+            ..
         } = &mut self
         else {
             return (None, self);
@@ -136,7 +141,15 @@ impl EntityPropertyWindow {
 
         let response = window.show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.small_button("✖").on_hover_text("Close").clicked() {
+                if ui
+                    .add(
+                        IconButton::new("✖")
+                            .size(22.0)
+                            .icon_size(12.0)
+                            .label("Close"),
+                    )
+                    .clicked()
+                {
                     *open = false;
                 }
 
@@ -147,14 +160,19 @@ impl EntityPropertyWindow {
                     }
                     ret
                 };
-                ui.label(&display_name);
+                h3(ui, &display_name);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let pin_button = if *pinned {
-                        ui.small_button("📌").on_hover_text("Unpin window")
-                    } else {
-                        ui.small_button("📍").on_hover_text("Pin window")
-                    };
+                    let pin_button = ui.add(
+                        IconButton::new(if *pinned { "📌" } else { "📍" })
+                            .size(22.0)
+                            .icon_size(12.0)
+                            .label(if *pinned {
+                                "Unpin window"
+                            } else {
+                                "Pin window"
+                            }),
+                    );
 
                     if pin_button.clicked() {
                         *pinned = !*pinned;
