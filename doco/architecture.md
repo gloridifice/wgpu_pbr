@@ -58,7 +58,7 @@ UI 在 Update 生成，场景操作及资产准备在 PostUpdate 执行，之后
 
 ## CPU 性能观测
 
-Tracy 由默认关闭的 `profile-tracy` 开启：core 持有客户端并提供编译期可消除的 scope、线程命名和帧标记，根插件在渲染初始化之前启动客户端，通过现有 LogPlugin 安装 Tracy layer。已配置的全局 subscriber 不重复初始化；Tracy 构建与旧 `-t` 互斥。`profile-tracy-deps` 追加 wgpu/egui 等依赖的 CPU scopes，`profiling` 构建配置继承 release 并保留符号。
+Tracy 由默认关闭的 `profile-tracy` 开启：core 持有客户端并提供编译期可消除的 scope、线程命名和帧标记，根插件在渲染初始化之前启动客户端，通过现有 LogPlugin 安装 Tracy layer。已配置的全局 subscriber 不重复初始化。`profile-tracy-deps` 追加 wgpu/egui 等依赖的 CPU scopes，`profiling` 构建配置继承 release 并保留符号。
 
 自定义 winit runner 每次 app.update 仅打一次帧标记；实际延迟渲染 Stage、encoder finish、submit、surface acquire/present、egui 和场景加载/提交分别观测。不改变调度、提交或同步语义，不采 GPU timestamp。操作和过滤规则见 [Tracy CPU 抓帧](specs/profiling.md)。
 

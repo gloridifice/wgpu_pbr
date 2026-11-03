@@ -52,7 +52,7 @@ impl Plugin for WgpuPbrPlugin {
     fn build(&self, app: &mut App) {
         lentille_core::profiling::init(app);
         lentille_core::profiling::name_thread("main");
-        // Legacy -t (and embedding applications) may already own the subscriber.
+        // Embedding applications may already own the subscriber.
         if !tracing::dispatcher::has_been_set() {
             let log_plugin = LogPlugin::default();
             #[cfg(feature = "profile-tracy")]

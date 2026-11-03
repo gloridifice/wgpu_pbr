@@ -18,8 +18,6 @@ cargo run --profile profiling --features profile-tracy-deps -- --scene scenes/de
 
 默认只由 LogPlugin 安装一次 subscriber。嵌入方若已安装 subscriber，插件不覆盖；嵌入方需自己安装兼容的 TracyLayer，否则只有直接 Tracy/依赖埋点，没有业务/ECS tracing spans。自建 wgpu App 若开启详细档，必须在调用依赖埋点之前调用 core 的 profiling::init；它只启动客户端，不安装 subscriber。
 
-Tracy 构建明确拒绝 `-t` 并退出 2；非 Tracy 构建保留旧 Chrome tracing 的 `-t`，不再重复初始化 LogPlugin。
-
 Tracy 模式显式设置 `wgpu_pbr=info`，避免 Bevy 默认的 `wgpu=error` 前缀同时屏蔽根 crate。formatter 关闭 ANSI，避免 tracing-tracy 的 zone 字段名称出现转义字符。`RUST_LOG` 会覆盖插件过滤；抓取时建议先清除它，或至少设置：
 
 ```powershell

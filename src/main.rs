@@ -1,4 +1,4 @@
-use std::{env, path::Path};
+use std::env;
 
 use bevy_app::App;
 use wgpu_pbr::WgpuPbrPlugin;
@@ -7,17 +7,6 @@ fn main() {
     color_backtrace::install();
 
     let args = env::args().collect::<Vec<_>>();
-
-    let legacy_trace = args.iter().any(|arg| arg == "-t");
-    if cfg!(feature = "profile-tracy") && legacy_trace {
-        eprintln!("-t cannot be combined with profile-tracy; connect Tracy instead");
-        std::process::exit(2);
-    }
-
-    if legacy_trace {
-        let path = Path::new("./build/hello_1.json");
-        wgpu_subscriber::initialize_default_subscriber(Some(path));
-    }
 
     let mut app = App::new();
     app.add_plugins(WgpuPbrPlugin);
